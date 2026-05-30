@@ -1,0 +1,7 @@
+**/AppData/**
+**/Local/**
+**/Temp/**
+*.pyc
+__pycache__/
+.git/
+.vscode/

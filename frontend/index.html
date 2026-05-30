@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laser Cut PRO — v7.1 Final</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+
+        /* Login Screen */
+        .login-screen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            width: 450px;
+        }
+
+        .login-box h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .checkbox-group input {
+            width: auto;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .login-btn:hover {
+            background: #5568d3;
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            text-align: center;
+            display: none;
+        }
+
+        /* Main App */
+        .main-app {
+            display: none;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .menu-toggle {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .status-badge {
+            background: #27ae60;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+        }
+
+        .nav-menu {
+            background: #34495e;
+            padding: 10px 0;
+        }
+
+        .nav-menu ul {
+            list-style: none;
+            display: flex;
+            gap: 20px;
+            padding: 0 30px;
+            flex-wrap: wrap;
+        }
+
+        .nav-menu a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            transition: background 0.3s;
+            cursor: pointer;
+            display: inline-block;
+        }
+
+        .nav-menu a:hover,
+        .nav-menu a.active {
+            background: #667eea;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .status-waiting {
+            background: #fff3cd;
+            color: #856404;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-processing {
+            background: #d1ecf1;
+            color: #0c5460;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-done {
+            background: #d4edda;
+            color: #155724;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        /* Calendar */
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 10px;
+        }
+
+        .calendar-day {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            min-height: 80px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .calendar-day:hover {
+            background: #e9ecef;
+        }
+
+        .calendar-day-header {
+            font-weight: 600;
+            color: #2c3e50;
+            padding: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div class="login-screen" id="loginScreen">
+        <div class="login-box">
+            <h1>🔑 LaserCut Login</h1>
+            <div class="error-message" id="loginError"></div>
+
+            <div class="form-group">
+                <label>Имя пользователя:</label>
+                <input type="text" id="usernameInput" placeholder="Введите логин" value="admin">
+            </div>
+
+            <div class="form-group">
+                <label>Быстрый выбор:</label>
+                <select id="quickSelect" onchange="document.getElementById('usernameInput').value=this.value">
+                    <option value="">-- Выберите пользователя --</option>
+                    <option value="admin">Администратор</option>
+                    <option value="Andrey">Оператор: Андрей</option>
+                    <option value="Denis">Оператор: Denis</option>
+                    <option value="Promstalmash">Заказчик: PromStalMash</option>
+                    <option value="GSKB">Заказчик: GSKB</option>
+                    <option value="Director_V">Директор: Director_V</option>
+                    <option value="Director_D">Директор: Director_D</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Пароль:</label>
+                <input type="password" id="passwordInput" placeholder="Введите пароль" value="password">
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="autoLogin" checked>
+                <label for="autoLogin">Авто-ввод пароля при входе</label>
+            </div>
+
+            <button class="login-btn" onclick="login()">Войти в систему</button>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div class="main-app" id="mainApp">
+        <div class="header">
+            <div class="header-left">
+                <button class="menu-toggle">☰</button>
+                <h2>🏭 LaserCut</h2>
+            </div>
+            <div class="user-info">
+                <span class="status-badge">🟢 На смене: ...</span>
+                <span>👤 <span id="currentUser">Администратор</span></span>
+                <span>🔔</span>
+                <button class="btn btn-primary" onclick="logout()">🚪 Выйти</button>
+            </div>
+        </div>
+
+        <div class="nav-menu">
+            <ul>
+                <li><a class="nav-link active" onclick="showSection('applications')">📋 Заявки</a></li>
+                <li><a class="nav-link" onclick="showSection('deficit')">⚠️ Дефицит</a></li>
+                <li><a class="nav-link" onclick="showSection('schedule')">📅 График</a></li>
+                <li><a class="nav-link" onclick="showSection('users')">👥 Пользователи</a></li>
+                <li><a class="nav-link" onclick="showSection('audit')">🔐 Аудит</a></li>
+            </ul>
+        </div>
+
+        <div class="content">
+            <!-- Applications Section -->
+            <div class="section active" id="applications">
+                <div class="card">
+                    <h2>
+                        Заявки на резку
+                        <button class="btn btn-primary">+ Заявить о нехватке</button>
+                    </h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Материал</th>
+                                <th>Марка</th>
+                                <th>Толщ.</th>
+                                <th>Размер</th>
+                                <th>Кол-во</th>
+                                <th>Заказчик</th>
+                                <th>Статус</th>
+                            </tr>
+                        </thead>
+                        <tbody id="applicationsTable">
+                            <tr>
+                                <td>Steel</td>
+                                <td>St3</td>
+                                <td>2.0</td>
+                                <td>1500*6000</td>
+                                <td>15</td>
+                                <td>ПромСтальМаш</td>
+                                <td><span class="status-waiting">Ожидает</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Deficit Section -->
+            <div class="section" id="deficit">
+                <div class="card">
+                    <h2>⚠️ Дефицит материалов</h2>
+                    <p style="padding: 20px; text-align: center; color: #666;">
+                        🚧 Раздел в разработке. Здесь будут списки нехватки материалов.
+                    </p>
+                    <div style="text-align: center; margin-top: 20px;">
+                        <button class="btn btn-primary">+ Заявить о нехватке</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schedule Section -->
+            <div class="section" id="schedule">
+                <div class="card">
+                    <div class="calendar-header">
+                        <button class="btn btn-primary">← Предыдущий</button>
+                        <h3>Текущий месяц</h3>
+                        <h3>Июнь 2025</h3>
+                        <button class="btn btn-primary">Следующий →</button>
+                    </div>
+
+                    <div class="calendar-grid">
+                        <div class="calendar-day-header">Пн</div>
+                        <div class="calendar-day-header">Вт</div>
+                        <div class="calendar-day-header">Ср</div>
+                        <div class="calendar-day-header">Чт</div>
+                        <div class="calendar-day-header">Пт</div>
+                        <div class="calendar-day-header">Сб</div>
+                        <div class="calendar-day-header">Вс</div>
+
+                        <div class="calendar-day">1</div>
+                        <div class="calendar-day">2</div>
+                        <div class="calendar-day">3</div>
+                        <div class="calendar-day">4</div>
+                        <div class="calendar-day">5</div>
+                        <div class="calendar-day">6</div>
+                        <div class="calendar-day">7</div>
+                        <div class="calendar-day">8</div>
+                        <div class="calendar-day">9</div>
+                        <div class="calendar-day">10</div>
+                        <div class="calendar-day">11</div>
+                        <div class="calendar-day">12</div>
+                        <div class="calendar-day">13</div>
+                        <div class="calendar-day">14</div>
+                    </div>
+
+                    <div style="margin-top: 30px;">
+                        <h3>📅 Детали дня</h3>
+                        <p style="color: #666; padding: 20px; text-align: center;">
+                            Нажмите на ячейку календаря
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Users Section -->
+            <div class="section" id="users">
+                <div class="card">
+                    <h2>👥 Пользователи системы</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Имя</th>
+                                <th>Роль</th>
+                                <th>Станок/Смена</th>
+                                <th>График</th>
+                                <th>Текущий статус</th>
+                                <th>Авто-вход</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTable">
+                            <tr>
+                                <td colspan="6" class="loading">Загрузка...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Audit Section -->
+            <div class="section" id="audit">
+                <div class="card">
+                    <h2>🔐 Журнал аудита</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Точное время</th>
+                                <th>Пользователь</th>
+                                <th>Действие</th>
+                                <th>Изменение</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditTable">
+                            <tr>
+                                <td>10.06.2025 14:32:07</td>
+                                <td>Админ</td>
+                                <td>Смена статуса</td>
+                                <td>В резке → Готово</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        let token = null;
+        let currentUser = null;
+
+        // Login
+        async function login() {
+            const username = document.getElementById('usernameInput').value;
+            const password = document.getElementById('passwordInput').value;
+            const errorDiv = document.getElementById('loginError');
+
+            if (!username || !password) {
+                errorDiv.textContent = 'Введите логин и пароль';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            errorDiv.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password,
+                        remember_me: true
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Неверные учетные данные');
+                }
+
+                token = data.access_token;
+                localStorage.setItem('token', token);
+
+                // Получаем данные пользователя
+                try {
+                    const usersResp = await fetch(`${API_URL}/users/`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+
+                    if (usersResp.ok) {
+                        const users = await usersResp.json();
+                        currentUser = users.find(u => u.username.toLowerCase() === username.toLowerCase()) || users[0];
+                    }
+                } catch (e) {
+                    currentUser = { username: username };
+                }
+
+                showMainApp();
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        // Logout
+        function logout() {
+            token = null;
+            currentUser = null;
+            localStorage.removeItem('token');
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('mainApp').style.display = 'none';
+            document.getElementById('passwordInput').value = '';
+        }
+
+        // Show main app
+        function showMainApp() {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'block';
+
+            const userName = currentUser ? currentUser.username : 'Пользователь';
+            document.getElementById('currentUser').textContent = userName;
+
+            loadUsers();
+        }
+
+        // Show section
+        function showSection(sectionName) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+
+            document.getElementById(sectionName).classList.add('active');
+            event.target.classList.add('active');
+
+            if (sectionName === 'users') loadUsers();
+        }
+
+        // Load users
+        async function loadUsers() {
+            const tbody = document.getElementById('usersTable');
+
+            try {
+                const response = await fetch(`${API_URL}/users/`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load users');
+                }
+
+                const users = await response.json();
+
+                if (users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Нет пользователей</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = users.map(user => `
+                    <tr>
+                        <td>${user.username}</td>
+                        <td>${user.role}</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td><span class="status-done">${user.status}</span></td>
+                        <td>✓</td>
+                    </tr>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading users:', error);
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:red;">Ошибка загрузки</td></tr>';
+            }
+        }
+
+        // Auto-login if token exists
+        window.onload = function() {
+            const savedToken = localStorage.getItem('token');
+            if (savedToken) {
+                token = savedToken;
+                showMainApp();
+            }
+        };
+
+        // Enter key login
+        document.getElementById('passwordInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') login();
+        });
+    </script>
+</body>
+</html>

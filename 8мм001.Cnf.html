@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Раскладка 001</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 20px; background: #f8fafc; color: #1e293b; }
+        .wrap { max-width: 1100px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h1 { border-bottom: 3px solid #3b82f6; padding-bottom: 10px; margin-top: 0; }
+        h2 { color: #334155; margin-top: 25px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin: 15px 0; }
+        .card { background: #f1f5f9; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #3b82f6; }
+        .lbl { font-size: 0.85em; color: #64748b; font-weight: 600; }
+        .val { font-size: 1.1em; margin-top: 4px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        th { background: #3b82f6; color: #fff; }
+        tr:hover { background: #f8fafc; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>📋 Раскладка №001</h1>
+    <p><strong>Файл:</strong> 8мм001.Cnf.DOC</p>
+
+    <h2>📊 Основная информация</h2>
+    <div class="grid">
+        <div class="card"><div class="lbl">Заказчик</div><div class="val">Прим.:</div></div>
+        <div class="card"><div class="lbl">Материал</div><div class="val">Steel</div></div>
+        <div class="card"><div class="lbl">Толщина</div><div class="val">8.0 мм</div></div>
+        <div class="card"><div class="lbl">Размер листа</div><div class="val">2234.1 × 1500.0 мм</div></div>
+        <div class="card"><div class="lbl">Вес листа</div><div class="val">209.11 кг</div></div>
+        <div class="card"><div class="lbl">Листов</div><div class="val">1</div></div>
+    </div>
+
+    <h2>⏱️ Время работы</h2>
+    <div class="grid">
+        <div class="card"><div class="lbl">Перемещение</div><div class="val">00:27</div></div>
+        <div class="card"><div class="lbl">Резка</div><div class="val">25:17</div></div>
+        <div class="card"><div class="lbl">Прокалывание</div><div class="val">00:40</div></div>
+        <div class="card"><div class="lbl">Итого</div><div class="val">28:38</div></div>
+    </div>
+
+    <h2>📏 Параметры резки</h2>
+    <div class="grid">
+        <div class="card"><div class="lbl">Длина перемещения</div><div class="val">20108.0 мм</div></div>
+        <div class="card"><div class="lbl">Длина резки</div><div class="val">49497.5 мм</div></div>
+        <div class="card"><div class="lbl">Проколов</div><div class="val">40 шт</div></div>
+        <div class="card"><div class="lbl">Деталей найдено</div><div class="val">5 шт</div></div>
+    </div>
+
+    <h2>🔧 Список деталей (5)</h2>
+    <table>
+        <thead><tr><th>№</th><th>Имя</th><th>DX</th><th>DY</th><th>Кол-во</th></tr></thead>
+        <tbody>
+        <tr><td>1</td><td>8ММ-1-657-4ШТ</td><td>120.0</td><td>906.0</td><td>4</td></tr>
+        <tr><td>2</td><td>8ММ-1-653-4ШТ</td><td>2102.0</td><td>120.0</td><td>4</td></tr>
+        <tr><td>3</td><td>8ММ-1-655-8ШТ</td><td>656.1</td><td>120.3</td><td>8</td></tr>
+        <tr><td>4</td><td>8ММ-1-616-2ШТ</td><td>898.0</td><td>330.0</td><td>2</td></tr>
+        <tr><td>5</td><td>8ММ-2-4-2ШТ</td><td>200.0</td><td>855.0</td><td>2</td></tr>
+        </tbody>
+    </table>
+    <div style="margin-top:20px; color:#94a3b8; font-size:0.9em;">
+        Сформировано: 23.05.2026 22:08:46
+    </div>
+</div>
+</body>
+</html>
