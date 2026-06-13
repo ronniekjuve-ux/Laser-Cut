@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import json
 import glob
 import re
@@ -8,7 +9,7 @@ from sqlalchemy.orm import joinedload
 from typing import Optional, List
 from pathlib import Path
 from app.db.base import get_db
-from app.db.models import Application, Layout, LayoutPart, Customer
+from app.db.models import Application, ApplicationLayout, ApplicationLayoutPart, Customer
 from app.services.unified_parser import (
     extract_text,
     parse_application_text,
@@ -53,7 +54,9 @@ def save_uploaded_file(file: UploadFile, order_name: str) -> str:
 @router.post("/upload")
 async def upload_application(
         file: UploadFile = File(...),
-        customer_name: str = Form("Промстальмаш"),
+        customer_name: str = Form(""),
+        steel_grade: str = Form(""),
+        comments: str = Form(""),
         db: AsyncSession = Depends(get_db)
 ):
     if not file.filename.lower().endswith('.doc'):
@@ -77,31 +80,30 @@ async def upload_application(
         )
         app = result.scalar_one_or_none()
 
-        # === Извлечение изображений (Заявка) ===
-        # LibreOffice при конвертации DOC в HTML создает папку с картинками
-        # Мы ищем картинки в папке order_name_files
         detail_images = extract_images(file_path, str(IMAGE_DIR), prefix="applications")
-
-        # Сохраняем список путей как JSON строку
         images_json = json.dumps(detail_images) if detail_images else None
 
         if app:
-            app.material = data.material
+            app.material = steel_grade if steel_grade else data.material
+            app.steel_grade = steel_grade if steel_grade else app.steel_grade
             app.thickness = data.thickness
             app.total_weight = data.total_weight
             app.total_parts_count = len(data.parts)
+            app.comments = comments if comments else app.comments
             if detail_images:
                 app.detail_images = images_json
         else:
-            customer = await get_or_create_customer(db, customer_name)
+            customer = await get_or_create_customer(db, customer_name or "Промстальмаш")
             app = Application(
                 order_name=data.order_name,
                 customer_id=customer.id,
-                material=data.material,
+                material=steel_grade if steel_grade else data.material,
+                steel_grade=steel_grade if steel_grade else None,
                 thickness=data.thickness,
                 total_weight=data.total_weight,
                 total_parts_count=len(data.parts),
-                detail_images=images_json
+                detail_images=images_json,
+                comments=comments if comments else None
             )
             db.add(app)
 
@@ -172,10 +174,10 @@ async def upload_layout(
 
         # ... код сохранения Layout ...
         result = await db.execute(
-            select(Layout).where(
-                Layout.application_id == app_id,
-                Layout.layout_code == layout_code,
-                Layout.machine_type == machine_type
+            select(ApplicationLayout).where(
+                ApplicationLayout.application_id == app_id,
+                ApplicationLayout.layout_code == layout_code,
+                ApplicationLayout.machine_type == machine_type
             )
         )
         layout = result.scalar_one_or_none()
@@ -191,7 +193,7 @@ async def upload_layout(
             if layout_image_path:
                 layout.layout_image = layout_image_path
         else:
-            layout = Layout(
+            layout = ApplicationLayout(
                 application_id=app_id,
                 layout_code=layout_code,
                 machine_type=machine_type,
@@ -208,16 +210,34 @@ async def upload_layout(
             await db.flush()
 
         await db.execute(
-            delete(LayoutPart).where(LayoutPart.layout_id == layout.id)
+            delete(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == layout.id)
         )
 
-        for part_data in merged_parts:
-            part = LayoutPart(
+        thickness = app.thickness or 0.0
+        detail_images = []
+        if app.detail_images:
+            try:
+                detail_images = json.loads(app.detail_images)
+            except Exception:
+                pass
+
+        for pi, part_data in enumerate(merged_parts):
+            # Calculate weight: dx(mm) * dy(mm) * thickness(mm) * 7.85 / 1000000
+            part_weight = None
+            if thickness > 0 and part_data.dx > 0 and part_data.dy > 0:
+                part_weight = round(part_data.dx * part_data.dy * thickness * 7.85 / 1000000, 4)
+
+            # Assign image by index
+            part_image = detail_images[pi] if pi < len(detail_images) else None
+
+            part = ApplicationLayoutPart(
                 layout_id=layout.id,
                 name=part_data.name,
                 dx=part_data.dx,
                 dy=part_data.dy,
-                quantity=part_data.quantity
+                quantity=part_data.quantity,
+                weight=part_weight,
+                image_path=part_image
             )
             db.add(part)
 
@@ -253,23 +273,38 @@ async def list_applications(
         search: Optional[str] = None,
         db: AsyncSession = Depends(get_db)
 ):
-    # Простой запрос без join
-    result = await db.execute(select(Application).order_by(Application.created_at.desc()))
-    apps = result.scalars().all()
+    result = await db.execute(
+        select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True)
+        .order_by(Application.created_at.desc())
+    )
+    rows = result.all()
 
-    return [
-        {
+    enriched = []
+    for app, cust in rows:
+        # Get first layout machine type
+        layouts_result = await db.execute(
+            select(ApplicationLayout).where(ApplicationLayout.application_id == app.id).limit(1)
+        )
+        first_layout = layouts_result.scalar_one_or_none()
+        machine = ""
+        if first_layout and first_layout.machine_type:
+            mt = first_layout.machine_type.upper()
+            machine = "станок 1" if "CNF" in mt else "станок 2" if "FNF" in mt else first_layout.machine_type
+
+        enriched.append({
             "id": app.id,
             "order_name": app.order_name,
-            "customer_id": app.customer_id,
+            "customer": cust.name if cust else "-",
             "material": app.material,
+            "steel_grade": app.steel_grade,
             "thickness": app.thickness,
             "total_parts": app.total_parts_count,
             "total_weight": app.total_weight,
+            "machine": machine,
             "created_at": app.created_at
-        }
-        for app in apps
-    ]
+        })
+
+    return enriched
 
 
 @router.get("/{app_id}")
@@ -295,7 +330,7 @@ async def get_application_details(app_id: int, db: AsyncSession = Depends(get_db
 
     # Получаем все раскладки
     layouts_result = await db.execute(
-        select(Layout).where(Layout.application_id == app_id)
+        select(ApplicationLayout).where(ApplicationLayout.application_id == app_id)
     )
     layouts = layouts_result.scalars().all()
 
@@ -303,7 +338,7 @@ async def get_application_details(app_id: int, db: AsyncSession = Depends(get_db
     for layout in layouts:
         # Получаем детали для каждой раскладки
         parts_result = await db.execute(
-            select(LayoutPart).where(LayoutPart.layout_id == layout.id)
+            select(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == layout.id)
         )
         parts = parts_result.scalars().all()
 
@@ -317,13 +352,16 @@ async def get_application_details(app_id: int, db: AsyncSession = Depends(get_db
             "move_time": layout.move_time,
             "pierce_time": layout.pierce_time,
             "cnc_path": layout.cnc_path,
+            "layout_image": layout.layout_image,
             "parts_count": len(parts),
             "parts": [
                 {
                     "name": part.name,
                     "dx": part.dx,
                     "dy": part.dy,
-                    "quantity": part.quantity
+                    "quantity": part.quantity,
+                    "weight": part.weight,
+                    "image_path": part.image_path
                 }
                 for part in parts
             ]
@@ -335,9 +373,12 @@ async def get_application_details(app_id: int, db: AsyncSession = Depends(get_db
             "order_name": app.order_name,
             "customer": customer_name,
             "material": app.material,
+            "steel_grade": app.steel_grade or app.material,
             "thickness": app.thickness,
             "total_parts": app.total_parts_count,
             "total_weight": app.total_weight,
+            "comments": app.comments,
+            "detail_images": app.detail_images,
             "created_at": app.created_at
         },
         "layouts": layouts_data,

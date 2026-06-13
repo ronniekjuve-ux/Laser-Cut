@@ -1,9 +1,10 @@
+# -*- coding: utf-8 -*-
 from sqlalchemy import select
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends, HTTPException, status
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.session import get_db
+from app.db.base import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.core.security import decode_token
 from app.models.audit import AuditLog
@@ -43,13 +44,9 @@ async def get_current_user(token: HTTPAuthorizationCredentials = Depends(oauth2_
             raise HTTPException(status_code=403, detail="Account inactive")
 
         return user
-
-    except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {str(e)}")
-
-    except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {str(e)}")

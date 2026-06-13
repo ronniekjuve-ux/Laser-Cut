@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -6,7 +7,7 @@ from pathlib import Path
 import os
 
 from app.db.base import get_db
-from app.db.models_orders import Customer, Object, Order, FileVersion, Layout, Part
+from app.db.models import Customer, Object, Order, FileVersion, OrderLayout, OrderPart
 from app.services.cypcut_parser import CypcutData, CypcutParser
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -121,7 +122,7 @@ async def upload_layout(
     await db.flush()
 
     # Создаем раскладку
-    layout = Layout(
+    layout = OrderLayout(
         file_version_id=file_version.id,
         material=data.material,
         thickness=data.thickness,
@@ -137,7 +138,7 @@ async def upload_layout(
 
     # Создаем детали
     for part_data in data.parts:
-        part = Part(
+        part = OrderPart(
             layout_id=layout.id,
             name=part_data.name,
             dx=part_data.dx,

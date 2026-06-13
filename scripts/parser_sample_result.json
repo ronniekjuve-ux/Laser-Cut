@@ -1,0 +1,33 @@
+{
+  "application_text_len": 1342,
+  "application_preview": "Заказ:\n8мм.Dsp\nДата: Friday, February 13, 2026, 16:12:23\n\nПрограммист:\n\nТруб, всего:\n1\nСубраскладок, всего:\n1\n\nРазмещено деталей, всего:\n20\nЗаказано деталей, всего:\n20\n\nПрим.:\n\nВремя, всего:\n00:28:38\nЭфф-ть:\n89.43 %\n\nСтанок:\nCYPCUT_LASER\nЛазер:\nCYPCUTLASER.7\n«Скелет»:\n10.57 %\n\nСубраскладки в заказе\n№\nВид\nТруба\nДлина трубы\nМатериал\nТолщ. (мм)\nЭфф. %\nВремя / 1\n\nВремя / все\nКол-во\n\n1\n\n2234.1\nSteel\n8\n89.43\n00:28:38\n00:28:38\n1\n\nДетали в субраскладках\n№\nИмя файла детали\nВид\nМатериал\nТолщ. (мм)\nВес (KG",
+  "application": {
+    "order_name": "",
+    "material": "Steel",
+    "thickness": 0.0,
+    "total_weight": null,
+    "parts_count": 0,
+    "parts_sample": []
+  },
+  "layout_text_len": 961,
+  "layout_preview": "\nИмя файла УП: D:\\РАБОЧАЯ\\ПРОМСТАЛЬМАШ\\13-02-2026_14-47-44\\1 ПЛОЩ РАСКОСЫ В ОСЯХ 8-9\\8ММ\\8ММ001.CNC\nЗаказчик:\n\nПрим.:\n№ заказа:\n\nЛИСТ Количество листов: 1\nМатериал: Steel\nРазмер: 2234.1 X 1500\nТолщина: 8.0\nВес: 209.11 kg\nКол-во деталей: 20\n\nВРЕМЯ РАБОТЫ (мин:сек) Модель станка: CYPCUT_LASER\nПеремещение: 00:27\nРезка: 25:17\nПрокалывание: 00:40\nВремя, всего: 28:38\n\nПеремещ. (мм): 20108\nРезка (мм): 49497.5\nКол.проколов: 40\n\nИмя детали\nDX\nDY\nКол-во\n\n3\nD:\\РАБОЧАЯ\\ПРОМСТАЛЬМАШ\\13-02-2026_14-47-44\\1 ПЛО",
+  "layout": {
+    "layout_code": "001",
+    "machine_type": "CNF",
+    "sheet_w": 2234.1,
+    "sheet_h": 1500.0,
+    "sheet_weight": null,
+    "cut_time": "25:17",
+    "move_time": "00:27",
+    "pierce_time": "00:40",
+    "total_time": null,
+    "cut_length": null,
+    "travel_length": null,
+    "pierces": null,
+    "sheet_count": null,
+    "parts_count": 0,
+    "parts_sample": []
+  },
+  "merged_count": 0,
+  "merged_sample": []
+}

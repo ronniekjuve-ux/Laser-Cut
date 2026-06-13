@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.db.session import get_db
+from app.db.base import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.user import UserCreate, UserUpdate, UserOut
 from app.core.deps import require_role, log_audit
@@ -63,3 +63,7 @@ async def update_user(
     await db.refresh(user)
     await log_audit(admin, "UPDATE", "user", user_id, str(payload.model_dump(exclude_unset=True)), db)
     return user
+
+@router.get("/me", response_model=UserOut)
+async def get_me(current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR, UserRole.CUSTOMER, UserRole.ACCOUNTANT))):
+    return current_user

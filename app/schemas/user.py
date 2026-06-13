@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from app.models.user import UserRole, UserStatus
+from app.db.models import UserRole, UserStatus
 
 
 class UserCreate(BaseModel):

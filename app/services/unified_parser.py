@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import re
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -60,11 +61,104 @@ class LayoutData:
     sheet_w: float = 0.0
     sheet_h: float = 0.0
     sheet_weight: Optional[float] = None
+    sheet_count: int = 1
+    material: str = "Steel"
+    thickness: float = 0.0
     cut_time: str = "00:00"
     move_time: str = "00:00"
     pierce_time: str = "00:00"
+    total_time: str = "00:00"
+    cut_length: Optional[float] = None
+    travel_length: Optional[float] = None
+    pierces: Optional[int] = None
     cnc_path: str = ""
     parts: List[LayoutPart] = field(default_factory=list)
+
+
+def _safe_float(val: str) -> Optional[float]:
+    try:
+        return float(val.replace(',', '.'))
+    except Exception:
+        return None
+
+
+def _safe_int(val: str) -> Optional[int]:
+    try:
+        return int(float(val.replace(',', '.')))
+    except Exception:
+        return None
+
+
+def _parse_vertical_parts_block(text: str) -> List[LayoutPart]:
+    """
+    Парсит «вертикальный» вывод Word для раскладки:
+    после заголовка "Имя детали" идут строки:
+      <номер>
+      <путь D:/.../NAME-4ШТ>
+      <DX>
+      <DY>
+      <Кол-во>
+    """
+    lines = [ln.strip() for ln in text.split('\n')]
+    in_table = False
+    current: dict = {}
+    parts: List[LayoutPart] = []
+    suffix_pattern = re.compile(r'[\s-]*\d+\s*[ШшСс][Тт]\s*$', re.I)
+
+    for raw in lines:
+        line = raw.replace('|', '').strip()
+        if not line:
+            continue
+
+        if 'Имя детали' in line:
+            in_table = True
+            continue
+        if not in_table:
+            continue
+
+        if line in ('DX', 'DY', 'Кол-во') or line.startswith('---'):
+            continue
+
+        # номер детали — закрываем предыдущую
+        if re.fullmatch(r'\d+', line):
+            if current.get('name') and current.get('dx') is not None and current.get('dy') is not None:
+                parts.append(LayoutPart(
+                    name=current['name'],
+                    dx=current['dx'],
+                    dy=current['dy'],
+                    quantity=current.get('qty', 1)
+                ))
+            current = {}
+            continue
+
+        # путь к детали
+        if re.match(r'^[A-Za-z]\s*:\\', line):
+            full_name = Path(line).name
+            clean_name = suffix_pattern.sub('', full_name).strip()
+            current['name'] = clean_name
+            continue
+
+        # числа (dx, dy, qty)
+        val = _safe_float(line)
+        if val is None:
+            continue
+        if 'name' in current:
+            if 'dx' not in current:
+                current['dx'] = val
+            elif 'dy' not in current:
+                current['dy'] = val
+            elif 'qty' not in current:
+                current['qty'] = int(val)
+
+    if current.get('name') and current.get('dx') is not None and current.get('dy') is not None:
+        parts.append(LayoutPart(
+            name=current['name'],
+            dx=current['dx'],
+            dy=current['dy'],
+            quantity=current.get('qty', 1)
+        ))
+
+    return parts
 
 
 def extract_text(filepath: str) -> str:
@@ -178,15 +272,24 @@ def parse_application_text(text: str) -> ApplicationData:
     """Парсит файл Заявки (.DOC)"""
     data = ApplicationData()
 
-    order_match = re.search(r'Заказ\s*:\s*\n\s*\|\s*([^\s\.]+)', text)
+    # Заказ: + следующая строка (Word-вывод) ИЛИ таблица с |
+    order_match = re.search(r'Заказ\s*:\s*\n\s*([^\s|]+)', text)
     if order_match:
-        data.order_name = order_match.group(1)
+        data.order_name = order_match.group(1).strip()
+        data.order_name = re.sub(r'\.dsp$', '', data.order_name, flags=re.I)
 
     mat_match = re.search(r'Материал\s*:\s*([^\s|]+)', text)
     if mat_match:
         data.material = mat_match.group(1).strip()
 
-    # ========== ИСПРАВЛЕНИЕ 1: Толщина из таблицы ==========
+    # Толщина: пытаемся взять из вертикального блока "Субраскладки в заказе"
+    thickness_match = re.search(r'Субраскладки в заказе[\s\S]*?\nSteel\s*\n(\d+(?:[.,]\d+)?)\s*\n', text, re.I)
+    if thickness_match:
+        th = _safe_float(thickness_match.group(1))
+        if th is not None:
+            data.thickness = th
+
+    # ========== Толщина из таблицы с | (LibreOffice/docx) ==========
     lines = text.split('\n')
 
     # Ищем таблицу "Данные материала" или "Доп. данные материала"
@@ -255,8 +358,12 @@ def parse_application_text(text: str) -> ApplicationData:
                             pass
             break
 
-    # ========== Парсинг деталей (без изменений) ==========
+    # ========== Парсинг деталей ==========
     in_parts_table = False
+    parts_vertical: List[AppPart] = []
+    current_name: Optional[str] = None
+    current_weight: Optional[float] = None
+    current_qty: Optional[int] = None
 
     for line in lines:
         if 'Детали в субраскладках' in line:
@@ -266,11 +373,15 @@ def parse_application_text(text: str) -> ApplicationData:
         if not in_parts_table:
             continue
 
+        # заголовки / разделители
         if line.startswith('| ---') or line.startswith('| №'):
+            continue
+        if line in ('№', 'Имя файла детали', 'Вид', 'Материал', 'Толщ. (мм)', 'Вес (KG', 'Вес (KG)', 'Кол-во', 'Кол-во ', 'Кол-во\n'):
             continue
 
         cells = [c.strip() for c in line.split('|') if c.strip()]
 
+        # 1) Формат LibreOffice/docx (таблица с |)
         if len(cells) >= 7:
             try:
                 name_raw = cells[1]
@@ -285,6 +396,44 @@ def parse_application_text(text: str) -> ApplicationData:
                     ))
             except (ValueError, IndexError):
                 continue
+            continue
+
+        # 2) Вертикальный формат Word: имя детали (строка с путём/именем) + далее вес и кол-во
+        # Пример имён в заявке: 8мм-1-616-2шт (без путей) — оставляем как есть.
+        if re.search(r'[А-ЯA-Z0-9].*-\d+\s*[ШшСс][Тт]$', line):
+            # закрываем предыдущую, если собрана
+            if current_name and current_weight is not None and current_qty is not None:
+                parts_vertical.append(AppPart(name_raw=current_name, weight=current_weight, qty=current_qty))
+            current_name = line.strip()
+            current_weight = None
+            current_qty = None
+            continue
+
+        # иногда имя может быть с путём
+        if re.match(r'^[A-Za-z]\s*:\\', line):
+            if current_name and current_weight is not None and current_qty is not None:
+                parts_vertical.append(AppPart(name_raw=current_name, weight=current_weight, qty=current_qty))
+            current_name = Path(line).name
+            current_weight = None
+            current_qty = None
+            continue
+
+        # Вес (KG) и Кол-во — обычно числа в отдельных строках после имени
+        num = _safe_float(line)
+        if num is None:
+            continue
+        if current_name:
+            # по заявке вес обычно дробный, кол-во — целое
+            if current_weight is None:
+                current_weight = num
+            elif current_qty is None:
+                current_qty = int(num)
+
+    if current_name and current_weight is not None and current_qty is not None:
+        parts_vertical.append(AppPart(name_raw=current_name, weight=current_weight, qty=current_qty))
+
+    if not data.parts and parts_vertical:
+        data.parts = parts_vertical
 
     return data
 
@@ -307,6 +456,45 @@ def parse_layout_text(text: str, filename: str) -> LayoutData:
     if code_match:
         data.layout_code = code_match.group(1)
 
+    # Базовые поля из раскладки (по xlsx)
+    sheet_count_match = re.search(r'Количество\s+листов\s*:\s*(\d+)', text, re.I)
+    if sheet_count_match:
+        sc = _safe_int(sheet_count_match.group(1))
+        if sc is not None and sc > 0:
+            data.sheet_count = sc
+
+    mat_match = re.search(r'Материал\s*:\s*([^\n]+)', text, re.I)
+    if mat_match:
+        data.material = mat_match.group(1).strip()
+
+    thick_match = re.search(r'Толщина\s*:\s*([\d.,]+)', text, re.I)
+    if thick_match:
+        th = _safe_float(thick_match.group(1))
+        if th is not None:
+            data.thickness = th
+
+    weight_match = re.search(r'Вес\s*:\s*([\d.,]+)', text, re.I)
+    if weight_match:
+        w = _safe_float(weight_match.group(1))
+        if w is not None:
+            data.sheet_weight = w
+
+    total_time_match = re.search(r'Время,\s*всего\s*:\s*([0-9]{1,3}:[0-9]{2})', text, re.I)
+    if total_time_match:
+        data.total_time = total_time_match.group(1)
+
+    travel_match = re.search(r'Перемещ\.\s*\(мм\)\s*:\s*([\d.,]+)', text, re.I)
+    if travel_match:
+        data.travel_length = _safe_float(travel_match.group(1))
+
+    cut_len_match = re.search(r'Резка\s*\(мм\)\s*:\s*([\d.,]+)', text, re.I)
+    if cut_len_match:
+        data.cut_length = _safe_float(cut_len_match.group(1))
+
+    pierces_match = re.search(r'Кол\.?\s*проколов\s*:\s*(\d+)', text, re.I)
+    if pierces_match:
+        data.pierces = _safe_int(pierces_match.group(1))
+
     size_match = re.search(r'Размер\s*:\s*([\d.,]+)\s*[XxхХ]\s*([\d.,]+)', text, re.I)
     if size_match:
         data.sheet_w = float(size_match.group(1).replace(',', '.'))
@@ -326,7 +514,8 @@ def parse_layout_text(text: str, filename: str) -> LayoutData:
     if cnc_match:
         data.cnc_path = cnc_match.group(1).strip()
 
-    # ========== ПАРСИНГ ДЕТАЛЕЙ (через ячейки) ==========
+    # ========== ПАРСИНГ ДЕТАЛЕЙ ==========
+    # 1) Попытка через «табличные» строки с |
     parts = []
     in_table = False
     cur = {}  # Текущая собираемая деталь
@@ -440,9 +629,12 @@ def parse_layout_text(text: str, filename: str) -> LayoutData:
         ))
 
     data.parts = parts
+    # 2) Если в Word-выводе не было | и ничего не нашли — fallback на вертикальный парсинг
+    if not data.parts:
+        data.parts = _parse_vertical_parts_block(text)
 
-    print(f"\n   ✅ ВСЕГО: Найдено {len(parts)} деталей")
-    for idx, p in enumerate(parts, 1):
+    print(f"\n   ✅ ВСЕГО: Найдено {len(data.parts)} деталей")
+    for idx, p in enumerate(data.parts, 1):
         print(f"      {idx}. {p.name} | DX:{p.dx} DY:{p.dy} QTY:{p.quantity}")
 
     return data
@@ -453,40 +645,43 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "") -> List[str
     import tempfile
     import subprocess
     from pathlib import Path
+    import shutil
 
     saved_paths = []
+    IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.emf', '.wmf', '.tiff', '.tif'}
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Конвертируем DOC в HTML через LibreOffice (сохраняет изображения)
             subprocess.run(
                 ['libreoffice', '--headless', '--convert-to', 'html', '--outdir', tmpdir, filepath],
                 check=True,
                 capture_output=True,
-                timeout=30
+                timeout=60
             )
 
-            # Ищем папку с изображениями
+            dest_dir = Path(output_dir) / prefix
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            # Ищем изображения в подпапке _files
             html_name = Path(filepath).stem
             img_dir = Path(tmpdir) / f"{html_name}_files"
-
             if img_dir.exists():
-                # Создаем папку назначения
-                dest_dir = Path(output_dir) / prefix
-                dest_dir.mkdir(parents=True, exist_ok=True)
-
-                # Копируем изображения
-                for img_file in img_dir.glob('*'):
-                    if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+                for img_file in img_dir.iterdir():
+                    if img_file.is_file() and img_file.suffix.lower() in IMG_EXTS:
                         dest_path = dest_dir / img_file.name
-                        import shutil
                         shutil.copy2(img_file, dest_path)
-                        # Относительный путь для API
-                        rel_path = f"/images/{prefix}/{img_file.name}"
-                        saved_paths.append(rel_path)
+                        saved_paths.append(f"/api/v1/images/{prefix}/{img_file.name}")
+
+            # Ищем изображения рядом с HTML файлом
+            for img_file in Path(tmpdir).iterdir():
+                if img_file.is_file() and img_file.suffix.lower() in IMG_EXTS:
+                    if not any(img_file.name in p for p in saved_paths):
+                        dest_path = dest_dir / img_file.name
+                        shutil.copy2(img_file, dest_path)
+                        saved_paths.append(f"/api/v1/images/{prefix}/{img_file.name}")
 
     except Exception as e:
-        print(f"⚠️ Ошибка извлечения изображений: {e}")
+        print(f"Warning: image extraction failed: {e}")
 
     return saved_paths
 

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """add_orders_module2
 
 Revision ID: 001

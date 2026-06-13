@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, users, audit, applications  # <-- Импортируй роутеры
+from app.api import auth, users, audit
 from app.api.v1.router_orders import router as orders_router
 from app.api.v1.router_applications import router as applications_router
 from app.api.v1.router_images import router as images_router
@@ -24,10 +25,8 @@ app.add_middleware(
 
 # Подключаем роутеры
 app.include_router(auth.router)
-app.include_router(auth.router)  # OK
 app.include_router(users.router, tags=["Users"])  # ✅ Убрали prefix
 app.include_router(audit.router, tags=["Audit"])  # ✅ Убрали prefix
-app.include_router(applications.router)
 app.include_router(orders_router)
 app.include_router(applications_router, prefix="/api/v1")
 app.include_router(images_router, prefix="/api/v1")

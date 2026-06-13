@@ -3,7 +3,7 @@ import asyncio
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.db.base import Base
-from app.db.session import engine, get_db
+from app.db.base import engine, get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 
 @pytest.fixture(scope="session", autouse=True)

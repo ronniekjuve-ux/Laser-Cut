@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
-from app.db.session import get_db
+from app.db.base import get_db
 from app.models.audit import AuditLog
 from app.models.user import User, UserRole
 from app.core.deps import get_current_user, mask_timestamp

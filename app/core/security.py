@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -33,9 +34,6 @@ def create_token(data: dict, expires_delta: timedelta | None = None) -> str:
 
 def decode_token(token: str) -> dict | None:
     try:
-        print(f"=== DECODING TOKEN ===")
-        print(f"Token: {token[:50]}...")
-        print(f"SECRET_KEY: {settings.SECRET_KEY}")
         print(f"ALGORITHM: {settings.ALGORITHM}")
 
         payload = jwt.decode(
@@ -43,12 +41,6 @@ def decode_token(token: str) -> dict | None:
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM]
         )
-        print(f"Decoded payload: {payload}")
-        print(f"=== END DECODE ===")
         return payload
     except JWTError as e:
-        print(f"=== JWT ERROR ===")
-        print(f"Error: {e}")
-        print(f"SECRET_KEY: {settings.SECRET_KEY}")
-        print(f"=== END ERROR ===")
         return None
