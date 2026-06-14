@@ -7,6 +7,8 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
   const [showPartInfo, setShowPartInfo] = useState(null);
   const [activeLayout, setActiveLayout] = useState(null);
 
+  const highlightPart = app.highlightPart || null;
+
   useEffect(() => {
     const fetchFull = async () => {
       try {
@@ -21,6 +23,16 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
     };
     fetchFull();
   }, [app.id]);
+
+  // Автооткрытие раскладки с подсвечиваемой деталью
+  useEffect(() => {
+    if (!fullApp || !highlightPart || activeLayout !== null) return;
+    const layouts = fullApp.layouts || [];
+    for (let i = 0; i < layouts.length; i++) {
+      const found = (layouts[i].parts || []).some(p => p.name === highlightPart);
+      if (found) { setActiveLayout(i); break; }
+    }
+  }, [fullApp, highlightPart]);
 
   const handleDelete = async () => {
     if (!window.confirm('Удалить заявку?')) return;
@@ -54,7 +66,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
   })() : [];
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onClick={activeLayout !== null ? () => setActiveLayout(null) : onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{width: 800}}>
         <div className="modal-header">
           <h3>{data.order_name || 'Заявка'} #{data.id}</h3>
@@ -147,7 +159,10 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                         </thead>
                         <tbody>
                           {layout.parts.map((part, pi) => (
-                            <tr key={pi} onClick={() => setShowPartInfo({...part, imageIndex: pi})} style={{cursor: 'pointer'}}>
+                            <tr key={pi} onClick={() => setShowPartInfo({...part, imageIndex: pi})} style={{
+                              cursor: 'pointer',
+                              background: highlightPart && part.name === highlightPart ? '#fef08a' : undefined
+                            }}>
                               <td><span className="part-link">{part.name || ''}</span></td>
                               <td>{part.dx || '-'}</td>
                               <td>{part.dy || '-'}</td>

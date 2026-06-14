@@ -312,6 +312,31 @@ async def list_applications(
         search: Optional[str] = None,
         db: AsyncSession = Depends(get_db)
 ):
+    # Если есть поиск — сначала найдём ID заявок по полям ИЛИ по деталям
+    matching_app_ids = None
+    if search:
+        like_pattern = f"%{search}%"
+        # Поиск по полям заявки
+        field_q = select(Application.id).where(
+            (Application.order_name.ilike(like_pattern)) |
+            (Application.material.ilike(like_pattern)) |
+            (Application.steel_grade.ilike(like_pattern)) |
+            (Application.comments.ilike(like_pattern))
+        )
+        # Поиск по имени заказчика
+        cust_q = select(Application.id).join(
+            Customer, Application.customer_id == Customer.id
+        ).where(Customer.name.ilike(like_pattern))
+        # Поиск по деталям
+        parts_q = select(ApplicationLayout.application_id).join(
+            ApplicationLayoutPart, ApplicationLayoutPart.layout_id == ApplicationLayout.id
+        ).where(ApplicationLayoutPart.name.ilike(like_pattern))
+        # Объединяем
+        from sqlalchemy import union
+        combined = union(field_q, cust_q, parts_q)
+        result_ids = await db.execute(select(combined.c.id))
+        matching_app_ids = set(r[0] for r in result_ids.all())
+
     result = await db.execute(
         select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True)
         .order_by(Application.created_at.desc())
@@ -320,6 +345,9 @@ async def list_applications(
 
     enriched = []
     for app, cust in rows:
+        if matching_app_ids is not None and app.id not in matching_app_ids:
+            continue
+
         # Get first layout machine type
         layouts_result = await db.execute(
             select(ApplicationLayout).where(ApplicationLayout.application_id == app.id).limit(1)
@@ -329,6 +357,19 @@ async def list_applications(
         if first_layout and first_layout.machine_type:
             mt = first_layout.machine_type.upper()
             machine = "станок 1" if "CNF" in mt else "станок 2" if "FNF" in mt else first_layout.machine_type
+
+        # Поиск по деталям — имена совпавших деталей
+        matched_parts = []
+        if search:
+            parts_result = await db.execute(
+                select(ApplicationLayoutPart.name)
+                .join(ApplicationLayout, ApplicationLayoutPart.layout_id == ApplicationLayout.id)
+                .where(
+                    ApplicationLayout.application_id == app.id,
+                    ApplicationLayoutPart.name.ilike(f"%{search}%")
+                )
+            )
+            matched_parts = list(parts_result.scalars().all())
 
         enriched.append({
             "id": app.id,
@@ -341,6 +382,7 @@ async def list_applications(
             "total_weight": app.total_weight,
             "machine": machine,
             "comments": app.comments,
+            "matched_parts": matched_parts,
             "created_at": app.created_at
         })
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../../api/client';
 import ApplicationDetail from './ApplicationDetail';
@@ -30,6 +30,7 @@ export default function ApplicationsList() {
   const [sortDir, setSortDir] = useState('asc');
   const [filters, setFilters] = useState({});
   const [openFilter, setOpenFilter] = useState(null);
+  const [filterPos, setFilterPos] = useState({top: 0, left: 0});
   const [selectedApp, setSelectedApp] = useState(null);
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [notesModal, setNotesModal] = useState(null);
@@ -37,9 +38,11 @@ export default function ApplicationsList() {
   const filterRef = useRef(null);
   const navigate = useNavigate();
 
-  const fetchApplications = useCallback(async () => {
+  const fetchApplications = useCallback(async (searchQuery) => {
     try {
-      const res = await client.get('/api/v1/applications/');
+      const params = {};
+      if (searchQuery) params.search = searchQuery;
+      const res = await client.get('/api/v1/applications/', { params });
       setApplications(Array.isArray(res.data) ? res.data : res.data.items || []);
     } catch (err) {
       console.error('Failed to load applications', err);
@@ -49,6 +52,14 @@ export default function ApplicationsList() {
   }, []);
 
   useEffect(() => { fetchApplications(); }, [fetchApplications]);
+
+  // Debounced поиск по backend
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchApplications(search || undefined);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, fetchApplications]);
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -92,6 +103,20 @@ export default function ApplicationsList() {
     }
   };
 
+  const highlightText = (text, query) => {
+    if (!query || !text) return text;
+    const str = String(text);
+    const idx = str.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return str;
+    return (
+      <>
+        {str.slice(0, idx)}
+        <mark style={{background: '#fde047', padding: '0 2px', borderRadius: 2}}>{str.slice(idx, idx + query.length)}</mark>
+        {str.slice(idx + query.length)}
+      </>
+    );
+  };
+
   const filtered = applications.filter(app => {
     const rd = getRowData(app);
     for (const [key, values] of Object.entries(filters)) {
@@ -99,11 +124,6 @@ export default function ApplicationsList() {
         const val = String(rd[key] || '').trim();
         if (!values.includes(val)) return false;
       }
-    }
-    if (search) {
-      const q = search.toLowerCase();
-      const allText = Object.values(rd).join(' ').toLowerCase();
-      if (!allText.includes(q)) return false;
     }
     return true;
   }).sort((a, b) => {
@@ -210,8 +230,15 @@ export default function ApplicationsList() {
                   {col.filterable && (
                     <span
                       className="filter-icon"
-                      onClick={(e) => { e.stopPropagation(); setOpenFilter(openFilter === col.key ? null : col.key); setFilterSearch(''); }}
-                      style={{marginLeft: 5, cursor: 'pointer', fontSize: 12}}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (openFilter === col.key) { setOpenFilter(null); return; }
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setFilterPos({top: rect.bottom + 4, left: rect.left});
+                        setOpenFilter(col.key);
+                        setFilterSearch('');
+                      }}
+                      style={{marginLeft: 5, cursor: 'pointer', fontSize: 12, position: 'relative'}}
                     >
                       {'\u25bc'}
                     </span>
@@ -222,7 +249,8 @@ export default function ApplicationsList() {
           </thead>
           <tbody>
             {filtered.map(app => (
-              <tr key={app.id} onClick={() => setSelectedApp(app)} style={{cursor: 'pointer'}}>
+              <React.Fragment key={app.id}>
+              <tr onClick={() => setSelectedApp(app)} style={{cursor: 'pointer'}}>
                 {COLUMNS.map(col => (
                   <td key={col.key}>
                     {col.key === 'status' ? (
@@ -253,11 +281,30 @@ export default function ApplicationsList() {
                         <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{padding: '4px 8px', fontSize: 11}}>🗑️</button>
                       </div>
                     ) : (
-                      getRowData(app)[col.key]
+                      highlightText(getRowData(app)[col.key], search)
                     )}
                   </td>
                 ))}
               </tr>
+              {search && app.matched_parts && app.matched_parts.length > 0 && (
+                <tr style={{background: '#fefce8'}}>
+                  <td colSpan={COLUMNS.length} style={{padding: '4px 10px', fontSize: 12}}>
+                    {'\uD83D\uDD0D '}Совпадения:{' '}
+                    {app.matched_parts.map((p, i) => (
+                      <span key={i}>
+                        {i > 0 && ', '}
+                        <span
+                          onClick={(e) => { e.stopPropagation(); setSelectedApp({...app, highlightPart: p}); }}
+                          style={{background: '#fde047', padding: '1px 4px', borderRadius: 3, fontWeight: 500, cursor: 'pointer'}}
+                        >
+                          {p}
+                        </span>
+                      </span>
+                    ))}
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             ))}
             {filtered.length === 0 && (
               <tr>
@@ -299,6 +346,47 @@ export default function ApplicationsList() {
               <button className="btn btn-primary" onClick={() => setNotesModal(null)}>Закрыть</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {openFilter && (
+        <div
+          ref={filterRef}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 1000,
+            background: '#fff', border: '1px solid var(--border)', borderRadius: 6,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: 8, minWidth: 160, maxHeight: 250, overflow: 'auto'
+          }}
+        >
+          <input
+            type="text"
+            placeholder="Фильтр..."
+            value={filterSearch}
+            onChange={(e) => setFilterSearch(e.target.value)}
+            style={{width: '100%', padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, marginBottom: 6, boxSizing: 'border-box'}}
+            autoFocus
+          />
+          {getFilterValues(openFilter)
+            .filter(v => !filterSearch || v.toLowerCase().includes(filterSearch.toLowerCase()))
+            .map(val => (
+              <label key={val} style={{display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: 12, cursor: 'pointer'}}>
+                <input
+                  type="checkbox"
+                  checked={(filters[openFilter] || []).includes(val)}
+                  onChange={() => toggleFilterItem(openFilter, val)}
+                />
+                {val || '(пусто)'}
+              </label>
+            ))
+          }
+          {(filters[openFilter] || []).length > 0 && (
+            <div style={{borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 4}}>
+              <span onClick={() => clearFilter(openFilter)} style={{fontSize: 11, color: '#ef4444', cursor: 'pointer'}}>
+                Сбросить
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
