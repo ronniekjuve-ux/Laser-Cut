@@ -182,7 +182,7 @@ class CypcutParser:
         customer = find_value('Заказчик') or ""
 
         cut_length = 0.0
-        cut_str = find_value('Резка \(мм\)') or find_value('Резка')
+        cut_str = find_value(r'Резка \(мм\)') or find_value('Резка')
         if cut_str:
             cut_match = re.search(r'([\d.,]+)', cut_str)
             if cut_match:
@@ -192,7 +192,7 @@ class CypcutParser:
                     pass
 
         pierces = 0
-        pierces_str = find_value('Кол\s*\.\s*проколов')
+        pierces_str = find_value(r'Кол\s*\.\s*проколов')
         if pierces_str:
             try:
                 pierces = int(pierces_str)
@@ -200,7 +200,7 @@ class CypcutParser:
                 pass
 
         processing_time = "00:00:00"
-        time_str = find_value('Время,\s*всего')
+        time_str = find_value(r'Время,\s*всего')
         if time_str:
             time_match = re.search(r'(\d+):(\d+)', time_str)
             if time_match:

@@ -7,14 +7,13 @@ import NewOrderModal from './NewOrderModal';
 const COLUMNS = [
   { key: 'customer', label: 'Заказчик', sortable: true, filterable: true },
   { key: 'machine', label: 'Станок', sortable: true, filterable: true },
-  { key: 'steel', label: 'Марка стали', sortable: true, filterable: true },
+  { key: 'material', label: 'Материал', sortable: true, filterable: true },
   { key: 'thickness', label: 'Толщ.', sortable: true, filterable: true },
-  { key: 'layout', label: 'Раскладка', sortable: true, filterable: false },
   { key: 'status', label: 'Статус', sortable: true, filterable: true },
   { key: 'operator', label: 'Оператор', sortable: true, filterable: true },
   { key: 'received', label: 'Поступил', sortable: true, filterable: false },
   { key: 'completed', label: 'Вып.', sortable: true, filterable: false },
-  { key: 'notes', label: 'Заметки', sortable: false, filterable: false, type: 'textarea' },
+  { key: 'notes', label: 'Заметки', sortable: false, filterable: false, type: 'notes' },
   { key: 'actions', label: '', sortable: false, filterable: false },
 ];
 
@@ -33,6 +32,7 @@ export default function ApplicationsList() {
   const [openFilter, setOpenFilter] = useState(null);
   const [selectedApp, setSelectedApp] = useState(null);
   const [showNewOrder, setShowNewOrder] = useState(false);
+  const [notesModal, setNotesModal] = useState(null);
   const [filterSearch, setFilterSearch] = useState('');
   const filterRef = useRef(null);
   const navigate = useNavigate();
@@ -63,14 +63,13 @@ export default function ApplicationsList() {
   const getRowData = (app) => ({
     customer: app.customer || '',
     machine: app.machine || '',
-    steel: app.steel_grade || app.material || '',
+    material: app.steel_grade || app.material || '',
     thickness: app.thickness || '',
-    layout: app.total_parts ? (app.total_parts + ' деталей') : '',
     status: app.status || '',
     operator: app.operator || '',
     received: app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : '',
     completed: app.completed_at ? new Date(app.completed_at).toLocaleDateString('ru-RU') : '',
-    notes: app.notes || '',
+    notes: app.comments || '',
   });
 
   const getFilterValues = (colKey) => {
@@ -234,13 +233,20 @@ export default function ApplicationsList() {
                         {app.status || '\u0412 \u043e\u0447\u0435\u0440\u0435\u0434\u0438'}
                       </span>
                     ) : col.key === 'notes' ? (
-                      <input
-                        type="text"
-                        placeholder={'\u0417\u0430\u043c\u0435\u0442\u043a\u0430...'}
-                        defaultValue={app.notes || ''}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{width: '100%', padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12}}
-                      />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setNotesModal(app); }}
+                        style={{
+                          background: app.comments ? '#eff6ff' : '#f8fafc',
+                          border: '1px solid ' + (app.comments ? '#bfdbfe' : 'var(--border)'),
+                          borderRadius: 4, padding: '3px 8px', fontSize: 12, cursor: 'pointer',
+                          color: app.comments ? '#1e40af' : '#94a3b8', maxWidth: 120,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          display: 'block', textAlign: 'left'
+                        }}
+                        title={app.comments || 'Добавить заметку'}
+                      >
+                        {app.comments || '📝'}
+                      </button>
                     ) : col.key === 'actions' ? (
                       <div style={{display: 'flex', gap: 4}}>
                         <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{padding: '4px 8px', fontSize: 11}}>✏️</button>
@@ -277,6 +283,23 @@ export default function ApplicationsList() {
           onClose={() => setShowNewOrder(false)}
           onCreated={() => { setShowNewOrder(false); fetchApplications(); }}
         />
+      )}
+
+      {notesModal && (
+        <div className="modal-overlay active" onClick={() => setNotesModal(null)}>
+          <div className="modal-content" style={{width: 500}} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Заметка — {notesModal.order_name || notesModal.id}</h3>
+              <button className="close-btn" onClick={() => setNotesModal(null)}>{'\u2715'}</button>
+            </div>
+            <div className="modal-body">
+              <div style={{whiteSpace: 'pre-wrap', lineHeight: 1.6}}>{notesModal.comments}</div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={() => setNotesModal(null)}>Закрыть</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

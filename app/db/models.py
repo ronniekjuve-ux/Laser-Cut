@@ -105,6 +105,9 @@ class ApplicationLayout(Base):
     cut_time: Mapped[str] = mapped_column(String(20))
     move_time: Mapped[str] = mapped_column(String(20))
     pierce_time: Mapped[str] = mapped_column(String(20))
+    cut_length: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    travel_length: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    pierces: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     cnc_path: Mapped[str] = mapped_column(Text, nullable=True)
     layout_image: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 

@@ -258,13 +258,13 @@ def clean_text(text: str) -> str:
 
 def normalize_name(name: str) -> str:
     """Нормализует имя для сопоставления"""
-    # 1. Сначала извлекаем только имя файла из пути D:\...\file.dft
-    clean = Path(name).name
+    # Извлекаем имя файла, обрабатывая Windows-пути (D:\...)
+    clean = name.replace('\\', '/').split('/')[-1]
 
-    # 2. Убираем расширение .dft
+    # Убираем расширение .dft
     clean = re.sub(r'\.dft$', '', clean, flags=re.IGNORECASE).strip()
 
-    # 3. Приводим к нижнему регистру
+    # Приводим к нижнему регистру
     return clean.lower()
 
 
@@ -640,8 +640,11 @@ def parse_layout_text(text: str, filename: str) -> LayoutData:
     return data
 
 
-def extract_images(filepath: str, output_dir: str, prefix: str = "") -> List[str]:
-    """Извлекает изображения из DOC файла"""
+def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft: bool = False) -> List[str]:
+    """Извлекает изображения из DOC файла.
+    filter_dft=True — только изображения рядом с .dft именами (для заявок).
+    filter_dft=False — все изображения (для раскладок).
+    """
     import tempfile
     import subprocess
     from pathlib import Path
@@ -662,23 +665,43 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "") -> List[str
             dest_dir = Path(output_dir) / prefix
             dest_dir.mkdir(parents=True, exist_ok=True)
 
-            # Ищем изображения в подпапке _files
+            html_files = list(Path(tmpdir).glob('*.html'))
+            if not html_files:
+                return saved_paths
+
+            html_text = html_files[0].read_text(encoding='utf-8', errors='ignore')
+
+            from urllib.parse import unquote
+
+            # Собираем ВСЕ изображения из tmpdir
+            all_images = {}
             html_name = Path(filepath).stem
             img_dir = Path(tmpdir) / f"{html_name}_files"
             if img_dir.exists():
                 for img_file in img_dir.iterdir():
                     if img_file.is_file() and img_file.suffix.lower() in IMG_EXTS:
-                        dest_path = dest_dir / img_file.name
-                        shutil.copy2(img_file, dest_path)
-                        saved_paths.append(f"/api/v1/images/{prefix}/{img_file.name}")
-
-            # Ищем изображения рядом с HTML файлом
+                        all_images[img_file.name] = img_file
             for img_file in Path(tmpdir).iterdir():
                 if img_file.is_file() and img_file.suffix.lower() in IMG_EXTS:
-                    if not any(img_file.name in p for p in saved_paths):
-                        dest_path = dest_dir / img_file.name
-                        shutil.copy2(img_file, dest_path)
-                        saved_paths.append(f"/api/v1/images/{prefix}/{img_file.name}")
+                    if img_file.name not in all_images:
+                        all_images[img_file.name] = img_file
+
+            # Для каждого <img> в HTML
+            for m in re.finditer(r'<img[^>]+src=["\']([^"\']+)', html_text):
+                img_ref = unquote(m.group(1)).split('/')[-1]
+                src = all_images.get(img_ref)
+                if not src:
+                    continue
+
+                if filter_dft:
+                    # Только изображения с .dft именами nearby
+                    lookback = html_text[max(0, m.start() - 500):m.start() + 200]
+                    if not re.search(r'\.dft', lookback, re.IGNORECASE):
+                        continue
+
+                dest_path = dest_dir / img_ref
+                shutil.copy2(src, dest_path)
+                saved_paths.append(f"/api/v1/images/{prefix}/{img_ref}")
 
     except Exception as e:
         print(f"Warning: image extraction failed: {e}")

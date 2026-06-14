@@ -16,7 +16,8 @@ from app.services.unified_parser import (
     parse_layout_text,
     merge_data,
     ApplicationData,
-    extract_images  # <-- Добавлено
+    extract_images,
+    normalize_name
 )
 
 router = APIRouter(prefix="/applications", tags=["Applications"])
@@ -80,8 +81,16 @@ async def upload_application(
         )
         app = result.scalar_one_or_none()
 
-        detail_images = extract_images(file_path, str(IMAGE_DIR), prefix="applications")
-        images_json = json.dumps(detail_images) if detail_images else None
+        detail_images = extract_images(file_path, str(IMAGE_DIR), prefix="applications", filter_dft=True)
+
+        # Маппинг: нормализованное имя детали -> изображение
+        detail_image_map = {}
+        if detail_images and data.parts:
+            for ai, ap in enumerate(data.parts):
+                key = normalize_name(ap.name_raw)
+                if key and ai < len(detail_images):
+                    detail_image_map[key] = detail_images[ai]
+        images_json = json.dumps(detail_image_map) if detail_image_map else None
 
         if app:
             app.material = steel_grade if steel_grade else data.material
@@ -90,7 +99,7 @@ async def upload_application(
             app.total_weight = data.total_weight
             app.total_parts_count = len(data.parts)
             app.comments = comments if comments else app.comments
-            if detail_images:
+            if detail_image_map:
                 app.detail_images = images_json
         else:
             customer = await get_or_create_customer(db, customer_name or "Промстальмаш")
@@ -153,11 +162,17 @@ async def upload_layout(
         # === Ищем файл заявки (для весов и чистых имен) ===
         print(f"\n🔍 Ищем файл заявки: {app.order_name}*.doc")
 
-        # Ищем файлы с именем заказа (учитываем .DOC и .doc)
+        # Ищем файлы с именем заказа, исключая файлы раскладок (_layout_)
         pattern = f"{UPLOAD_DIR}/{app.order_name}*"
-        found_files = [f for f in glob.glob(pattern + ".*") if f.lower().endswith(('.doc', '.docx'))]
+        found_files = [
+            f for f in glob.glob(pattern + ".*")
+            if f.lower().endswith(('.doc', '.docx')) and '_layout_' not in f.lower()
+        ]
         if not found_files:
-            found_files = glob.glob(f"{UPLOAD_DIR}/{app.order_name}*.doc")
+            found_files = [
+                f for f in glob.glob(f"{UPLOAD_DIR}/{app.order_name}*.doc")
+                if '_layout_' not in f.lower()
+            ]
 
         app_data = ApplicationData()  # Пустая по умолчанию
 
@@ -189,6 +204,9 @@ async def upload_layout(
             layout.cut_time = layout_data.cut_time
             layout.move_time = layout_data.move_time
             layout.pierce_time = layout_data.pierce_time
+            layout.cut_length = layout_data.cut_length
+            layout.travel_length = layout_data.travel_length
+            layout.pierces = layout_data.pierces
             layout.cnc_path = layout_data.cnc_path
             if layout_image_path:
                 layout.layout_image = layout_image_path
@@ -203,6 +221,9 @@ async def upload_layout(
                 cut_time=layout_data.cut_time,
                 move_time=layout_data.move_time,
                 pierce_time=layout_data.pierce_time,
+                cut_length=layout_data.cut_length,
+                travel_length=layout_data.travel_length,
+                pierces=layout_data.pierces,
                 cnc_path=layout_data.cnc_path,
                 layout_image=layout_image_path
             )
@@ -214,21 +235,29 @@ async def upload_layout(
         )
 
         thickness = app.thickness or 0.0
-        detail_images = []
+        detail_image_map = {}
         if app.detail_images:
             try:
-                detail_images = json.loads(app.detail_images)
+                parsed = json.loads(app.detail_images)
+                if isinstance(parsed, dict):
+                    detail_image_map = parsed
+                elif isinstance(parsed, list):
+                    # Старый формат — список, маппим по имени из app_data.parts
+                    if app_data.parts:
+                        for ai, ap in enumerate(app_data.parts):
+                            key = normalize_name(ap.name_raw)
+                            if key and ai < len(parsed):
+                                detail_image_map[key] = parsed[ai]
             except Exception:
                 pass
 
         for pi, part_data in enumerate(merged_parts):
-            # Calculate weight: dx(mm) * dy(mm) * thickness(mm) * 7.85 / 1000000
             part_weight = None
             if thickness > 0 and part_data.dx > 0 and part_data.dy > 0:
                 part_weight = round(part_data.dx * part_data.dy * thickness * 7.85 / 1000000, 4)
 
-            # Assign image by index
-            part_image = detail_images[pi] if pi < len(detail_images) else None
+            part_key = normalize_name(part_data.name)
+            part_image = detail_image_map.get(part_key)
 
             part = ApplicationLayoutPart(
                 layout_id=layout.id,
@@ -251,7 +280,17 @@ async def upload_layout(
         if app.total_weight is None and layout_data.sheet_weight:
             app.total_weight = layout_data.sheet_weight
 
-        await db.commit()  # Сохраняем обновленную заявку
+        await db.commit()
+
+        # Пересчёт весов деталей с учётом обновлённой толщины
+        if app.thickness and app.thickness > 0:
+            parts_res = await db.execute(
+                select(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == layout.id)
+            )
+            for part in parts_res.scalars().all():
+                if part.dx > 0 and part.dy > 0:
+                    part.weight = round(part.dx * part.dy * app.thickness * 7.85 / 1_000_000, 4)
+            await db.commit()
 
         return {
             "status": "success",
@@ -301,6 +340,7 @@ async def list_applications(
             "total_parts": app.total_parts_count,
             "total_weight": app.total_weight,
             "machine": machine,
+            "comments": app.comments,
             "created_at": app.created_at
         })
 
@@ -351,6 +391,9 @@ async def get_application_details(app_id: int, db: AsyncSession = Depends(get_db
             "cut_time": layout.cut_time,
             "move_time": layout.move_time,
             "pierce_time": layout.pierce_time,
+            "cut_length": layout.cut_length,
+            "travel_length": layout.travel_length,
+            "pierces": layout.pierces,
             "cnc_path": layout.cnc_path,
             "layout_image": layout.layout_image,
             "parts_count": len(parts),
