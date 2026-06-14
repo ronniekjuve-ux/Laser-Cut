@@ -1,13 +1,55 @@
 import { useState, useEffect } from 'react';
 import client from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ApplicationDetail({ app, onClose, onUpdate }) {
+  const { user } = useAuth();
   const [fullApp, setFullApp] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showPartInfo, setShowPartInfo] = useState(null);
   const [activeLayout, setActiveLayout] = useState(null);
+  const [showDeficitForm, setShowDeficitForm] = useState(false);
+  const [deficitNote, setDeficitNote] = useState('');
+  const [deficitSize, setDeficitSize] = useState('');
+  const [deficitQty, setDeficitQty] = useState('');
+  const [deficitSending, setDeficitSending] = useState(false);
 
   const highlightPart = app.highlightPart || null;
+
+  const updateStatus = async (newStatus) => {
+    try {
+      await client.patch('/api/v1/applications/' + app.id + '/status?status=' + newStatus);
+      setFullApp(prev => ({
+        ...prev,
+        application: { ...prev.application, status: newStatus }
+      }));
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      alert('Ошибка смены статуса');
+    }
+  };
+
+  const submitDeficit = async () => {
+    setDeficitSending(true);
+    try {
+      const fd = new FormData();
+      fd.append('material', data.material || data.steel_grade || '');
+      fd.append('thickness', data.thickness ? String(data.thickness) : '');
+      fd.append('size', deficitSize || '');
+      fd.append('quantity', deficitQty || '');
+      fd.append('note', deficitNote || '');
+      await client.post('/api/v1/applications/' + app.id + '/deficit', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setShowDeficitForm(false);
+      setDeficitNote('');
+      alert('Заявка о нехватке металла отправлена');
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setDeficitSending(false);
+    }
+  };
 
   useEffect(() => {
     const fetchFull = async () => {
@@ -93,6 +135,96 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                 <div><span style={{fontWeight: 600}}>Дата:</span> {data.created_at ? new Date(data.created_at).toLocaleDateString('ru-RU') : '-'}</div>
                 {data.comments && <div><span style={{fontWeight: 600}}>Комментарий:</span> {data.comments}</div>}
               </div>
+
+              {(user?.role === 'admin' || user?.role === 'operator') && (
+                <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
+                  <div style={{fontWeight: 600, marginBottom: 8}}>Статус:</div>
+                  <div style={{display: 'flex', gap: 6, flexWrap: 'wrap'}}>
+                    {[
+                      { key: 'pending', label: 'В очереди', bg: '#f1f5f9', color: '#475569' },
+                      { key: 'in_progress', label: 'В работе', bg: '#dbeafe', color: '#1d4ed8' },
+                      { key: 'partially_cut', label: 'Частично', bg: '#fef3c7', color: '#92400e' },
+                      { key: 'cut', label: 'Вырезано', bg: '#dcfce7', color: '#166534' },
+                    ].map(s => (
+                      <button
+                        key={s.key}
+                        onClick={() => updateStatus(s.key)}
+                        style={{
+                          padding: '6px 14px', borderRadius: 6, border: '2px solid',
+                          borderColor: data.status === s.key ? s.color : 'transparent',
+                          background: data.status === s.key ? s.bg : '#f8fafc',
+                          color: s.color, fontWeight: data.status === s.key ? 700 : 400,
+                          cursor: 'pointer', fontSize: 13
+                        }}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(user?.role === 'operator') && (
+                <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
+                  {!showDeficitForm ? (
+                    <button
+                      className="btn"
+                      onClick={() => {
+                        const firstLayout = layouts[0];
+                        setDeficitSize(firstLayout ? firstLayout.sheet_size : '');
+                        setDeficitQty(firstLayout ? String(firstLayout.sheet_count || 1) : '1');
+                        setDeficitNote('');
+                        setShowDeficitForm(true);
+                      }}
+                      style={{background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d'}}
+                    >
+                      ⚠️ Заказать материал
+                    </button>
+                  ) : (
+                    <div style={{padding: 10, background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 6}}>
+                      <div style={{fontWeight: 600, marginBottom: 6}}>Нехватка металла</div>
+                      <div style={{fontSize: 13, color: '#64748b', marginBottom: 6}}>
+                        Материал: {data.material || data.steel_grade || '-'}, Толщина: {data.thickness || '-'} мм
+                      </div>
+                      <div style={{display: 'flex', gap: 8, marginBottom: 6}}>
+                        <div style={{flex: 1}}>
+                          <label style={{fontSize: 12, color: '#64748b'}}>Размер листа</label>
+                          <input
+                            value={deficitSize}
+                            onChange={e => setDeficitSize(e.target.value)}
+                            placeholder="1500x6000"
+                            style={{width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, boxSizing: 'border-box'}}
+                          />
+                        </div>
+                        <div style={{width: 80}}>
+                          <label style={{fontSize: 12, color: '#64748b'}}>Кол-во</label>
+                          <input
+                            type="number"
+                            value={deficitQty}
+                            onChange={e => setDeficitQty(e.target.value)}
+                            placeholder="1"
+                            style={{width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, boxSizing: 'border-box'}}
+                          />
+                        </div>
+                      </div>
+                      <textarea
+                        value={deficitNote}
+                        onChange={e => setDeficitNote(e.target.value)}
+                        placeholder="Комментарий (необязательно)"
+                        style={{width: '100%', padding: 6, border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, minHeight: 50, boxSizing: 'border-box'}}
+                      />
+                      <div style={{display: 'flex', gap: 6, marginTop: 6}}>
+                        <button className="btn btn-primary" onClick={submitDeficit} disabled={deficitSending}>
+                          {deficitSending ? 'Отправка...' : 'Отправить'}
+                        </button>
+                        <button className="btn" onClick={() => { setShowDeficitForm(false); setDeficitNote(''); }}>
+                          Отмена
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {layouts.length > 0 && (
                 <div style={{marginTop: 16}}>

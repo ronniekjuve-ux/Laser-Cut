@@ -44,10 +44,6 @@ async def get_current_user(token: HTTPAuthorizationCredentials = Depends(oauth2_
             raise HTTPException(status_code=403, detail="Account inactive")
 
         return user
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {str(e)}")
-        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {str(e)}")
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import client from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import ApplicationDetail from './ApplicationDetail';
 import NewOrderModal from './NewOrderModal';
 
@@ -9,10 +10,9 @@ const COLUMNS = [
   { key: 'machine', label: 'Станок', sortable: true, filterable: true },
   { key: 'material', label: 'Материал', sortable: true, filterable: true },
   { key: 'thickness', label: 'Толщ.', sortable: true, filterable: true },
+  { key: 'priority', label: 'Приоритет', sortable: true, filterable: true },
   { key: 'status', label: 'Статус', sortable: true, filterable: true },
-  { key: 'operator', label: 'Оператор', sortable: true, filterable: true },
   { key: 'received', label: 'Поступил', sortable: true, filterable: false },
-  { key: 'completed', label: 'Вып.', sortable: true, filterable: false },
   { key: 'notes', label: 'Заметки', sortable: false, filterable: false, type: 'notes' },
   { key: 'actions', label: '', sortable: false, filterable: false },
 ];
@@ -23,6 +23,9 @@ function debounce(fn, ms) {
 }
 
 export default function ApplicationsList() {
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const highlightId = searchParams.get('highlight');
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -37,6 +40,15 @@ export default function ApplicationsList() {
   const [filterSearch, setFilterSearch] = useState('');
   const filterRef = useRef(null);
   const navigate = useNavigate();
+
+  // Подсветка заявки из уведомления
+  useEffect(() => {
+    if (highlightId && applications.length > 0) {
+      // Очищаем параметр через 3 секунды
+      const timer = setTimeout(() => setSearchParams({}), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightId, applications]);
 
   const fetchApplications = useCallback(async (searchQuery) => {
     try {
@@ -76,12 +88,18 @@ export default function ApplicationsList() {
     machine: app.machine || '',
     material: app.steel_grade || app.material || '',
     thickness: app.thickness || '',
-    status: app.status || '',
+    priority: app.priority || 'medium',
+    status: app.status || 'pending',
     operator: app.operator || '',
     received: app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : '',
     completed: app.completed_at ? new Date(app.completed_at).toLocaleDateString('ru-RU') : '',
     notes: app.comments || '',
   });
+
+  const FILTER_LABELS = {
+    priority: { low: 'Низкий', medium: 'Средний', high: 'Высокий', urgent: 'Срочно' },
+    status: { pending: 'В очереди', in_progress: 'В работе', partially_cut: 'Частично', cut: 'Вырезано' },
+  };
 
   const getFilterValues = (colKey) => {
     const vals = new Set();
@@ -250,16 +268,46 @@ export default function ApplicationsList() {
           <tbody>
             {filtered.map(app => (
               <React.Fragment key={app.id}>
-              <tr onClick={() => setSelectedApp(app)} style={{cursor: 'pointer'}}>
+              <tr onClick={() => setSelectedApp(app)} style={{
+                cursor: 'pointer',
+                background: highlightId && app.id === parseInt(highlightId) ? '#fef08a' : undefined
+              }}>
                 {COLUMNS.map(col => (
                   <td key={col.key}>
                     {col.key === 'status' ? (
                       <span className={'badge ' + (
-                        (app.status || '').toLowerCase() === '\u0433\u043e\u0442\u043e\u0432\u043e' ? 'bg-done' :
-                        (app.status || '').toLowerCase() === '\u0432 \u0440\u0435\u0437\u043a\u0435' ? 'bg-work' : 'bg-queue'
+                        app.status === 'cut' ? 'bg-done' :
+                        app.status === 'in_progress' || app.status === 'partially_cut' ? 'bg-work' : 'bg-queue'
                       )}>
-                        {app.status || '\u0412 \u043e\u0447\u0435\u0440\u0435\u0434\u0438'}
+                        {app.status === 'cut' ? 'Вырезано' :
+                         app.status === 'in_progress' ? 'В работе' :
+                         app.status === 'partially_cut' ? 'Частично' : 'В очереди'}
                       </span>
+                    ) : col.key === 'priority' ? (
+                      (user?.role === 'admin' || user?.role === 'director') ? (
+                        <select
+                          value={app.priority || 'medium'}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            client.patch('/api/v1/applications/' + app.id + '/priority?priority=' + e.target.value)
+                              .then(() => fetchApplications(search || undefined));
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            border: 'none', background: 'transparent', cursor: 'pointer',
+                            fontSize: 12, padding: '2px 4px', borderRadius: 4
+                          }}
+                        >
+                          <option value="low">🟢 Низкий</option>
+                          <option value="medium">🔵 Средний</option>
+                          <option value="high">🟠 Высокий</option>
+                          <option value="urgent">🔴 Срочно</option>
+                        </select>
+                      ) : (
+                        <span>
+                          {({low: '🟢 Низкий', medium: '🔵 Средний', high: '🟠 Высокий', urgent: '🔴 Срочно'})[app.priority] || '🔵 Средний'}
+                        </span>
+                      )
                     ) : col.key === 'notes' ? (
                       <button
                         onClick={(e) => { e.stopPropagation(); setNotesModal(app); }}
@@ -376,7 +424,7 @@ export default function ApplicationsList() {
                   checked={(filters[openFilter] || []).includes(val)}
                   onChange={() => toggleFilterItem(openFilter, val)}
                 />
-                {val || '(пусто)'}
+                {(FILTER_LABELS[openFilter] && FILTER_LABELS[openFilter][val]) || val || '(пусто)'}
               </label>
             ))
           }

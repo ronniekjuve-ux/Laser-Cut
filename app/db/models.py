@@ -21,6 +21,20 @@ class UserStatus(str, enum.Enum):
     DELETED = "deleted"
 
 
+class ApplicationStatus(str, enum.Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    PARTIALLY_CUT = "partially_cut"
+    CUT = "cut"
+
+
+class ApplicationPriority(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -29,6 +43,9 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.OPERATOR)
     status: Mapped[UserStatus] = mapped_column(SAEnum(UserStatus), default=UserStatus.ACTIVE)
+    customer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("customers.id"), nullable=True)
+
+    customer: Mapped[Optional["Customer"]] = relationship(back_populates="users")
 
 
 class Session(Base):
@@ -61,6 +78,7 @@ class Customer(Base):
     objects: Mapped[List["Object"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
     applications: Mapped[List["Application"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
     orders: Mapped[List["Order"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
+    users: Mapped[List["User"]] = relationship(back_populates="customer")
 
 
 class Object(Base):
@@ -88,8 +106,12 @@ class Application(Base):
     total_time: Mapped[str] = mapped_column(String(20), default="00:00:00")
     detail_images: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     comments: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    priority: Mapped[str] = mapped_column(String(20), default="medium")
+    updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     customer: Mapped["Customer"] = relationship(back_populates="applications")
+    updater: Mapped[Optional["User"]] = relationship(foreign_keys=[updated_by])
     layouts: Mapped[List["ApplicationLayout"]] = relationship(back_populates="application", cascade="all, delete-orphan")
 
 
@@ -185,3 +207,51 @@ class OrderPart(Base):
     quantity: Mapped[int] = mapped_column(Integer)
 
     layout: Mapped["OrderLayout"] = relationship(back_populates="parts")
+
+
+class DeficitRequest(Base):
+    __tablename__ = "deficit_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[Optional[int]] = mapped_column(ForeignKey("applications.id"), nullable=True)
+    material: Mapped[str] = mapped_column(String(50))
+    thickness: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    customer_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    application: Mapped[Optional["Application"]] = relationship(foreign_keys=[application_id])
+    creator: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by])
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    type: Mapped[str] = mapped_column(String(50))
+    message: Mapped[str] = mapped_column(Text)
+    is_read: Mapped[bool] = mapped_column(default=False)
+    related_app_id: Mapped[Optional[int]] = mapped_column(ForeignKey("applications.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    related_app: Mapped[Optional["Application"]] = relationship(foreign_keys=[related_app_id])
+
+
+class ChangeLog(Base):
+    __tablename__ = "change_log"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_name: Mapped[str] = mapped_column(String(50))
+    change_type: Mapped[str] = mapped_column(String(50))
+    resource: Mapped[str] = mapped_column(String(50))
+    resource_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    description: Mapped[str] = mapped_column(Text)
+    old_value: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    new_value: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])

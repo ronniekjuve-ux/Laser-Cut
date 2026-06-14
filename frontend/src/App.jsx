@@ -9,6 +9,7 @@ import Deficit from './pages/Deficit';
 import Schedule from './pages/Schedule';
 import UsersList from './pages/Users/UsersList';
 import AuditLog from './pages/Audit/AuditLog';
+import ChangeLog from './pages/ChangeLog/ChangeLog';
 
 export default function App() {
   return (
@@ -33,7 +34,16 @@ export default function App() {
                 <UsersList />
               </ProtectedRoute>
             } />
-            <Route path="audit" element={<AuditLog />} />
+            <Route path="changelog" element={
+              <ProtectedRoute roles={['admin', 'director']}>
+                <ChangeLog />
+              </ProtectedRoute>
+            } />
+            <Route path="audit" element={
+              <ProtectedRoute roles={['admin']}>
+                <AuditLog />
+              </ProtectedRoute>
+            } />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

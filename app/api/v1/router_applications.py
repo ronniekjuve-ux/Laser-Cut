@@ -2,14 +2,19 @@
 import json
 import glob
 import re
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Form
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from sqlalchemy.orm import joinedload
 from typing import Optional, List
 from pathlib import Path
 from app.db.base import get_db
-from app.db.models import Application, ApplicationLayout, ApplicationLayoutPart, Customer
+from app.db.models import (
+    Application, ApplicationLayout, ApplicationLayoutPart, Customer,
+    User, UserRole, ApplicationStatus, ApplicationPriority,
+    DeficitRequest, Notification, ChangeLog
+)
+from app.core.deps import get_current_user, require_role
 from app.services.unified_parser import (
     extract_text,
     parse_application_text,
@@ -58,7 +63,8 @@ async def upload_application(
         customer_name: str = Form(""),
         steel_grade: str = Form(""),
         comments: str = Form(""),
-        db: AsyncSession = Depends(get_db)
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN))
 ):
     if not file.filename.lower().endswith('.doc'):
         raise HTTPException(status_code=400, detail="Только .doc файлы")
@@ -136,7 +142,8 @@ async def upload_application(
 async def upload_layout(
         app_id: int,
         file: UploadFile = File(...),
-        db: AsyncSession = Depends(get_db)
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN))
 ):
     result = await db.execute(select(Application).where(Application.id == app_id))
     app = result.scalar_one_or_none()
@@ -310,8 +317,14 @@ async def upload_layout(
 @router.get("/")
 async def list_applications(
         search: Optional[str] = None,
-        db: AsyncSession = Depends(get_db)
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
 ):
+    # Если заказчик — только свои заявки
+    customer_filter = None
+    if user.role == UserRole.CUSTOMER and user.customer_id:
+        customer_filter = user.customer_id
+
     # Если есть поиск — сначала найдём ID заявок по полям ИЛИ по деталям
     matching_app_ids = None
     if search:
@@ -337,10 +350,10 @@ async def list_applications(
         result_ids = await db.execute(select(combined.c.id))
         matching_app_ids = set(r[0] for r in result_ids.all())
 
-    result = await db.execute(
-        select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True)
-        .order_by(Application.created_at.desc())
-    )
+    query = select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True)
+    if customer_filter:
+        query = query.where(Application.customer_id == customer_filter)
+    result = await db.execute(query.order_by(Application.created_at.desc()))
     rows = result.all()
 
     enriched = []
@@ -382,6 +395,8 @@ async def list_applications(
             "total_weight": app.total_weight,
             "machine": machine,
             "comments": app.comments,
+            "status": app.status or "pending",
+            "priority": app.priority or "medium",
             "matched_parts": matched_parts,
             "created_at": app.created_at
         })
@@ -389,8 +404,210 @@ async def list_applications(
     return enriched
 
 
+@router.get("/changelog")
+async def list_changelog(
+        limit: int = Query(100, le=500),
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(ChangeLog).order_by(ChangeLog.created_at.desc()).limit(limit)
+    )
+    logs = result.scalars().all()
+
+    return [
+        {
+            "id": l.id,
+            "user_name": l.user_name,
+            "change_type": l.change_type,
+            "resource": l.resource,
+            "resource_id": l.resource_id,
+            "description": l.description,
+            "old_value": l.old_value,
+            "new_value": l.new_value,
+            "created_at": l.created_at
+        }
+        for l in logs
+    ]
+
+
+@router.get("/notifications/unread-count")
+async def unread_count(
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    from sqlalchemy import func as sqlfunc
+    result = await db.execute(
+        select(sqlfunc.count(Notification.id))
+        .where(Notification.user_id == user.id, Notification.is_read == False)
+    )
+    count = result.scalar() or 0
+    return {"count": count}
+
+
+@router.get("/notifications")
+async def list_notifications(
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(Notification)
+        .where(Notification.user_id == user.id)
+        .order_by(Notification.created_at.desc())
+        .limit(50)
+    )
+    notifications = result.scalars().all()
+
+    return [
+        {
+            "id": n.id,
+            "type": n.type,
+            "message": n.message,
+            "is_read": n.is_read,
+            "related_app_id": n.related_app_id,
+            "created_at": n.created_at
+        }
+        for n in notifications
+    ]
+
+
+@router.patch("/notifications/{notif_id}/read")
+async def mark_read(
+        notif_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(Notification).where(Notification.id == notif_id, Notification.user_id == user.id)
+    )
+    notif = result.scalar_one_or_none()
+    if not notif:
+        raise HTTPException(status_code=404, detail="Уведомление не найдено")
+
+    notif.is_read = True
+    await db.commit()
+
+    return {"status": "success"}
+
+
+@router.get("/deficit")
+async def list_deficit(
+        status_filter: Optional[str] = None,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    query = select(DeficitRequest)
+    if status_filter:
+        query = query.where(DeficitRequest.status == status_filter)
+    if user.role == UserRole.CUSTOMER and user.customer_id:
+        query = query.where(DeficitRequest.customer_name == user.username)
+
+    result = await db.execute(query.order_by(DeficitRequest.created_at.desc()))
+    deficits = result.scalars().all()
+
+    # Получаем имена пользователей
+    user_ids = list(set(d.created_by for d in deficits if d.created_by))
+    user_map = {}
+    if user_ids:
+        users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
+        for u in users_result.scalars().all():
+            user_map[u.id] = u.username
+
+    return [
+        {
+            "id": d.id,
+            "application_id": d.application_id,
+            "material": d.material,
+            "thickness": d.thickness,
+            "size": d.size,
+            "quantity": d.quantity,
+            "customer_name": d.customer_name,
+            "status": d.status,
+            "note": d.note,
+            "created_by": user_map.get(d.created_by, "-"),
+            "created_at": d.created_at
+        }
+        for d in deficits
+    ]
+
+
+@router.patch("/deficit/{deficit_id}/resolve")
+async def resolve_deficit(
+        deficit_id: int,
+        status: str = Query("resolved"),
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
+):
+    result = await db.execute(select(DeficitRequest).where(DeficitRequest.id == deficit_id))
+    deficit = result.scalar_one_or_none()
+    if not deficit:
+        raise HTTPException(status_code=404, detail="Запрос не найден")
+
+    old_status = deficit.status
+    deficit.status = status
+
+    # Запись в историю изменений
+    status_labels = {"pending": "Ожидает", "resolved": "Решено"}
+    db.add(ChangeLog(
+        user_id=user.id, user_name=user.username,
+        change_type="deficit_status", resource="deficit", resource_id=deficit.id,
+        description=f"Дефицит: {deficit.material} ({deficit.customer_name or '-'})",
+        old_value=status_labels.get(old_status, old_status),
+        new_value=status_labels.get(status, status)
+    ))
+
+    await db.commit()
+
+    return {"status": "success"}
+
+
+@router.patch("/deficit/{deficit_id}")
+async def update_deficit(
+        deficit_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user),
+        body: dict = None
+):
+    if not body:
+        raise HTTPException(status_code=400, detail="Тело запроса обязательно")
+
+    result = await db.execute(select(DeficitRequest).where(DeficitRequest.id == deficit_id))
+    deficit = result.scalar_one_or_none()
+    if not deficit:
+        raise HTTPException(status_code=404, detail="Запрос не найден")
+
+    if "material" in body:
+        deficit.material = body["material"]
+    if "thickness" in body:
+        deficit.thickness = body["thickness"]
+    if "size" in body:
+        deficit.size = body["size"]
+    if "quantity" in body:
+        deficit.quantity = body["quantity"]
+    if "customer_name" in body:
+        deficit.customer_name = body["customer_name"]
+    if "note" in body:
+        deficit.note = body["note"]
+
+    # Запись в историю изменений
+    db.add(ChangeLog(
+        user_id=user.id, user_name=user.username,
+        change_type="deficit_edit", resource="deficit", resource_id=deficit.id,
+        description=f"Редактирование дефицита: {deficit.material} ({deficit.customer_name or '-'})",
+        old_value=None, new_value="Обновлено"
+    ))
+
+    await db.commit()
+
+    return {"status": "success"}
+
+
 @router.get("/{app_id}")
-async def get_application_details(app_id: int, db: AsyncSession = Depends(get_db)):
+async def get_application_details(
+        app_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
     # Сначала получаем заявку
     result = await db.execute(
         select(Application).where(Application.id == app_id)
@@ -475,7 +692,11 @@ async def get_application_details(app_id: int, db: AsyncSession = Depends(get_db
 
 
 @router.delete("/{app_id}")
-async def delete_application(app_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_application(
+        app_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN))
+):
     result = await db.execute(select(Application).where(Application.id == app_id))
     app = result.scalar_one_or_none()
 
@@ -486,3 +707,168 @@ async def delete_application(app_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return {"status": "success", "message": "Заявка удалена"}
+
+
+@router.patch("/{app_id}/priority")
+async def update_priority(
+        app_id: int,
+        priority: str = Query(...),
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
+):
+    if priority not in ("low", "medium", "high", "urgent"):
+        raise HTTPException(status_code=400, detail="Невалидный приоритет")
+
+    result = await db.execute(select(Application).where(Application.id == app_id))
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    app.priority = priority
+
+    priority_labels = {"low": "Низкий", "medium": "Средний", "high": "Высокий", "urgent": "Срочно"}
+    cust_name = ""
+    order_date = app.created_at.strftime('%d.%m.%Y') if app.created_at else ""
+    if app.customer_id:
+        cust_result = await db.execute(select(Customer).where(Customer.id == app.customer_id))
+        customer = cust_result.scalar_one_or_none()
+        cust_name = f" | {customer.name}" if customer else ""
+    db.add(ChangeLog(
+        user_id=user.id, user_name=user.username,
+        change_type="priority", resource="application", resource_id=app.id,
+        description=f"{app.order_name}{cust_name} | {order_date}",
+        old_value=priority_labels.get(app.priority, app.priority),
+        new_value=priority_labels.get(priority, priority)
+    ))
+
+    await db.commit()
+
+    return {"status": "success", "new_priority": priority}
+
+
+@router.patch("/{app_id}/status")
+async def update_application_status(
+        app_id: int,
+        status: str = Query(...),
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
+):
+    if status not in ("pending", "in_progress", "partially_cut", "cut"):
+        raise HTTPException(status_code=400, detail="Невалидный статус")
+
+    result = await db.execute(select(Application).where(Application.id == app_id))
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    old_status = app.status
+    app.status = status
+    app.updated_by = user.id
+
+    # Уведомление для заказчика и админов
+    if old_status != status:
+        status_labels = {
+            "pending": "В очереди", "in_progress": "В работе",
+            "partially_cut": "Вырезано частично", "cut": "Вырезано"
+        }
+        cust_name = ""
+        order_date = app.created_at.strftime('%d.%m.%Y') if app.created_at else ""
+        if app.customer_id:
+            cust_result = await db.execute(select(Customer).where(Customer.id == app.customer_id))
+            customer = cust_result.scalar_one_or_none()
+            cust_name = f" | {customer.name}" if customer else ""
+        old_label = status_labels.get(old_status, old_status or "В очереди")
+        new_label = status_labels.get(status, status)
+        msg = f"Заявка «{app.order_name}»{cust_name} ({order_date}): «{old_label}» → «{new_label}» ({user.username})"
+
+        # Заказчику
+        if app.customer_id:
+            users_result = await db.execute(
+                select(User).where(User.customer_id == app.customer_id, User.role == UserRole.CUSTOMER)
+            )
+            for cust_user in users_result.scalars().all():
+                db.add(Notification(user_id=cust_user.id, type="status_change", message=msg, related_app_id=app.id))
+
+        # Админам и директорам
+        admins_result = await db.execute(
+            select(User).where(User.role.in_([UserRole.ADMIN, UserRole.DIRECTOR]))
+        )
+        for admin_user in admins_result.scalars().all():
+            if admin_user.id != user.id:
+                db.add(Notification(user_id=admin_user.id, type="status_change", message=msg, related_app_id=app.id))
+
+        # Запись в историю изменений
+        status_labels_all = {
+            "pending": "В очереди", "in_progress": "В работе",
+            "partially_cut": "Вырезано частично", "cut": "Вырезано"
+        }
+        cust_name = ""
+        order_date = app.created_at.strftime('%d.%m.%Y') if app.created_at else ""
+        if app.customer_id:
+            cust_result2 = await db.execute(select(Customer).where(Customer.id == app.customer_id))
+            customer2 = cust_result2.scalar_one_or_none()
+            cust_name = f" | {customer2.name}" if customer2 else ""
+        db.add(ChangeLog(
+            user_id=user.id, user_name=user.username,
+            change_type="status", resource="application", resource_id=app.id,
+            description=f"{app.order_name}{cust_name} | {order_date}",
+            old_value=status_labels_all.get(old_status, old_status or "В очереди"),
+            new_value=status_labels_all.get(status, status)
+        ))
+
+    await db.commit()
+
+    return {"status": "success", "new_status": status}
+
+
+@router.post("/{app_id}/deficit")
+async def create_deficit(
+        app_id: int,
+        material: str = Form(...),
+        thickness: str = Form(""),
+        size: str = Form(""),
+        quantity: str = Form(""),
+        note: str = Form(""),
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(Application).where(Application.id == app_id))
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    cust_result = await db.execute(select(Customer).where(Customer.id == app.customer_id))
+    customer = cust_result.scalar_one_or_none()
+
+    deficit = DeficitRequest(
+        application_id=app_id,
+        material=material,
+        thickness=float(thickness) if thickness else None,
+        size=size or None,
+        quantity=int(quantity) if quantity else None,
+        customer_name=customer.name if customer else None,
+        note=note or None,
+        created_by=user.id
+    )
+    db.add(deficit)
+    await db.flush()
+
+    # Уведомление заказчику о нехватке металла
+    if app.customer_id:
+        order_date = app.created_at.strftime('%d.%m.%Y') if app.created_at else ""
+        msg = f"Нехватка металла: {material}"
+        if thickness:
+            msg += f", толщина {thickness} мм"
+        msg += f" — заявка «{app.order_name}» ({order_date})"
+        if note:
+            msg += f". {note}"
+
+        users_result = await db.execute(
+            select(User).where(User.customer_id == app.customer_id, User.role == UserRole.CUSTOMER)
+        )
+        for cust_user in users_result.scalars().all():
+            db.add(Notification(user_id=cust_user.id, type="deficit", message=msg, related_app_id=app.id))
+
+    await db.commit()
+
+    return {"status": "success", "deficit_id": deficit.id}

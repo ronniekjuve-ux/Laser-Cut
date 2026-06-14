@@ -13,7 +13,8 @@ router = APIRouter(prefix="/users", tags=["Users"])
 @router.post("/", response_model=UserOut, status_code=201)
 async def create_user(
         payload: UserCreate,
-        db: AsyncSession = Depends(get_db)
+        db: AsyncSession = Depends(get_db),
+        admin: User = Depends(require_role(UserRole.ADMIN))
 ):
     role = payload.role or UserRole.OPERATOR
     user = User(

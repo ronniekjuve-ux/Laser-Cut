@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useState, useEffect } from 'react';
+import client from '../api/client';
 
 const SHIFT_CYCLE = [
   ['Yura', 'Denis'],
@@ -32,11 +33,12 @@ function getActiveOps() {
 }
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Заявки', icon: '📋', end: true },
-  { to: '/deficit', label: 'Дефицит', icon: '⚠️' },
-  { to: '/schedule', label: 'График', icon: '📅' },
+  { to: '/', label: 'Заявки', icon: '📋', end: true, roles: ['admin', 'director', 'operator', 'customer'] },
+  { to: '/deficit', label: 'Дефицит', icon: '⚠️', roles: ['admin', 'director', 'operator', 'customer'] },
+  { to: '/schedule', label: 'График', icon: '📅', roles: ['admin', 'director', 'operator'] },
   { to: '/users', label: 'Пользователи', icon: '👥', roles: ['admin', 'director'] },
-  { to: '/audit', label: 'Аудит', icon: '🔐' },
+  { to: '/changelog', label: 'История изменений', icon: '📝', roles: ['admin', 'director'] },
+  { to: '/audit', label: 'Аудит', icon: '🔐', roles: ['admin'] },
 ];
 
 export default function Layout() {
@@ -45,6 +47,9 @@ export default function Layout() {
   const location = useLocation();
   const [clock, setClock] = useState('');
   const [activeOps, setActiveOps] = useState('');
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifs, setShowNotifs] = useState(false);
 
   useEffect(() => {
     const update = () => {
@@ -55,6 +60,42 @@ export default function Layout() {
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (showNotifs && !e.target.closest('.notif-bell') && !e.target.closest('[style*="z-index: 1000"]')) {
+        setShowNotifs(false);
+      }
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showNotifs]);
+
+  useEffect(() => {
+    const fetchNotifs = async () => {
+      try {
+        const res = await client.get('/api/v1/applications/notifications/unread-count');
+        setUnreadCount(res.data.count);
+      } catch {}
+    };
+    fetchNotifs();
+    const id = setInterval(fetchNotifs, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const openNotifications = async () => {
+    if (showNotifs) { setShowNotifs(false); return; }
+    try {
+      const res = await client.get('/api/v1/applications/notifications');
+      setNotifications(res.data);
+      setShowNotifs(true);
+      // Mark all as read
+      for (const n of res.data.filter(x => !x.is_read)) {
+        await client.patch('/api/v1/applications/notifications/' + n.id + '/read');
+      }
+      setUnreadCount(0);
+    } catch {}
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -67,7 +108,8 @@ export default function Layout() {
     if (p === '/deficit') return 'Дефицит материалов';
     if (p === '/schedule') return 'График смен';
     if (p === '/users') return 'Пользователи';
-    if (p === '/audit') return 'Журнал аудита';
+    if (p === '/audit') return 'Аудит';
+    if (p === '/changelog') return 'История изменений';
     if (p.startsWith('/applications/')) return 'Детали заявки';
     return 'Заявки на резку';
   })();
@@ -101,6 +143,42 @@ export default function Layout() {
           </div>
           <div className="header-right">
             <span className="clock">{clock}</span>
+            <span className="notif-bell" onClick={openNotifications} style={{cursor: 'pointer', position: 'relative', fontSize: 18}}>
+              🔔
+              {unreadCount > 0 && (
+                <span style={{position: 'absolute', top: -6, right: -8, background: '#ef4444', color: '#fff', borderRadius: '50%', fontSize: 10, padding: '1px 4px', fontWeight: 700}}>
+                  {unreadCount}
+                </span>
+              )}
+            </span>
+            {showNotifs && (
+              <div style={{
+                position: 'absolute', top: 45, right: 10, background: '#fff', border: '1px solid #e2e8f0',
+                borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 320, maxHeight: 350,
+                overflow: 'auto', zIndex: 1000
+              }}>
+                <div style={{padding: '8px 12px', fontWeight: 600, borderBottom: '1px solid #e2e8f0'}}>Уведомления</div>
+                {notifications.length === 0 ? (
+                  <div style={{padding: 16, textAlign: 'center', color: '#94a3b8', fontSize: 13}}>Нет уведомлений</div>
+                ) : notifications.map(n => (
+                  <div key={n.id} onClick={() => {
+                    if (n.related_app_id) {
+                      setShowNotifs(false);
+                      navigate('/?highlight=' + n.related_app_id);
+                    }
+                  }} style={{
+                    padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontSize: 13,
+                    background: n.is_read ? '#fff' : '#eff6ff',
+                    cursor: n.related_app_id ? 'pointer' : 'default'
+                  }}>
+                    <div>{n.message}</div>
+                    <div style={{fontSize: 11, color: '#94a3b8', marginTop: 2}}>
+                      {new Date(n.created_at).toLocaleString('ru-RU')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <span className="user-badge">👤 {user?.username || '...'}</span>
           </div>
         </div>
