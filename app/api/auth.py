@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from app.db.base import get_db
 from app.models.user import User, UserStatus, UserRole
 from app.models.session import Session
+from app.db.models import LoginHistory
 from app.schemas.auth import LoginRequest, TokenResponse, QRLoginRequest
 from app.core.security import verify_password, create_token, get_password_hash
 from app.core.deps import get_current_user
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     stmt = select(User).where(or_(User.username == req.username, User.email == req.username))
     res = await db.execute(stmt)
     user = res.scalars().first()
@@ -35,6 +36,12 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
         expires_at=datetime.datetime.utcnow() + expires
     )
     db.add(session)
+
+    db.add(LoginHistory(
+        user_id=user.id,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent", "")[:200]
+    ))
     await db.commit()
 
     return TokenResponse(access_token=token, token_type="bearer")
@@ -66,5 +73,14 @@ async def login_qr(req: QRLoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/logout")
 async def logout(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(LoginHistory).where(
+            LoginHistory.user_id == current_user.id,
+            LoginHistory.logout_at.is_(None)
+        ).order_by(LoginHistory.login_at.desc()).limit(1)
+    )
+    last_login = result.scalar_one_or_none()
+    if last_login:
+        last_login.logout_at = datetime.datetime.utcnow()
     await db.commit()
     return {"detail": "Logged out"}

@@ -44,6 +44,7 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.OPERATOR)
     status: Mapped[UserStatus] = mapped_column(SAEnum(UserStatus), default=UserStatus.ACTIVE)
     customer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("customers.id"), nullable=True)
+    last_active: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     customer: Mapped[Optional["Customer"]] = relationship(back_populates="users")
 
@@ -253,5 +254,28 @@ class ChangeLog(Base):
     old_value: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     new_value: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+
+
+class UserActivity(Base):
+    __tablename__ = "user_activity"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    action_type: Mapped[str] = mapped_column(String(50), default="api_call")
+    details: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+
+
+class LoginHistory(Base):
+    __tablename__ = "login_history"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    login_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    logout_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
     user: Mapped["User"] = relationship(foreign_keys=[user_id])

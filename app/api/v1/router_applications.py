@@ -602,6 +602,32 @@ async def update_deficit(
     return {"status": "success"}
 
 
+@router.post("/deficit")
+async def create_deficit_standalone(
+        body: dict,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    material = body.get("material", "")
+    if not material:
+        raise HTTPException(status_code=400, detail="Материал обязателен")
+
+    deficit = DeficitRequest(
+        material=material,
+        thickness=float(body["thickness"]) if body.get("thickness") else None,
+        size=body.get("size") or None,
+        quantity=int(body["quantity"]) if body.get("quantity") else None,
+        customer_name=body.get("customer_name") or None,
+        note=body.get("note") or None,
+        created_by=user.id
+    )
+    db.add(deficit)
+    await db.commit()
+    await db.refresh(deficit)
+
+    return {"status": "success", "deficit_id": deficit.id}
+
+
 @router.get("/{app_id}")
 async def get_application_details(
         app_id: int,

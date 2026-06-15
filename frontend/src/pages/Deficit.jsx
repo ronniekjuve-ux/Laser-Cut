@@ -27,21 +27,19 @@ export default function Deficit() {
   const handleAdd = async () => {
     if (!form.material) return;
     try {
-      const fd = new FormData();
-      fd.append('material', form.material);
-      fd.append('thickness', form.thickness);
-      fd.append('size', form.size);
-      fd.append('quantity', form.qty);
-      fd.append('customer_name', form.customer);
-      fd.append('note', form.note);
-      await client.post('/api/v1/applications/deficit', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      await client.post('/api/v1/applications/deficit', {
+        material: form.material,
+        thickness: form.thickness,
+        size: form.size,
+        quantity: form.qty,
+        customer_name: form.customer,
+        note: form.note,
       });
       setForm({ material: '', thickness: '', size: '', qty: '', customer: '', note: '' });
       setShowForm(false);
       fetchDeficit();
     } catch (err) {
-      alert('Ошибка: ' + (err.response?.data?.detail || err.message));
+      alert('Ошибка: ' + (typeof err.response?.data?.detail === 'string' ? err.response.data.detail : err.response?.data?.detail?.[0]?.msg || err.message));
     }
   };
 
@@ -80,7 +78,7 @@ export default function Deficit() {
       setEditingId(null);
       fetchDeficit();
     } catch (err) {
-      alert('Ошибка: ' + (err.response?.data?.detail || err.message));
+      alert('Ошибка: ' + (typeof err.response?.data?.detail === 'string' ? err.response.data.detail : err.response?.data?.detail?.[0]?.msg || err.message));
     }
   };
 

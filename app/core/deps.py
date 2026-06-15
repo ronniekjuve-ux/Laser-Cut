@@ -8,6 +8,7 @@ from app.db.base import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.core.security import decode_token
 from app.models.audit import AuditLog
+from app.db.models import UserActivity, LoginHistory
 from fastapi.security import HTTPBearer
 import uuid
 import json
@@ -42,6 +43,11 @@ async def get_current_user(token: HTTPAuthorizationCredentials = Depends(oauth2_
 
         if not user or user.status != UserStatus.ACTIVE:
             raise HTTPException(status_code=403, detail="Account inactive")
+
+        now = datetime.utcnow()
+        user.last_active = now
+        db.add(UserActivity(user_id=user.id, timestamp=now, action_type="api_call"))
+        await db.flush()
 
         return user
     except Exception as e:
