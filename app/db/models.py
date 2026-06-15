@@ -109,10 +109,14 @@ class Application(Base):
     comments: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     priority: Mapped[str] = mapped_column(String(20), default="medium")
+    supply_material: Mapped[Optional[bool]] = mapped_column(default=None, nullable=True)
+    cut_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cut_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     customer: Mapped["Customer"] = relationship(back_populates="applications")
     updater: Mapped[Optional["User"]] = relationship(foreign_keys=[updated_by])
+    cutter: Mapped[Optional["User"]] = relationship(foreign_keys=[cut_by])
     layouts: Mapped[List["ApplicationLayout"]] = relationship(back_populates="application", cascade="all, delete-orphan")
 
 
@@ -279,3 +283,18 @@ class LoginHistory(Base):
     user_agent: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
+
+
+class WarehouseItem(Base):
+    __tablename__ = "warehouse_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    metal: Mapped[str] = mapped_column(String(50))
+    grade: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    sheet_count: Mapped[int] = mapped_column(Integer, default=0)
+    owner: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    creator: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by])

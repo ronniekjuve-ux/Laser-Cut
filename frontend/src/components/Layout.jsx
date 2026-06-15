@@ -34,6 +34,7 @@ function getActiveOps() {
 
 const NAV_ITEMS = [
   { to: '/', label: 'Заявки', icon: '📋', end: true, roles: ['admin', 'director', 'operator', 'customer'] },
+  { to: '/warehouse', label: 'Склад', icon: '🏭', roles: ['admin', 'director', 'operator'] },
   { to: '/deficit', label: 'Дефицит', icon: '⚠️', roles: ['admin', 'director', 'operator', 'customer'] },
   { to: '/schedule', label: 'График', icon: '📅', roles: ['admin', 'director', 'operator'] },
   { to: '/users', label: 'Пользователи', icon: '👥', roles: ['admin', 'director'] },
@@ -105,6 +106,7 @@ export default function Layout() {
   const pageTitle = (() => {
     const p = location.pathname;
     if (p === '/') return 'Заявки на резку';
+    if (p === '/warehouse') return 'Склад металла';
     if (p === '/deficit') return 'Дефицит материалов';
     if (p === '/schedule') return 'График смен';
     if (p === '/users') return 'Пользователи';

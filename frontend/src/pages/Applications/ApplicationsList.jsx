@@ -10,6 +10,7 @@ const COLUMNS = [
   { key: 'machine', label: 'Станок', sortable: true, filterable: true },
   { key: 'material', label: 'Материал', sortable: true, filterable: true },
   { key: 'thickness', label: 'Толщ.', sortable: true, filterable: true },
+  { key: 'supply_material', label: 'Дав. мат', sortable: true, filterable: true },
   { key: 'priority', label: 'Приоритет', sortable: true, filterable: true },
   { key: 'status', label: 'Статус', sortable: true, filterable: true },
   { key: 'received', label: 'Поступил', sortable: true, filterable: false },
@@ -78,6 +79,9 @@ export default function ApplicationsList() {
       if (filterRef.current && !filterRef.current.contains(e.target) && !e.target.closest('.filter-icon')) {
         setOpenFilter(null);
       }
+      if (!e.target.closest('[id^="supply-dropdown-"]') && !e.target.closest('button')) {
+        document.querySelectorAll('[id^="supply-dropdown-"]').forEach(el => el.style.display = 'none');
+      }
     };
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
@@ -88,6 +92,7 @@ export default function ApplicationsList() {
     machine: app.machine || '',
     material: app.steel_grade || app.material || '',
     thickness: app.thickness || '',
+    supply_material: app.supply_material === true ? 'Да' : app.supply_material === false ? 'Нет' : '',
     priority: app.priority || 'medium',
     status: app.status || 'pending',
     operator: app.operator || '',
@@ -99,6 +104,7 @@ export default function ApplicationsList() {
   const FILTER_LABELS = {
     priority: { low: 'Низкий', medium: 'Средний', high: 'Высокий', urgent: 'Срочно' },
     status: { pending: 'В очереди', in_progress: 'В работе', partially_cut: 'Частично', cut: 'Вырезано' },
+    supply_material: { 'Да': 'Да', 'Нет': 'Нет' },
   };
 
   const getFilterValues = (colKey) => {
@@ -154,6 +160,11 @@ export default function ApplicationsList() {
       va = parseFloat(va) || 0;
       vb = parseFloat(vb) || 0;
     }
+    if (sortCol === 'priority') {
+      const order = { urgent: 0, high: 1, medium: 2, low: 3 };
+      va = order[va] !== undefined ? order[va] : 4;
+      vb = order[vb] !== undefined ? order[vb] : 4;
+    }
     let cmp;
     if (typeof va === 'number' && typeof vb === 'number') {
       cmp = va - vb;
@@ -162,6 +173,9 @@ export default function ApplicationsList() {
     }
     return sortDir === 'asc' ? cmp : -cmp;
   });
+
+  const activeApps = filtered.filter(app => app.status !== 'cut');
+  const completedApps = filtered.filter(app => app.status === 'cut');
 
   const toggleFilterItem = (colKey, val) => {
     setFilters(prev => {
@@ -198,6 +212,16 @@ export default function ApplicationsList() {
   const handleEdit = (e, app) => {
     e.stopPropagation();
     setSelectedApp(app);
+  };
+
+  const handleCancelCut = async (e, appId) => {
+    e.stopPropagation();
+    try {
+      await client.patch('/api/v1/applications/' + appId + '/status?status=pending');
+      fetchApplications(search || undefined);
+    } catch (err) {
+      alert('Ошибка');
+    }
   };
 
   if (loading) return <div className="loading">{'\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430...'}</div>;
@@ -266,7 +290,7 @@ export default function ApplicationsList() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(app => (
+            {activeApps.map(app => (
               <React.Fragment key={app.id}>
               <tr onClick={() => setSelectedApp(app)} style={{
                 cursor: 'pointer',
@@ -283,6 +307,57 @@ export default function ApplicationsList() {
                          app.status === 'in_progress' ? 'В работе' :
                          app.status === 'partially_cut' ? 'Частично' : 'В очереди'}
                       </span>
+                    ) : col.key === 'supply_material' ? (
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const openId = 'supply-dropdown-' + app.id;
+                            const el = document.getElementById(openId);
+                            if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
+                          }}
+                          style={{
+                            cursor: 'pointer', padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 600, border: '1px solid var(--border)',
+                            background: app.supply_material === true ? '#d1fae5' : app.supply_material === false ? '#fee2e2' : '#f1f5f9',
+                            color: app.supply_material === true ? '#047857' : app.supply_material === false ? '#b91c1c' : '#94a3b8',
+                          }}
+                        >
+                          {app.supply_material === true ? 'Да' : app.supply_material === false ? 'Нет' : '—'} ▾
+                        </button>
+                        <div
+                          id={'supply-dropdown-' + app.id}
+                          style={{
+                            display: 'none', position: 'absolute', top: '100%', left: 0, zIndex: 100,
+                            background: '#fff', border: '1px solid var(--border)', borderRadius: 6,
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 80,
+                          }}
+                        >
+                          {[
+                            { val: true, label: 'Да', bg: '#d1fae5', color: '#047857' },
+                            { val: false, label: 'Нет', bg: '#fee2e2', color: '#b91c1c' },
+                            { val: null, label: '—', bg: '#f1f5f9', color: '#94a3b8' },
+                          ].map(opt => (
+                            <div
+                              key={opt.label}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const val = opt.val === true ? 'true' : opt.val === false ? 'false' : '';
+                                client.patch('/api/v1/applications/' + app.id + '/supply_material?value=' + val)
+                                  .then(() => fetchApplications(search || undefined));
+                                document.getElementById('supply-dropdown-' + app.id).style.display = 'none';
+                              }}
+                              style={{
+                                padding: '6px 10px', fontSize: 12, cursor: 'pointer',
+                                background: app.supply_material === opt.val ? opt.bg : '#fff',
+                                color: app.supply_material === opt.val ? opt.color : '#334155',
+                                fontWeight: app.supply_material === opt.val ? 600 : 400,
+                              }}
+                            >
+                              {opt.label}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     ) : col.key === 'priority' ? (
                       (user?.role === 'admin' || user?.role === 'director') ? (
                         <select
@@ -354,16 +429,71 @@ export default function ApplicationsList() {
               )}
               </React.Fragment>
             ))}
-            {filtered.length === 0 && (
+            {activeApps.length === 0 && (
               <tr>
                 <td colSpan={COLUMNS.length} style={{textAlign: 'center', padding: 20, color: '#64748b'}}>
-                  {'\u041d\u0438\u0447\u0435\u0433\u043e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e'}
+                  {'\u041d\u0435\u0442 \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u0437\u0430\u044f\u0432\u043e\u043a'}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {completedApps.length > 0 && (
+        <div style={{marginTop: 20}}>
+          <h4 style={{margin: '0 0 8px 0', fontSize: 14, color: '#64748b'}}>{'\u0412\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u044b\u0435 \u0437\u0430\u044f\u0432\u043a\u0438'}</h4>
+          <div className="table-container" style={{maxHeight: 150, overflowY: 'auto'}}>
+            <table>
+              <thead style={{position: 'sticky', top: 0, zIndex: 1}}>
+                <tr>
+                  <th>Заказчик</th>
+                  <th>Станок</th>
+                  <th>Материал</th>
+                  <th>Толщ.</th>
+                  <th>Дав. мат</th>
+                  <th>Поступил</th>
+                  <th>Выполнена</th>
+                  <th>Оператор</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {completedApps.map(app => (
+                  <tr key={app.id} onClick={() => setSelectedApp(app)} style={{cursor: 'pointer', opacity: 0.7}}>
+                    <td>{app.customer}</td>
+                    <td>{app.machine}</td>
+                    <td>{app.steel_grade || app.material}</td>
+                    <td>{app.thickness}</td>
+                    <td>
+                      <span style={{
+                        padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+                        background: app.supply_material === true ? '#d1fae5' : app.supply_material === false ? '#fee2e2' : '#f1f5f9',
+                        color: app.supply_material === true ? '#047857' : app.supply_material === false ? '#b91c1c' : '#94a3b8',
+                      }}>
+                        {app.supply_material === true ? 'Да' : app.supply_material === false ? 'Нет' : '—'}
+                      </span>
+                    </td>
+                    <td>{app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : ''}</td>
+                    <td>{app.cut_at ? new Date(app.cut_at).toLocaleDateString('ru-RU') : ''}</td>
+                    <td>{app.cut_by || ''}</td>
+                    <td>
+                      <button
+                        className="btn"
+                        onClick={(e) => handleCancelCut(e, app.id)}
+                        title="Отменить вырезание"
+                        style={{padding: '3px 8px', fontSize: 11}}
+                      >
+                        ↩️
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {selectedApp && (
         <ApplicationDetail

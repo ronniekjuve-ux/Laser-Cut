@@ -10,6 +10,7 @@ import Schedule from './pages/Schedule';
 import UsersList from './pages/Users/UsersList';
 import AuditLog from './pages/Audit/AuditLog';
 import ChangeLog from './pages/ChangeLog/ChangeLog';
+import Warehouse from './pages/Warehouse/Warehouse';
 
 export default function App() {
   return (
@@ -28,6 +29,11 @@ export default function App() {
             <Route index element={<ApplicationsList />} />
             <Route path="applications/:id" element={<ApplicationDetail />} />
             <Route path="deficit" element={<Deficit />} />
+            <Route path="warehouse" element={
+              <ProtectedRoute roles={['admin', 'director', 'operator']}>
+                <Warehouse />
+              </ProtectedRoute>
+            } />
             <Route path="schedule" element={<Schedule />} />
             <Route path="users" element={
               <ProtectedRoute roles={['admin', 'director']}>

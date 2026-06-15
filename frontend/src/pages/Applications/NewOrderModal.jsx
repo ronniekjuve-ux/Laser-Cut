@@ -88,6 +88,7 @@ export default function NewOrderModal({ onClose, onCreated }) {
   const [customerName, setCustomerName] = useState('');
   const [steelGrade, setSteelGrade] = useState('');
   const [comments, setComments] = useState('');
+  const [supplyMaterial, setSupplyMaterial] = useState('');
   const [appFiles, setAppFiles] = useState([]);
   const [layoutFiles, setLayoutFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -111,6 +112,7 @@ export default function NewOrderModal({ onClose, onCreated }) {
       if (customerName) fd.append('customer_name', customerName);
       if (steelGrade) fd.append('steel_grade', steelGrade);
       if (comments) fd.append('comments', comments);
+      if (supplyMaterial) fd.append('supply_material', supplyMaterial);
 
       const res = await client.post('/api/v1/applications/upload', fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -159,13 +161,24 @@ export default function NewOrderModal({ onClose, onCreated }) {
                 />
               </div>
               <div className="form-group">
-                <label>{'\u041c\u0430\u0440\u043a\u0430 \u0441\u0442\u0430\u043b\u0438'}</label>
+                <label>{'\u041c\u0430\u0442\u0435\u0440\u0438\u0430\u043b'}</label>
                 <input
                   type="text"
                   value={steelGrade}
                   onChange={(e) => setSteelGrade(e.target.value)}
                   placeholder={'\u041d\u0430\u043f\u0440. St3, 09\u0413\u0421'}
                 />
+              </div>
+              <div className="form-group">
+                <label>{'\u0414\u0430\u0432. \u043c\u0430\u0442'}</label>
+                <select
+                  value={supplyMaterial}
+                  onChange={(e) => setSupplyMaterial(e.target.value)}
+                >
+                  <option value="">{'\u2014'}</option>
+                  <option value="true">{'\u0414\u0430'}</option>
+                  <option value="false">{'\u041d\u0435\u0442'}</option>
+                </select>
               </div>
             </div>
             <div className="form-group">

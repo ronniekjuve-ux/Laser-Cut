@@ -63,6 +63,7 @@ async def upload_application(
         customer_name: str = Form(""),
         steel_grade: str = Form(""),
         comments: str = Form(""),
+        supply_material: str = Form(""),
         db: AsyncSession = Depends(get_db),
         user: User = Depends(require_role(UserRole.ADMIN))
 ):
@@ -105,6 +106,10 @@ async def upload_application(
             app.total_weight = data.total_weight
             app.total_parts_count = len(data.parts)
             app.comments = comments if comments else app.comments
+            if supply_material == "true":
+                app.supply_material = True
+            elif supply_material == "false":
+                app.supply_material = False
             if detail_image_map:
                 app.detail_images = images_json
         else:
@@ -118,7 +123,8 @@ async def upload_application(
                 total_weight=data.total_weight,
                 total_parts_count=len(data.parts),
                 detail_images=images_json,
-                comments=comments if comments else None
+                comments=comments if comments else None,
+                supply_material=True if supply_material == "true" else False if supply_material == "false" else None,
             )
             db.add(app)
 
@@ -397,9 +403,23 @@ async def list_applications(
             "comments": app.comments,
             "status": app.status or "pending",
             "priority": app.priority or "medium",
+            "supply_material": app.supply_material,
+            "cut_at": app.cut_at.isoformat() if app.cut_at else None,
+            "cut_by_id": app.cut_by,
             "matched_parts": matched_parts,
             "created_at": app.created_at
         })
+
+    cut_user_ids = set(e["cut_by_id"] for e in enriched if e.get("cut_by_id"))
+    if cut_user_ids:
+        users_result = await db.execute(select(User).where(User.id.in_(cut_user_ids)))
+        user_map = {u.id: u.username for u in users_result.scalars().all()}
+        for e in enriched:
+            if e.get("cut_by_id"):
+                e["cut_by"] = user_map.get(e["cut_by_id"])
+            else:
+                e["cut_by"] = None
+            del e["cut_by_id"]
 
     return enriched
 
@@ -729,6 +749,8 @@ async def delete_application(
     if not app:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
+    await db.execute(delete(DeficitRequest).where(DeficitRequest.application_id == app_id))
+    await db.execute(delete(Notification).where(Notification.related_app_id == app_id))
     await db.delete(app)
     await db.commit()
 
@@ -772,6 +794,29 @@ async def update_priority(
     return {"status": "success", "new_priority": priority}
 
 
+@router.patch("/{app_id}/supply_material")
+async def update_supply_material(
+        app_id: int,
+        value: str = Query(...),
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
+):
+    result = await db.execute(select(Application).where(Application.id == app_id))
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    if value == "true":
+        app.supply_material = True
+    elif value == "false":
+        app.supply_material = False
+    else:
+        app.supply_material = None
+
+    await db.commit()
+    return {"status": "success"}
+
+
 @router.patch("/{app_id}/status")
 async def update_application_status(
         app_id: int,
@@ -790,6 +835,14 @@ async def update_application_status(
     old_status = app.status
     app.status = status
     app.updated_by = user.id
+
+    if status == "cut" and old_status != "cut":
+        from datetime import datetime, timezone
+        app.cut_at = datetime.now(timezone.utc)
+        app.cut_by = user.id if user.role == UserRole.OPERATOR else None
+    elif status != "cut" and old_status == "cut":
+        app.cut_at = None
+        app.cut_by = None
 
     # Уведомление для заказчика и админов
     if old_status != status:
