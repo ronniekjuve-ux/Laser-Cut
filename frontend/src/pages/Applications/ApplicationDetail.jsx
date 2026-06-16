@@ -103,10 +103,6 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
     return sum + partsQty;
   }, 0);
 
-  const detailImages = data.detail_images ? (() => {
-    try { return JSON.parse(data.detail_images); } catch { return []; }
-  })() : [];
-
   return (
     <div className="modal-overlay active" onClick={activeLayout !== null ? () => setActiveLayout(null) : onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{width: 800}}>
@@ -291,7 +287,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                         </thead>
                         <tbody>
                           {layout.parts.map((part, pi) => (
-                            <tr key={pi} onClick={() => setShowPartInfo({...part, imageIndex: pi})} style={{
+                            <tr key={pi} onClick={() => setShowPartInfo(part)} style={{
                               cursor: 'pointer',
                               background: highlightPart && part.name === highlightPart ? '#fef08a' : undefined
                             }}>

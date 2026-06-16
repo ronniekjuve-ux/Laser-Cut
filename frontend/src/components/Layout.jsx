@@ -39,7 +39,7 @@ const NAV_ITEMS = [
   { to: '/schedule', label: 'График', icon: '📅', roles: ['admin', 'director', 'operator'] },
   { to: '/users', label: 'Пользователи', icon: '👥', roles: ['admin', 'director'] },
   { to: '/changelog', label: 'История изменений', icon: '📝', roles: ['admin', 'director'] },
-  { to: '/audit', label: 'Аудит', icon: '🔐', roles: ['admin'] },
+  { to: '/audit', label: 'Аудит', icon: '🔐', roles: ['admin', 'director'] },
 ];
 
 export default function Layout() {

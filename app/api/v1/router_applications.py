@@ -90,13 +90,13 @@ async def upload_application(
 
         detail_images = extract_images(file_path, str(IMAGE_DIR), prefix="applications", filter_dft=True)
 
-        # Маппинг: нормализованное имя детали -> изображение
+        # detail_images — список кортежей (image_path, dft_name)
         detail_image_map = {}
-        if detail_images and data.parts:
-            for ai, ap in enumerate(data.parts):
-                key = normalize_name(ap.name_raw)
-                if key and ai < len(detail_images):
-                    detail_image_map[key] = detail_images[ai]
+        if detail_images:
+            for img_path, dft_name in detail_images:
+                key = normalize_name(dft_name)
+                if key:
+                    detail_image_map[key] = img_path
         images_json = json.dumps(detail_image_map) if detail_image_map else None
 
         if app:

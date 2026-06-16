@@ -285,6 +285,19 @@ class LoginHistory(Base):
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
 
 
+class OperatorShift(Base):
+    __tablename__ = "operator_shifts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    shift_type: Mapped[str] = mapped_column(String(10), default="day")
+    hours: Mapped[float] = mapped_column(Float, default=8.0)
+    machine_type: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+
+
 class WarehouseItem(Base):
     __tablename__ = "warehouse_items"
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -640,17 +640,19 @@ def parse_layout_text(text: str, filename: str) -> LayoutData:
     return data
 
 
-def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft: bool = False) -> List[str]:
+def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft: bool = False) -> List:
     """Извлекает изображения из DOC файла.
     filter_dft=True — только изображения рядом с .dft именами (для заявок).
+      Возвращает список кортежей (image_path, dft_name) для маппинга по имени.
     filter_dft=False — все изображения (для раскладок).
+      Возвращает список путей [image_path, ...].
     """
     import tempfile
     import subprocess
     from pathlib import Path
     import shutil
 
-    saved_paths = []
+    saved = []
     IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.emf', '.wmf', '.tiff', '.tif'}
 
     try:
@@ -667,7 +669,7 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft:
 
             html_files = list(Path(tmpdir).glob('*.html'))
             if not html_files:
-                return saved_paths
+                return saved
 
             html_text = html_files[0].read_text(encoding='utf-8', errors='ignore')
 
@@ -694,19 +696,23 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft:
                     continue
 
                 if filter_dft:
-                    # Только изображения с .dft именами nearby
                     lookback = html_text[max(0, m.start() - 500):m.start() + 200]
-                    if not re.search(r'\.dft', lookback, re.IGNORECASE):
+                    dft_match = re.search(r'([\\\/]|^)([^\\\/]+?)\.dft\b', lookback, re.IGNORECASE)
+                    if not dft_match:
                         continue
-
-                dest_path = dest_dir / img_ref
-                shutil.copy2(src, dest_path)
-                saved_paths.append(f"/api/v1/images/{prefix}/{img_ref}")
+                    dft_name = dft_match.group(2)
+                    dest_path = dest_dir / img_ref
+                    shutil.copy2(src, dest_path)
+                    saved.append((f"/api/v1/images/{prefix}/{img_ref}", dft_name))
+                else:
+                    dest_path = dest_dir / img_ref
+                    shutil.copy2(src, dest_path)
+                    saved.append(f"/api/v1/images/{prefix}/{img_ref}")
 
     except Exception as e:
         print(f"Warning: image extraction failed: {e}")
 
-    return saved_paths
+    return saved
 
 
 def merge_data(app_data: ApplicationData, layout_data: LayoutData) -> List[MergedPart]:

@@ -8,7 +8,7 @@ import ApplicationDetail from './pages/Applications/ApplicationDetail';
 import Deficit from './pages/Deficit';
 import Schedule from './pages/Schedule';
 import UsersList from './pages/Users/UsersList';
-import AuditLog from './pages/Audit/AuditLog';
+import AuditLog from './pages/Audit/AuditProduction';
 import ChangeLog from './pages/ChangeLog/ChangeLog';
 import Warehouse from './pages/Warehouse/Warehouse';
 
@@ -46,7 +46,7 @@ export default function App() {
               </ProtectedRoute>
             } />
             <Route path="audit" element={
-              <ProtectedRoute roles={['admin']}>
+              <ProtectedRoute roles={['admin', 'director']}>
                 <AuditLog />
               </ProtectedRoute>
             } />
