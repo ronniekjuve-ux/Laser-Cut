@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from app.db.base import get_db
@@ -32,6 +33,40 @@ async def list_warehouse(
         }
         for i in items
     ]
+
+
+@router.get("/export")
+async def export_warehouse_xlsx(
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
+):
+    from app.services.exporters import export_warehouse
+
+    result = await db.execute(
+        select(WarehouseItem).order_by(desc(WarehouseItem.created_at))
+    )
+    items = result.scalars().all()
+
+    data = [
+        {
+            "id": i.id,
+            "metal": i.metal,
+            "grade": i.grade or "",
+            "size": i.size or "",
+            "sheet_count": i.sheet_count,
+            "owner": i.owner or "",
+            "note": i.note or "",
+            "created_at": i.created_at.strftime('%d.%m.%Y') if i.created_at else "",
+        }
+        for i in items
+    ]
+
+    output = export_warehouse(data)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=warehouse.xlsx"}
+    )
 
 
 @router.post("/")

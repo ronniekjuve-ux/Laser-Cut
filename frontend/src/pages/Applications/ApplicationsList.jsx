@@ -39,6 +39,9 @@ export default function ApplicationsList() {
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [notesModal, setNotesModal] = useState(null);
   const [filterSearch, setFilterSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const filterRef = useRef(null);
   const navigate = useNavigate();
 
@@ -51,28 +54,35 @@ export default function ApplicationsList() {
     }
   }, [highlightId, applications]);
 
-  const fetchApplications = useCallback(async (searchQuery) => {
+  const fetchApplications = useCallback(async (searchQuery, pageNum = page) => {
     try {
-      const params = {};
+      const params = { page: pageNum, limit: 50 };
       if (searchQuery) params.search = searchQuery;
       const res = await client.get('/api/v1/applications/', { params });
-      setApplications(Array.isArray(res.data) ? res.data : res.data.items || []);
+      if (res.data.items) {
+        setApplications(res.data.items);
+        setTotal(res.data.total);
+        setTotalPages(res.data.pages);
+      } else {
+        setApplications(Array.isArray(res.data) ? res.data : []);
+      }
     } catch (err) {
       console.error('Failed to load applications', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => { fetchApplications(); }, [fetchApplications]);
 
   // Debounced поиск по backend
   useEffect(() => {
+    setPage(1);
     const timer = setTimeout(() => {
-      fetchApplications(search || undefined);
+      fetchApplications(search || undefined, 1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, fetchApplications]);
+  }, [search]);
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -238,6 +248,24 @@ export default function ApplicationsList() {
         <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
           + {'\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u044f\u0432\u043a\u0430'}
         </button>
+        <span style={{marginLeft: 'auto', fontSize: 13, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center'}}>
+          Всего: {total} заявок | Стр. {page} из {totalPages || 1}
+          <button className="btn" onClick={async () => {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/v1/applications/export', {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'applications.xlsx';
+            a.click();
+            URL.revokeObjectURL(url);
+          }} style={{fontSize: 12}}>
+            📥 Excel
+          </button>
+        </span>
       </div>
 
       {activeFilterEntries.length > 0 && (
@@ -492,6 +520,37 @@ export default function ApplicationsList() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div style={{display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center'}}>
+          <button className="btn" onClick={() => { setPage(1); fetchApplications(search, 1); }} disabled={page <= 1} style={{fontSize: 12}}>
+            «
+          </button>
+          <button className="btn" onClick={() => { const p = page - 1; setPage(p); fetchApplications(search, p); }} disabled={page <= 1} style={{fontSize: 12}}>
+            ‹
+          </button>
+          {Array.from({length: Math.min(5, totalPages)}, (_, i) => {
+            let p;
+            if (totalPages <= 5) p = i + 1;
+            else if (page <= 3) p = i + 1;
+            else if (page >= totalPages - 2) p = totalPages - 4 + i;
+            else p = page - 2 + i;
+            return (
+              <button key={p} className={`btn ${p === page ? 'btn-primary' : ''}`}
+                onClick={() => { setPage(p); fetchApplications(search, p); }}
+                style={{fontSize: 12, minWidth: 32}}>
+                {p}
+              </button>
+            );
+          })}
+          <button className="btn" onClick={() => { const p = page + 1; setPage(p); fetchApplications(search, p); }} disabled={page >= totalPages} style={{fontSize: 12}}>
+            ›
+          </button>
+          <button className="btn" onClick={() => { setPage(totalPages); fetchApplications(search, totalPages); }} disabled={page >= totalPages} style={{fontSize: 12}}>
+            »
+          </button>
         </div>
       )}
 

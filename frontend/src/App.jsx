@@ -11,6 +11,7 @@ import UsersList from './pages/Users/UsersList';
 import AuditLog from './pages/Audit/AuditProduction';
 import ChangeLog from './pages/ChangeLog/ChangeLog';
 import Warehouse from './pages/Warehouse/Warehouse';
+import OrdersList from './pages/Orders/OrdersList';
 
 export default function App() {
   return (
@@ -48,6 +49,11 @@ export default function App() {
             <Route path="audit" element={
               <ProtectedRoute roles={['admin', 'director']}>
                 <AuditLog />
+              </ProtectedRoute>
+            } />
+            <Route path="orders" element={
+              <ProtectedRoute roles={['admin', 'director']}>
+                <OrdersList />
               </ProtectedRoute>
             } />
           </Route>

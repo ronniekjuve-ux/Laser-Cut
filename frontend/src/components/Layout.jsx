@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 const SHIFT_CYCLE = [
   ['Yura', 'Denis'],
@@ -34,6 +35,7 @@ function getActiveOps() {
 
 const NAV_ITEMS = [
   { to: '/', label: 'Заявки', icon: '📋', end: true, roles: ['admin', 'director', 'operator', 'customer'] },
+  { to: '/orders', label: 'Заказы', icon: '📦', roles: ['admin', 'director'] },
   { to: '/warehouse', label: 'Склад', icon: '🏭', roles: ['admin', 'director', 'operator'] },
   { to: '/deficit', label: 'Дефицит', icon: '⚠️', roles: ['admin', 'director', 'operator', 'customer'] },
   { to: '/schedule', label: 'График', icon: '📅', roles: ['admin', 'director', 'operator'] },
@@ -51,6 +53,14 @@ export default function Layout() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifs, setShowNotifs] = useState(false);
+
+  const handleWsMessage = useCallback((data) => {
+    if (data.type === 'notification') {
+      setUnreadCount(prev => prev + 1);
+    }
+  }, []);
+
+  useWebSocket(handleWsMessage);
 
   useEffect(() => {
     const update = () => {
@@ -106,6 +116,7 @@ export default function Layout() {
   const pageTitle = (() => {
     const p = location.pathname;
     if (p === '/') return 'Заявки на резку';
+    if (p === '/orders') return 'Заказы';
     if (p === '/warehouse') return 'Склад металла';
     if (p === '/deficit') return 'Дефицит материалов';
     if (p === '/schedule') return 'График смен';

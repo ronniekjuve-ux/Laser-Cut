@@ -172,12 +172,30 @@ async def audit_applications(
     result = await db.execute(query)
     rows = result.all()
 
+    app_ids = [app.id for app, _ in rows]
+
+    layouts_result = await db.execute(
+        select(ApplicationLayout).where(ApplicationLayout.application_id.in_(app_ids))
+    )
+    all_layouts = layouts_result.scalars().all()
+
+    layout_ids = [l.id for l in all_layouts]
+    parts_result = await db.execute(
+        select(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id.in_(layout_ids))
+    )
+    all_parts = parts_result.scalars().all()
+
+    layouts_by_app = {}
+    for layout in all_layouts:
+        layouts_by_app.setdefault(layout.application_id, []).append(layout)
+
+    parts_by_layout = {}
+    for part in all_parts:
+        parts_by_layout.setdefault(part.layout_id, []).append(part)
+
     enriched = []
     for app, cust in rows:
-        layouts_result = await db.execute(
-            select(ApplicationLayout).where(ApplicationLayout.application_id == app.id)
-        )
-        layouts = layouts_result.scalars().all()
+        layouts = layouts_by_app.get(app.id, [])
 
         total_cut_length = 0.0
         total_pierces = 0
@@ -185,10 +203,7 @@ async def audit_applications(
         layouts_summary = []
 
         for layout in layouts:
-            parts_result = await db.execute(
-                select(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == layout.id)
-            )
-            parts = parts_result.scalars().all()
+            parts = parts_by_layout.get(layout.id, [])
             layout_parts_weight = sum(p.weight or 0 for p in parts)
 
             total_cut_length += layout.cut_length or 0

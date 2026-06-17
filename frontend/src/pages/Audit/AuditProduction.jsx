@@ -15,6 +15,21 @@ function monthKey(iso) {
   return `${MONTHS_RU[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+const EXPORT_COLUMNS = [
+  { key: 'customer', label: 'Заказчик' },
+  { key: 'order_name', label: 'Заявка' },
+  { key: 'created_at', label: 'Дата' },
+  { key: 'steel_grade', label: 'Марка' },
+  { key: 'thickness', label: 'Толщ.' },
+  { key: 'supply_material', label: 'Дав.мат' },
+  { key: 'machine', label: 'Станок' },
+  { key: 'layouts_count', label: 'Раскладок' },
+  { key: 'total_cut_length', label: 'Длина реза' },
+  { key: 'total_pierces', label: 'Проколы' },
+  { key: 'total_parts_weight', label: 'Масса дет.' },
+  { key: 'total_weight', label: 'Масса заявки' },
+];
+
 function ApplicationsTab() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +40,10 @@ function ApplicationsTab() {
   const [groupBy, setGroupBy] = useState('date');
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [expandedApps, setExpandedApps] = useState(new Set());
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedColumns, setSelectedColumns] = useState(
+    EXPORT_COLUMNS.map(c => c.key)
+  );
 
   const fetchData = async () => {
     setLoading(true);
@@ -81,44 +100,54 @@ function ApplicationsTab() {
     });
   };
 
+  const toggleColumn = (key) => {
+    setSelectedColumns(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
+  const selectAllColumns = () => setSelectedColumns(EXPORT_COLUMNS.map(c => c.key));
+  const deselectAllColumns = () => setSelectedColumns([]);
+
   const exportToExcel = async () => {
+    if (selectedColumns.length === 0) return;
     const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
 
+    const cols = EXPORT_COLUMNS.filter(c => selectedColumns.includes(c.key));
     const rows = [];
+
     for (const g of grouped) {
-      if (groupBy !== 'none') {
-        rows.push({ A: g.label, B: `${g.items.length} заявок` });
-      }
       for (const item of g.items) {
-        rows.push({
-          A: item.customer,
-          B: item.order_name,
-          C: formatDate(item.created_at),
-          D: item.steel_grade || item.material,
-          E: item.thickness,
-          F: item.supply_material ? 'Да' : item.supply_material === false ? 'Нет' : '-',
-          G: item.machine,
-          H: item.layouts_count,
-          I: item.total_cut_length,
-          J: item.total_pierces,
-          K: item.total_parts_weight,
-        });
+        const row = {};
+        cols.forEach(col => { row[col.label] = getCellValue(item, col.key); });
+        rows.push(row);
       }
     }
 
-    const ws = XLSX.utils.json_to_sheet(rows, {
-      header: ['Заказчик', 'Заявка', 'Дата', 'Марка', 'Толщ.', 'Дав.мат', 'Станок', 'Раскладок', 'Длина реза', 'Проколы', 'Масса дет.'],
-    });
-
-    ws['!cols'] = [
-      { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 10 },
-      { wch: 8 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
-      { wch: 12 }, { wch: 10 }, { wch: 12 },
-    ];
-
+    const ws = XLSX.utils.json_to_sheet(rows, { header: cols.map(c => c.label), skipHeader: false });
+    ws['!cols'] = cols.map(() => ({ wch: 14 }));
     XLSX.utils.book_append_sheet(wb, ws, 'Заявки');
     XLSX.writeFile(wb, `audit_${new Date().toISOString().slice(0,10)}.xlsx`);
+    setShowExportModal(false);
+  };
+
+  const getCellValue = (item, key) => {
+    switch (key) {
+      case 'customer': return item.customer || '';
+      case 'order_name': return item.order_name || '';
+      case 'created_at': return formatDate(item.created_at);
+      case 'steel_grade': return item.steel_grade || item.material || '-';
+      case 'thickness': return item.thickness ?? '';
+      case 'supply_material': return item.supply_material ? 'Да' : item.supply_material === false ? 'Нет' : '-';
+      case 'machine': return item.machine || '';
+      case 'layouts_count': return item.layouts_count ?? '';
+      case 'total_cut_length': return item.total_cut_length ?? '';
+      case 'total_pierces': return item.total_pierces ?? '';
+      case 'total_parts_weight': return item.total_parts_weight ?? '';
+      case 'total_weight': return item.total_weight ?? '';
+      default: return '';
+    }
   };
 
   if (loading) return <div className="loading">Загрузка...</div>;
@@ -144,8 +173,53 @@ function ApplicationsTab() {
           <option value="none">Без группировки</option>
         </select>
         <button className="btn btn-primary" onClick={handleFilter} style={{fontSize:13}}>Применить</button>
-        <button className="btn" onClick={exportToExcel} style={{fontSize:13, marginLeft:'auto'}}>Экспорт в Excel</button>
+        <button className="btn" onClick={() => setShowExportModal(true)} style={{fontSize:13, marginLeft:'auto'}}>Экспорт в Excel</button>
       </div>
+
+      {showExportModal && (
+        <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.4)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000}}
+          onClick={() => setShowExportModal(false)}>
+          <div style={{background:'#fff', borderRadius:12, padding:24, minWidth:420, maxWidth:600,
+            boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}
+            onClick={e => e.stopPropagation()}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
+              <h3 style={{margin:0, fontSize:16}}>Выбор столбцов для экспорта</h3>
+              <button onClick={() => setShowExportModal(false)}
+                style={{border:'none', background:'none', fontSize:20, cursor:'pointer', color:'#64748b'}}>×</button>
+            </div>
+
+            <div style={{display:'flex', gap:8, marginBottom:12}}>
+              <button className="btn" onClick={selectAllColumns} style={{fontSize:12}}>Все</button>
+              <button className="btn" onClick={deselectAllColumns} style={{fontSize:12}}>Нет</button>
+            </div>
+
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:16}}>
+              {EXPORT_COLUMNS.map(col => (
+                <label key={col.key} style={{display:'flex', alignItems:'center', gap:6, fontSize:13, cursor:'pointer',
+                  padding:'4px 8px', borderRadius:4, background: selectedColumns.includes(col.key) ? '#eff6ff' : 'transparent'}}>
+                  <input type="checkbox" checked={selectedColumns.includes(col.key)}
+                    onChange={() => toggleColumn(col.key)} />
+                  {col.label}
+                </label>
+              ))}
+            </div>
+
+            <div style={{fontSize:12, color:'#64748b', marginBottom:12}}>
+              Предпросмотр: {selectedColumns.length} столбцов, {data.length} заявок
+            </div>
+
+            <div style={{display:'flex', gap:8, justifyContent:'flex-end'}}>
+              <button className="btn" onClick={() => setShowExportModal(false)}>Отмена</button>
+              <button className="btn btn-primary" onClick={exportToExcel}
+                disabled={selectedColumns.length === 0}
+                style={{opacity: selectedColumns.length === 0 ? 0.5 : 1}}>
+                Экспорт
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{fontSize:13, color:'#64748b', marginBottom:8}}>
         Найдено: {data.length} заявок
@@ -161,7 +235,7 @@ function ApplicationsTab() {
             >
               <span>{expandedGroups.has(g.key) ? '\u25BC' : '\u25B6'} {g.label} ({g.items.length})</span>
               <span style={{fontSize:12, fontWeight:400, color:'#64748b'}}>
-                Масса: {g.items.reduce((s,i) => s + (i.total_parts_weight||0), 0).toFixed(1)} кг |
+                Масса: {g.items.reduce((s,i) => s + (i.total_weight||0), 0).toFixed(1)} кг |
                 Рез: {g.items.reduce((s,i) => s + (i.total_cut_length||0), 0).toFixed(0)} мм |
                 Проколы: {g.items.reduce((s,i) => s + (i.total_pierces||0), 0)}
               </span>
@@ -183,7 +257,7 @@ function ApplicationsTab() {
                     <th>Раскладок</th>
                     <th>Длина реза</th>
                     <th>Проколы</th>
-                    <th>Масса дет.</th>
+                    <th>Масса заявки</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -201,7 +275,7 @@ function ApplicationsTab() {
                         <td>{item.layouts_count}</td>
                         <td>{item.total_cut_length}</td>
                         <td>{item.total_pierces}</td>
-                        <td>{item.total_parts_weight}</td>
+                        <td>{item.total_weight}</td>
                       </tr>
                       {expandedApps.has(item.id) && item.layouts.map((l, li) => (
                         <tr key={li} style={{background:'#f8fafc', fontSize:12}}>
@@ -216,7 +290,7 @@ function ApplicationsTab() {
                           <td style={{color:'#475569'}}>{l.parts_count} дет.</td>
                           <td style={{color:'#475569'}}>{l.cut_length || '-'}</td>
                           <td style={{color:'#475569'}}>{l.pierces || '-'}</td>
-                          <td style={{color:'#475569'}}>{l.parts_weight} кг</td>
+                          <td style={{color:'#475569'}}>{l.sheet_weight ? l.sheet_weight.toFixed(1) + ' кг' : '-'}</td>
                         </tr>
                       ))}
                     </React.Fragment>

@@ -4,7 +4,7 @@ import glob
 import re
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.orm import joinedload
 from typing import Optional, List
 from pathlib import Path
@@ -130,6 +130,12 @@ async def upload_application(
 
         await db.commit()
         await db.refresh(app)
+
+        try:
+            from app.services.cache import invalidate
+            await invalidate("apps:")
+        except Exception:
+            pass
 
         return {
             "status": "success",
@@ -323,9 +329,21 @@ async def upload_layout(
 @router.get("/")
 async def list_applications(
         search: Optional[str] = None,
+        page: int = Query(1, ge=1),
+        limit: int = Query(50, ge=1, le=200),
         db: AsyncSession = Depends(get_db),
         user: User = Depends(get_current_user)
 ):
+    from app.services.cache import get_redis, cache_key
+    r = await get_redis()
+    ckey = cache_key("apps", search, page, limit, user.id)
+    try:
+        cached = await r.get(ckey)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+
     # Если заказчик — только свои заявки
     customer_filter = None
     if user.role == UserRole.CUSTOMER and user.customer_id:
@@ -359,7 +377,12 @@ async def list_applications(
     query = select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True)
     if customer_filter:
         query = query.where(Application.customer_id == customer_filter)
-    result = await db.execute(query.order_by(Application.created_at.desc()))
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    result = await db.execute(query.order_by(Application.created_at.desc()).offset((page - 1) * limit).limit(limit))
     rows = result.all()
 
     enriched = []
@@ -421,7 +444,58 @@ async def list_applications(
                 e["cut_by"] = None
             del e["cut_by_id"]
 
-    return enriched
+    return {
+        "items": enriched,
+        "total": total,
+        "page": page,
+        "pages": (total + limit - 1) // limit if total > 0 else 0
+    }
+
+    try:
+        await r.setex(ckey, 30, json.dumps(response, default=str))
+    except Exception:
+        pass
+
+    return response
+
+
+@router.get("/export")
+async def export_applications_xlsx(
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    from fastapi.responses import StreamingResponse
+    from app.services.exporters import export_applications
+
+    query = select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True)
+    if user.role == UserRole.CUSTOMER and user.customer_id:
+        query = query.where(Application.customer_id == user.customer_id)
+    result = await db.execute(query.order_by(Application.created_at.desc()))
+    rows = result.all()
+
+    apps = []
+    for app, cust in rows:
+        apps.append({
+            "id": app.id,
+            "customer": cust.name if cust else "-",
+            "order_name": app.order_name,
+            "material": app.material,
+            "steel_grade": app.steel_grade or "",
+            "thickness": app.thickness,
+            "supply_material": app.supply_material,
+            "total_parts": app.total_parts_count,
+            "total_weight": app.total_weight,
+            "status": app.status,
+            "priority": app.priority,
+            "created_at": app.created_at.strftime('%d.%m.%Y') if app.created_at else "",
+        })
+
+    output = export_applications(apps)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=applications.xlsx"}
+    )
 
 
 @router.get("/changelog")
@@ -897,6 +971,34 @@ async def update_application_status(
 
     await db.commit()
 
+    try:
+        from app.services.cache import invalidate
+        await invalidate("apps:")
+    except Exception:
+        pass
+
+    if old_status != status:
+        try:
+            from app.main import manager
+            notif_user_ids = []
+            if app.customer_id:
+                users_result = await db.execute(
+                    select(User.id).where(User.customer_id == app.customer_id, User.role == UserRole.CUSTOMER)
+                )
+                notif_user_ids.extend([r[0] for r in users_result.all()])
+            admins_result = await db.execute(
+                select(User.id).where(User.role.in_([UserRole.ADMIN, UserRole.DIRECTOR]))
+            )
+            notif_user_ids.extend([r[0] for r in admins_result.all()])
+            for uid in set(notif_user_ids):
+                if uid != user.id:
+                    await manager.send_to_user(uid, {
+                        "type": "notification",
+                        "message": msg
+                    })
+        except Exception:
+            pass
+
     return {"status": "success", "new_status": status}
 
 
@@ -949,5 +1051,19 @@ async def create_deficit(
             db.add(Notification(user_id=cust_user.id, type="deficit", message=msg, related_app_id=app.id))
 
     await db.commit()
+
+    if app.customer_id:
+        try:
+            from app.main import manager
+            users_result = await db.execute(
+                select(User.id).where(User.customer_id == app.customer_id, User.role == UserRole.CUSTOMER)
+            )
+            for uid in [r[0] for r in users_result.all()]:
+                await manager.send_to_user(uid, {
+                    "type": "notification",
+                    "message": msg
+                })
+        except Exception:
+            pass
 
     return {"status": "success", "deficit_id": deficit.id}
