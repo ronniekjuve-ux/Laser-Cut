@@ -1,8 +1,9 @@
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+﻿import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
+import InstallPWA from './InstallPWA';
 
 const SHIFT_CYCLE = [
   ['Yura', 'Denis'],
@@ -34,14 +35,14 @@ function getActiveOps() {
 }
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Заявки', icon: '📋', end: true, roles: ['admin', 'director', 'operator', 'customer'] },
-  { to: '/orders', label: 'Заказы', icon: '📦', roles: ['admin', 'director'] },
-  { to: '/warehouse', label: 'Склад', icon: '🏭', roles: ['admin', 'director', 'operator'] },
-  { to: '/deficit', label: 'Дефицит', icon: '⚠️', roles: ['admin', 'director', 'operator', 'customer'] },
-  { to: '/schedule', label: 'График', icon: '📅', roles: ['admin', 'director', 'operator'] },
-  { to: '/users', label: 'Пользователи', icon: '👥', roles: ['admin', 'director'] },
-  { to: '/changelog', label: 'История изменений', icon: '📝', roles: ['admin', 'director'] },
-  { to: '/audit', label: 'Аудит', icon: '🔐', roles: ['admin', 'director'] },
+  { to: '/', label: 'Р—Р°СЏРІРєРё', icon: 'рџ“‹', end: true, roles: ['admin', 'director', 'operator', 'customer'] },
+  { to: '/orders', label: 'Р—Р°РєР°Р·С‹', icon: 'рџ“¦', roles: ['admin', 'director'] },
+  { to: '/warehouse', label: 'РЎРєР»Р°Рґ', icon: 'рџЏ­', roles: ['admin', 'director', 'operator'] },
+  { to: '/deficit', label: 'Р”РµС„РёС†РёС‚', icon: 'вљ пёЏ', roles: ['admin', 'director', 'operator', 'customer'] },
+  { to: '/schedule', label: 'Р“СЂР°С„РёРє', icon: 'рџ“…', roles: ['admin', 'director', 'operator'] },
+  { to: '/users', label: 'РџРѕР»СЊР·РѕРІР°С‚РµР»Рё', icon: 'рџ‘Ґ', roles: ['admin', 'director'] },
+  { to: '/changelog', label: 'РСЃС‚РѕСЂРёСЏ РёР·РјРµРЅРµРЅРёР№', icon: 'рџ“ќ', roles: ['admin', 'director'] },
+  { to: '/audit', label: 'РђСѓРґРёС‚', icon: 'рџ”ђ', roles: ['admin', 'director'] },
 ];
 
 export default function Layout() {
@@ -115,16 +116,16 @@ export default function Layout() {
 
   const pageTitle = (() => {
     const p = location.pathname;
-    if (p === '/') return 'Заявки на резку';
-    if (p === '/orders') return 'Заказы';
-    if (p === '/warehouse') return 'Склад металла';
-    if (p === '/deficit') return 'Дефицит материалов';
-    if (p === '/schedule') return 'График смен';
-    if (p === '/users') return 'Пользователи';
-    if (p === '/audit') return 'Аудит';
-    if (p === '/changelog') return 'История изменений';
-    if (p.startsWith('/applications/')) return 'Детали заявки';
-    return 'Заявки на резку';
+    if (p === '/') return 'Р—Р°СЏРІРєРё РЅР° СЂРµР·РєСѓ';
+    if (p === '/orders') return 'Р—Р°РєР°Р·С‹';
+    if (p === '/warehouse') return 'РЎРєР»Р°Рґ РјРµС‚Р°Р»Р»Р°';
+    if (p === '/deficit') return 'Р”РµС„РёС†РёС‚ РјР°С‚РµСЂРёР°Р»РѕРІ';
+    if (p === '/schedule') return 'Р“СЂР°С„РёРє СЃРјРµРЅ';
+    if (p === '/users') return 'РџРѕР»СЊР·РѕРІР°С‚РµР»Рё';
+    if (p === '/audit') return 'РђСѓРґРёС‚';
+    if (p === '/changelog') return 'РСЃС‚РѕСЂРёСЏ РёР·РјРµРЅРµРЅРёР№';
+    if (p.startsWith('/applications/')) return 'Р”РµС‚Р°Р»Рё Р·Р°СЏРІРєРё';
+    return 'Р—Р°СЏРІРєРё РЅР° СЂРµР·РєСѓ';
   })();
 
   return (
@@ -144,20 +145,20 @@ export default function Layout() {
         ))}
         <div className="nav-spacer" />
         <div className="nav-item" onClick={handleLogout} style={{cursor: 'pointer'}}>
-          <span className="nav-icon">🚪</span>
-          <span className="nav-text">Выйти</span>
+          <span className="nav-icon">рџљЄ</span>
+          <span className="nav-text">Р’С‹Р№С‚Рё</span>
         </div>
       </div>
       <div className="main">
         <div className="header">
           <div className="header-left">
             <h3>{pageTitle}</h3>
-            <div className="active-ops">🟢 На смене: {activeOps}</div>
+            <div className="active-ops">рџџў РќР° СЃРјРµРЅРµ: {activeOps}</div>
           </div>
           <div className="header-right">
             <span className="clock">{clock}</span>
             <span className="notif-bell" onClick={openNotifications} style={{cursor: 'pointer', position: 'relative', fontSize: 18}}>
-              🔔
+              рџ””
               {unreadCount > 0 && (
                 <span style={{position: 'absolute', top: -6, right: -8, background: '#ef4444', color: '#fff', borderRadius: '50%', fontSize: 10, padding: '1px 4px', fontWeight: 700}}>
                   {unreadCount}
@@ -170,9 +171,9 @@ export default function Layout() {
                 borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 320, maxHeight: 350,
                 overflow: 'auto', zIndex: 1000
               }}>
-                <div style={{padding: '8px 12px', fontWeight: 600, borderBottom: '1px solid #e2e8f0'}}>Уведомления</div>
+                <div style={{padding: '8px 12px', fontWeight: 600, borderBottom: '1px solid #e2e8f0'}}>РЈРІРµРґРѕРјР»РµРЅРёСЏ</div>
                 {notifications.length === 0 ? (
-                  <div style={{padding: 16, textAlign: 'center', color: '#94a3b8', fontSize: 13}}>Нет уведомлений</div>
+                  <div style={{padding: 16, textAlign: 'center', color: '#94a3b8', fontSize: 13}}>РќРµС‚ СѓРІРµРґРѕРјР»РµРЅРёР№</div>
                 ) : notifications.map(n => (
                   <div key={n.id} onClick={() => {
                     if (n.related_app_id) {
@@ -192,12 +193,13 @@ export default function Layout() {
                 ))}
               </div>
             )}
-            <span className="user-badge">👤 {user?.username || '...'}</span>
+            <span className="user-badge">рџ‘¤ {user?.username || '...'}</span>
           </div>
         </div>
         <div className="content">
           <Outlet />
         </div>
+        <InstallPWA />
       </div>
     </div>
   );
