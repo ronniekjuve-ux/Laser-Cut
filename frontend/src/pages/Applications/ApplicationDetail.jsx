@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import CostCalculator from './CostCalculator';
 
 export default function ApplicationDetail({ app, onClose, onUpdate }) {
   const { user } = useAuth();
@@ -132,14 +133,66 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                 {data.comments && <div><span style={{fontWeight: 600}}>Комментарий:</span> {data.comments}</div>}
               </div>
 
-              {(user?.role === 'admin' || user?.role === 'operator') && (
+              {layouts.length > 0 && ['pending', 'rejected'].includes(data.status) && (
+                <CostCalculator
+                  layouts={layouts}
+                  supply_material={data.supply_material}
+                  thickness={data.thickness}
+                  steel_grade={data.steel_grade || data.material}
+                />
+              )}
+
+              {data.status === 'pending' && user?.role === 'admin' && (
+                <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
+                  <div style={{fontWeight: 600, marginBottom: 8}}>Решение:</div>
+                  <div style={{display: 'flex', gap: 8}}>
+                    <button
+                      onClick={() => updateStatus('approved')}
+                      style={{
+                        padding: '8px 18px', borderRadius: 6, border: '1px solid #86efac',
+                        background: '#dcfce7', color: '#166534', fontWeight: 600,
+                        cursor: 'pointer', fontSize: 13
+                      }}
+                    >
+                      ✅ Утвердить
+                    </button>
+                    <button
+                      onClick={() => updateStatus('rejected')}
+                      style={{
+                        padding: '8px 18px', borderRadius: 6, border: '1px solid #fca5a5',
+                        background: '#fee2e2', color: '#991b1b', fontWeight: 600,
+                        cursor: 'pointer', fontSize: 13
+                      }}
+                    >
+                      ❌ Отклонить
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {data.status === 'rejected' && user?.role === 'admin' && (
+                <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
+                  <div style={{fontWeight: 600, marginBottom: 8}}>Решение:</div>
+                  <button
+                    onClick={() => updateStatus('approved')}
+                    style={{
+                      padding: '8px 18px', borderRadius: 6, border: '1px solid #86efac',
+                      background: '#dcfce7', color: '#166534', fontWeight: 600,
+                      cursor: 'pointer', fontSize: 13
+                    }}
+                  >
+                    ✅ Утвердить
+                  </button>
+                </div>
+              )}
+
+              {(user?.role === 'admin' || user?.role === 'operator') && ['approved', 'in_progress', 'partially_cut', 'cut'].includes(data.status) && (
                 <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
                   <div style={{fontWeight: 600, marginBottom: 8}}>Статус:</div>
                   <div style={{display: 'flex', gap: 6, flexWrap: 'wrap'}}>
                     {[
-                      { key: 'pending', label: 'В очереди', bg: '#f1f5f9', color: '#475569' },
-                      { key: 'in_progress', label: 'В работе', bg: '#dbeafe', color: '#1d4ed8' },
-                      { key: 'partially_cut', label: 'Частично', bg: '#fef3c7', color: '#92400e' },
+                      { key: 'in_progress', label: 'В резке', bg: '#dbeafe', color: '#1d4ed8' },
+                      { key: 'partially_cut', label: 'Частично вырезано', bg: '#fef3c7', color: '#92400e' },
                       { key: 'cut', label: 'Вырезано', bg: '#dcfce7', color: '#166534' },
                     ].map(s => (
                       <button

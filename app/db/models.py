@@ -23,6 +23,8 @@ class UserStatus(str, enum.Enum):
 
 class ApplicationStatus(str, enum.Enum):
     PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
     IN_PROGRESS = "in_progress"
     PARTIALLY_CUT = "partially_cut"
     CUT = "cut"

@@ -328,6 +328,7 @@ async def upload_layout(
 
 @router.get("/")
 async def list_applications(
+        tab: Optional[str] = Query(None),
         search: Optional[str] = None,
         page: int = Query(1, ge=1),
         limit: int = Query(50, ge=1, le=200),
@@ -336,7 +337,7 @@ async def list_applications(
 ):
     from app.services.cache import get_redis, cache_key
     r = await get_redis()
-    ckey = cache_key("apps", search, page, limit, user.id)
+    ckey = cache_key("apps", tab, search, page, limit, user.id)
     try:
         cached = await r.get(ckey)
         if cached:
@@ -377,6 +378,11 @@ async def list_applications(
     query = select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True)
     if customer_filter:
         query = query.where(Application.customer_id == customer_filter)
+
+    if tab == "applications":
+        query = query.where(Application.status.in_(["pending", "rejected"]))
+    elif tab == "orders":
+        query = query.where(Application.status.in_(["approved", "in_progress", "partially_cut", "cut"]))
 
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
@@ -451,16 +457,12 @@ async def list_applications(
         "pages": (total + limit - 1) // limit if total > 0 else 0
     }
 
-    try:
-        await r.setex(ckey, 30, json.dumps(response, default=str))
-    except Exception:
-        pass
-
     return response
 
 
 @router.get("/export")
 async def export_applications_xlsx(
+        tab: Optional[str] = Query(None),
         db: AsyncSession = Depends(get_db),
         user: User = Depends(get_current_user)
 ):
@@ -470,6 +472,10 @@ async def export_applications_xlsx(
     query = select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True)
     if user.role == UserRole.CUSTOMER and user.customer_id:
         query = query.where(Application.customer_id == user.customer_id)
+    if tab == "applications":
+        query = query.where(Application.status.in_(["pending", "rejected"]))
+    elif tab == "orders":
+        query = query.where(Application.status.in_(["approved", "in_progress", "partially_cut", "cut"]))
     result = await db.execute(query.order_by(Application.created_at.desc()))
     rows = result.all()
 
@@ -801,6 +807,8 @@ async def get_application_details(
             "total_weight": app.total_weight,
             "comments": app.comments,
             "detail_images": app.detail_images,
+            "status": app.status or "pending",
+            "supply_material": app.supply_material,
             "created_at": app.created_at
         },
         "layouts": layouts_data,
@@ -898,7 +906,7 @@ async def update_application_status(
         db: AsyncSession = Depends(get_db),
         user: User = Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
 ):
-    if status not in ("pending", "in_progress", "partially_cut", "cut"):
+    if status not in ("pending", "approved", "rejected", "in_progress", "partially_cut", "cut"):
         raise HTTPException(status_code=400, detail="Невалидный статус")
 
     result = await db.execute(select(Application).where(Application.id == app_id))
@@ -921,8 +929,8 @@ async def update_application_status(
     # Уведомление для заказчика и админов
     if old_status != status:
         status_labels = {
-            "pending": "В очереди", "in_progress": "В работе",
-            "partially_cut": "Вырезано частично", "cut": "Вырезано"
+            "pending": "В очереди", "approved": "В очереди", "rejected": "Отклонено",
+            "in_progress": "В резке", "partially_cut": "Частично вырезано", "cut": "Вырезано"
         }
         cust_name = ""
         order_date = app.created_at.strftime('%d.%m.%Y') if app.created_at else ""
@@ -952,8 +960,8 @@ async def update_application_status(
 
         # Запись в историю изменений
         status_labels_all = {
-            "pending": "В очереди", "in_progress": "В работе",
-            "partially_cut": "Вырезано частично", "cut": "Вырезано"
+            "pending": "В очереди", "approved": "В очереди", "rejected": "Отклонено",
+            "in_progress": "В резке", "partially_cut": "Частично вырезано", "cut": "Вырезано"
         }
         cust_name = ""
         order_date = app.created_at.strftime('%d.%m.%Y') if app.created_at else ""

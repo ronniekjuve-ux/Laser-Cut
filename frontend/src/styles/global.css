@@ -1,4 +1,4 @@
-﻿/* Global Reset */
+/* Global Reset */
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--primary:#2563eb;--dark:#0f172a;--light:#f8fafc;--border:#e2e8f0;--success:#10b981;--warning:#f59e0b;--danger:#ef4444;--urgent:#ff4d4f}
 body{font-family:'Segoe UI',Roboto,sans-serif;margin:0;background:#f1f5f9;color:#334155;height:100vh;overflow:hidden}
@@ -54,6 +54,8 @@ tr:hover{background:#eff6ff}
 .bg-queue{background:#e0f2fe;color:#0369a1}
 .bg-work{background:#fef3c7;color:#b45309}
 .bg-done{background:#d1fae5;color:#047857}
+.bg-approved{background:#dbeafe;color:#1d4ed8}
+.bg-rejected{background:#fee2e2;color:#991b1b}
 .bg-pending{background:#fef3c7;color:#b45309}
 .bg-in_progress{background:#e0f2fe;color:#0369a1}
 .bg-active{background:#d1fae5;color:#047857}

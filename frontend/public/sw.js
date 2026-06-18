@@ -1,20 +1,6 @@
-﻿const CACHE_NAME = 'lasercut-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/assets/',
-  '/icons/'
-];
+const CACHE_NAME = 'lasercut-v3';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch(() => {
-        console.log('Some assets failed to cache');
-      });
-    })
-  );
   self.skipWaiting();
 });
 
@@ -22,11 +8,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
+        cacheNames.map((cacheName) => caches.delete(cacheName))
       );
     })
   );
@@ -49,23 +31,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(request).then((response) => {
-        if (!response || response.status !== 200) {
-          return response;
-        }
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, responseToCache);
-        });
-        return response;
-      });
-    })
-  );
+  event.respondWith(fetch(request));
 });
 
 self.addEventListener('push', (event) => {

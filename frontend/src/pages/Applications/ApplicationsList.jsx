@@ -7,12 +7,10 @@ import NewOrderModal from './NewOrderModal';
 
 const COLUMNS = [
   { key: 'customer', label: 'Заказчик', sortable: true, filterable: true },
-  { key: 'machine', label: 'Станок', sortable: true, filterable: true },
   { key: 'material', label: 'Материал', sortable: true, filterable: true },
   { key: 'thickness', label: 'Толщ.', sortable: true, filterable: true },
   { key: 'supply_material', label: 'Дав. мат', sortable: true, filterable: true },
-  { key: 'priority', label: 'Приоритет', sortable: true, filterable: true },
-  { key: 'status', label: 'Статус', sortable: true, filterable: true },
+  { key: 'approve', label: 'Утвердить', sortable: false, filterable: false },
   { key: 'received', label: 'Поступил', sortable: true, filterable: false },
   { key: 'notes', label: 'Заметки', sortable: false, filterable: false, type: 'notes' },
   { key: 'actions', label: '', sortable: false, filterable: false },
@@ -56,7 +54,7 @@ export default function ApplicationsList() {
 
   const fetchApplications = useCallback(async (searchQuery, pageNum = page) => {
     try {
-      const params = { page: pageNum, limit: 50 };
+      const params = { page: pageNum, limit: 50, tab: 'applications' };
       if (searchQuery) params.search = searchQuery;
       const res = await client.get('/api/v1/applications/', { params });
       if (res.data.items) {
@@ -112,8 +110,6 @@ export default function ApplicationsList() {
   });
 
   const FILTER_LABELS = {
-    priority: { low: 'Низкий', medium: 'Средний', high: 'Высокий', urgent: 'Срочно' },
-    status: { pending: 'В очереди', in_progress: 'В работе', partially_cut: 'Частично', cut: 'Вырезано' },
     supply_material: { 'Да': 'Да', 'Нет': 'Нет' },
   };
 
@@ -184,8 +180,7 @@ export default function ApplicationsList() {
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
-  const activeApps = filtered.filter(app => app.status !== 'cut');
-  const completedApps = filtered.filter(app => app.status === 'cut');
+  const activeApps = filtered;
 
   const toggleFilterItem = (colKey, val) => {
     setFilters(prev => {
@@ -224,16 +219,6 @@ export default function ApplicationsList() {
     setSelectedApp(app);
   };
 
-  const handleCancelCut = async (e, appId) => {
-    e.stopPropagation();
-    try {
-      await client.patch('/api/v1/applications/' + appId + '/status?status=pending');
-      fetchApplications(search || undefined);
-    } catch (err) {
-      alert('Ошибка');
-    }
-  };
-
   if (loading) return <div className="loading">{'\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430...'}</div>;
 
   return (
@@ -252,7 +237,7 @@ export default function ApplicationsList() {
           Всего: {total} заявок | Стр. {page} из {totalPages || 1}
           <button className="btn" onClick={async () => {
             const token = localStorage.getItem('token');
-            const res = await fetch('/api/v1/applications/export', {
+            const res = await fetch('/api/v1/applications/export?tab=applications', {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             const blob = await res.blob();
@@ -326,15 +311,21 @@ export default function ApplicationsList() {
               }}>
                 {COLUMNS.map(col => (
                   <td key={col.key}>
-                    {col.key === 'status' ? (
-                      <span className={'badge ' + (
-                        app.status === 'cut' ? 'bg-done' :
-                        app.status === 'in_progress' || app.status === 'partially_cut' ? 'bg-work' : 'bg-queue'
-                      )}>
-                        {app.status === 'cut' ? 'Вырезано' :
-                         app.status === 'in_progress' ? 'В работе' :
-                         app.status === 'partially_cut' ? 'Частично' : 'В очереди'}
-                      </span>
+                    {col.key === 'approve' ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          client.patch('/api/v1/applications/' + app.id + '/status?status=approved')
+                            .then(() => fetchApplications(search || undefined));
+                        }}
+                        style={{
+                          padding: '4px 12px', borderRadius: 4, border: '1px solid #86efac',
+                          background: '#dcfce7', color: '#166534', fontWeight: 600,
+                          cursor: 'pointer', fontSize: 12
+                        }}
+                      >
+                        Да
+                      </button>
                     ) : col.key === 'supply_material' ? (
                       <div style={{ position: 'relative' }}>
                         <button
@@ -342,7 +333,17 @@ export default function ApplicationsList() {
                             e.stopPropagation();
                             const openId = 'supply-dropdown-' + app.id;
                             const el = document.getElementById(openId);
-                            if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
+                            if (el.style.display === 'block') {
+                              el.style.display = 'none';
+                              return;
+                            }
+                            document.querySelectorAll('[id^="supply-dropdown-"]').forEach(d => d.style.display = 'none');
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            el.style.display = 'block';
+                            el.style.position = 'fixed';
+                            el.style.top = (rect.bottom + 4) + 'px';
+                            el.style.left = rect.left + 'px';
+                            el.style.zIndex = '9999';
                           }}
                           style={{
                             cursor: 'pointer', padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 600, border: '1px solid var(--border)',
@@ -355,7 +356,7 @@ export default function ApplicationsList() {
                         <div
                           id={'supply-dropdown-' + app.id}
                           style={{
-                            display: 'none', position: 'absolute', top: '100%', left: 0, zIndex: 100,
+                            display: 'none', position: 'fixed', zIndex: 9999,
                             background: '#fff', border: '1px solid var(--border)', borderRadius: 6,
                             boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 80,
                           }}
@@ -467,61 +468,6 @@ export default function ApplicationsList() {
           </tbody>
         </table>
       </div>
-
-      {completedApps.length > 0 && (
-        <div style={{marginTop: 20}}>
-          <h4 style={{margin: '0 0 8px 0', fontSize: 14, color: '#64748b'}}>{'\u0412\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u044b\u0435 \u0437\u0430\u044f\u0432\u043a\u0438'}</h4>
-          <div className="table-container" style={{maxHeight: 150, overflowY: 'auto'}}>
-            <table>
-              <thead style={{position: 'sticky', top: 0, zIndex: 1}}>
-                <tr>
-                  <th>Заказчик</th>
-                  <th>Станок</th>
-                  <th>Материал</th>
-                  <th>Толщ.</th>
-                  <th>Дав. мат</th>
-                  <th>Поступил</th>
-                  <th>Выполнена</th>
-                  <th>Оператор</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {completedApps.map(app => (
-                  <tr key={app.id} onClick={() => setSelectedApp(app)} style={{cursor: 'pointer', opacity: 0.7}}>
-                    <td>{app.customer}</td>
-                    <td>{app.machine}</td>
-                    <td>{app.steel_grade || app.material}</td>
-                    <td>{app.thickness}</td>
-                    <td>
-                      <span style={{
-                        padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600,
-                        background: app.supply_material === true ? '#d1fae5' : app.supply_material === false ? '#fee2e2' : '#f1f5f9',
-                        color: app.supply_material === true ? '#047857' : app.supply_material === false ? '#b91c1c' : '#94a3b8',
-                      }}>
-                        {app.supply_material === true ? 'Да' : app.supply_material === false ? 'Нет' : '—'}
-                      </span>
-                    </td>
-                    <td>{app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : ''}</td>
-                    <td>{app.cut_at ? new Date(app.cut_at).toLocaleDateString('ru-RU') : ''}</td>
-                    <td>{app.cut_by || ''}</td>
-                    <td>
-                      <button
-                        className="btn"
-                        onClick={(e) => handleCancelCut(e, app.id)}
-                        title="Отменить вырезание"
-                        style={{padding: '3px 8px', fontSize: 11}}
-                      >
-                        ↩️
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {totalPages > 1 && (
         <div style={{display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center'}}>
