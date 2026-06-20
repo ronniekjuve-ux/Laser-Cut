@@ -84,7 +84,7 @@ function FileDropZone({ label, accept, multiple, files, onFiles, disabled }) {
   );
 }
 
-export default function NewOrderModal({ onClose, onCreated }) {
+export default function NewOrderModal({ onClose, onCreated, status = 'pending' }) {
   const [customerName, setCustomerName] = useState('');
   const [steelGrade, setSteelGrade] = useState('');
   const [comments, setComments] = useState('');
@@ -113,10 +113,9 @@ export default function NewOrderModal({ onClose, onCreated }) {
       if (steelGrade) fd.append('steel_grade', steelGrade);
       if (comments) fd.append('comments', comments);
       if (supplyMaterial) fd.append('supply_material', supplyMaterial);
+      fd.append('status', status);
 
-      const res = await client.post('/api/v1/applications/upload', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await client.post('/api/v1/applications/upload', fd);
 
       const appId = res.data.application_id;
 
@@ -125,9 +124,7 @@ export default function NewOrderModal({ onClose, onCreated }) {
           setProgress('\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0440\u0430\u0441\u043a\u043b\u0430\u0434\u043a\u0438 ' + (i + 1) + ' \u0438\u0437 ' + layoutFiles.length + '...');
           const lfd = new FormData();
           lfd.append('file', layoutFiles[i]);
-          await client.post('/api/v1/applications/' + appId + '/layouts/upload', lfd, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          });
+          await client.post('/api/v1/applications/' + appId + '/layouts/upload', lfd);
         }
       }
 
@@ -145,7 +142,7 @@ export default function NewOrderModal({ onClose, onCreated }) {
     <div className="modal-overlay active" onClick={onClose}>
       <div className="modal-content" style={{width: 700}} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>{'\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u044f\u0432\u043a\u0430'}</h3>
+          <h3>{status === 'approved' ? 'Новый заказ' : 'Новая заявка'}</h3>
           <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
         </div>
         <div className="modal-body">

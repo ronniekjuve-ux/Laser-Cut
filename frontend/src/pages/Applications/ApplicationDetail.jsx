@@ -56,9 +56,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
       fd.append('size', deficitSize || '');
       fd.append('quantity', deficitQty || '');
       fd.append('note', deficitNote || '');
-      await client.post('/api/v1/applications/' + app.id + '/deficit', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      await client.post('/api/v1/applications/' + app.id + '/deficit', fd);
       setShowDeficitForm(false);
       setDeficitNote('');
       alert('Заявка о нехватке металла отправлена');

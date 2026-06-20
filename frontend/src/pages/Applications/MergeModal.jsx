@@ -40,9 +40,7 @@ export default function MergeModal({ onClose, onMerged }) {
       fd.append('file', file);
       fd.append('layout_ids', JSON.stringify(refs));
 
-      const res = await client.post('/api/v1/applications/merge', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await client.post('/api/v1/applications/merge', fd);
       setResult(res.data);
       if (res.data.warnings && res.data.warnings.length > 0) {
         setStep(3);
@@ -68,9 +66,7 @@ export default function MergeModal({ onClose, onMerged }) {
       fd.append('file', file);
       fd.append('layout_ids', JSON.stringify(refs));
 
-      const res = await client.post('/api/v1/applications/merge', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await client.post('/api/v1/applications/merge', fd);
       setResult(res.data);
       if (onMerged) onMerged();
       onClose();

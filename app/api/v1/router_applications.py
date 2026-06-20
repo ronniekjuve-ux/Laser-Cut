@@ -64,6 +64,7 @@ async def upload_application(
         steel_grade: str = Form(""),
         comments: str = Form(""),
         supply_material: str = Form(""),
+        status: str = Form("pending"),
         db: AsyncSession = Depends(get_db),
         user: User = Depends(require_role(UserRole.ADMIN))
 ):
@@ -114,6 +115,8 @@ async def upload_application(
                 app.detail_images = images_json
         else:
             customer = await get_or_create_customer(db, customer_name or "Промстальмаш")
+            if status not in ("pending", "approved", "rejected", "in_progress", "partially_cut", "cut"):
+                status = "pending"
             app = Application(
                 order_name=data.order_name,
                 customer_id=customer.id,
@@ -125,6 +128,7 @@ async def upload_application(
                 detail_images=images_json,
                 comments=comments if comments else None,
                 supply_material=True if supply_material == "true" else False if supply_material == "false" else None,
+                status=status,
             )
             db.add(app)
 

@@ -660,6 +660,7 @@ export default function OrdersList() {
         <NewOrderModal
           onClose={() => setShowNewOrder(false)}
           onCreated={() => { setShowNewOrder(false); fetchOrders(); }}
+          status="approved"
         />
       )}
 
