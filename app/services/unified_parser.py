@@ -258,13 +258,9 @@ def clean_text(text: str) -> str:
 
 def normalize_name(name: str) -> str:
     """Нормализует имя для сопоставления"""
-    # Извлекаем имя файла, обрабатывая Windows-пути (D:\...)
     clean = name.replace('\\', '/').split('/')[-1]
-
-    # Убираем расширение .dft
     clean = re.sub(r'\.dft$', '', clean, flags=re.IGNORECASE).strip()
-
-    # Приводим к нижнему регистру
+    clean = re.sub(r'\s+', ' ', clean).strip()
     return clean.lower()
 
 
@@ -701,6 +697,10 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft:
                     if not dft_match:
                         continue
                     dft_name = dft_match.group(2)
+                    dft_name = re.sub(r'<[^>]+>', '', dft_name)
+                    dft_name = re.sub(r'\s+', ' ', dft_name).strip()
+                    if not dft_name:
+                        continue
                     dest_path = dest_dir / img_ref
                     shutil.copy2(src, dest_path)
                     saved.append((f"/api/v1/images/{prefix}/{img_ref}", dft_name))
