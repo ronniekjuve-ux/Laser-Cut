@@ -4,30 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
 import InstallPWA from './InstallPWA';
-
-const SHIFT_CYCLE = [
-  ['Yura', 'Denis'],
-  ['Andrey', 'Denis'],
-  ['Andrey', 'Dima'],
-  ['Yura', 'Dima'],
-];
-const SHIFT_OFFSET = 2;
-
-function getShiftInfo(date) {
-  const now = new Date();
-  const d1 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const d2 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const diffDays = Math.floor((d1 - d2) / (1000 * 60 * 60 * 24));
-  let dayIndex = ((diffDays + SHIFT_OFFSET) % 4 + 4) % 4;
-  const pair = SHIFT_CYCLE[dayIndex];
-  let nightIndex = ((diffDays + SHIFT_OFFSET) % 8 + 8) % 8;
-  const isVovaOn = nightIndex < 4;
-  return { pair, isVovaOn };
-}
+import { getShiftForDate, loadOverrides } from '../utils/shifts';
 
 function getActiveOps() {
   const h = new Date().getHours();
-  const { pair, isVovaOn } = getShiftInfo(new Date());
+  const overrides = loadOverrides();
+  const { pair, isVovaOn } = getShiftForDate(new Date(), overrides);
   if (h >= 8 && h < 20) {
     return pair[0] + ' (St1) | ' + pair[1] + ' (St2)';
   }
@@ -43,6 +25,7 @@ const NAV_ITEMS = [
   { to: '/users', label: 'Пользователи', icon: '👥', roles: ['admin', 'director'] },
   { to: '/changelog', label: 'История изменений', icon: '📝', roles: ['admin', 'director'] },
   { to: '/audit', label: 'Аудит', icon: '📊', roles: ['admin', 'director'] },
+  { to: '/feedback', label: 'Отзывы', icon: '💬' },
 ];
 
 export default function Layout() {
@@ -124,6 +107,7 @@ export default function Layout() {
     if (p === '/users') return 'Пользователи';
     if (p === '/audit') return 'Аудит';
     if (p === '/changelog') return 'История изменений';
+    if (p === '/feedback') return 'Жалобы и предложения';
     if (p.startsWith('/applications/')) return 'Детали заявки';
     return 'Предварительный просчёт';
   })();

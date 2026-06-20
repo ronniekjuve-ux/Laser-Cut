@@ -266,7 +266,7 @@ export default function OrdersList() {
     <div>
       <div className="toolbar">
         <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
-          + Новая заявка
+          + Новый заказ
         </button>
         {(user?.role === 'admin' || user?.role === 'operator') && (
           <button className="btn" onClick={() => setShowMerge(true)} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #86efac' }}>

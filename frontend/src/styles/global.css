@@ -192,6 +192,14 @@ tr:hover{background:#eff6ff}
 
 .history-controls { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; font-size: 13px; color: #64748b; }
 
+/* === SCHEDULE OVERRIDES === */
+.sched-op.override { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 3px; }
+.operator-filtered { opacity: 0.3; }
+.operator-filtered .sched-op { opacity: 0.5; }
+.operator-active { opacity: 1; }
+.operator-active .sched-op { opacity: 1; }
+.operator-stat-block { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+
 @keyframes slideUp {
   from { transform: translateY(100px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }

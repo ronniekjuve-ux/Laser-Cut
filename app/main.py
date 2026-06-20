@@ -8,6 +8,7 @@ from app.api.v1.router_applications import router as applications_router
 from app.api.v1.router_images import router as images_router
 from app.api.v1.router_warehouse import router as warehouse_router
 from app.api.v1.router_audit import router as audit_data_router
+from app.api.v1.router_feedback import router as feedback_router
 from jose import JWTError, jwt
 from app.core.config import settings
 
@@ -93,6 +94,7 @@ app.include_router(orders_router)
 app.include_router(applications_router, prefix="/api/v1")
 app.include_router(images_router, prefix="/api/v1")
 app.include_router(warehouse_router, prefix="/api/v1")
+app.include_router(feedback_router, prefix="/api/v1")
 app.include_router(audit_data_router)
 
 @app.get("/health")

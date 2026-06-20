@@ -12,6 +12,7 @@ import AuditLog from './pages/Audit/AuditProduction';
 import ChangeLog from './pages/ChangeLog/ChangeLog';
 import Warehouse from './pages/Warehouse/Warehouse';
 import OrdersList from './pages/Orders/OrdersList';
+import Feedback from './pages/Feedback';
 
 export default function App() {
   return (
@@ -56,6 +57,7 @@ export default function App() {
                 <OrdersList />
               </ProtectedRoute>
             } />
+            <Route path="feedback" element={<Feedback />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
