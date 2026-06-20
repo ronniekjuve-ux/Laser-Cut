@@ -4,6 +4,49 @@ import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import ApplicationDetail from '../Applications/ApplicationDetail';
 import NewOrderModal from '../Applications/NewOrderModal';
+import MergeModal from '../Applications/MergeModal';
+
+function NotesModal({ app, onClose, onSaved }) {
+  const [text, setText] = useState(app.comments || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await client.patch('/api/v1/applications/' + app.id + '/comments?comments=' + encodeURIComponent(text));
+      onSaved();
+    } catch (err) {
+      alert('Ошибка сохранения');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay active" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+        <div className="modal-header">
+          <h3>Заметки — {app.order_name}</h3>
+          <button className="close-btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="Введите заметку..."
+            style={{ width: '100%', minHeight: 100, padding: 8, border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? 'Сохранение...' : 'Сохранить'}
+          </button>
+          <button className="btn" onClick={onClose}>Отмена</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const COLUMNS = [
   { key: 'customer', label: 'Заказчик', sortable: true, filterable: true },
@@ -25,13 +68,14 @@ export default function OrdersList() {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [sortCol, setSortCol] = useState(null);
+  const [sortCol, setSortCol] = useState('priority');
   const [sortDir, setSortDir] = useState('asc');
   const [filters, setFilters] = useState({});
   const [openFilter, setOpenFilter] = useState(null);
   const [filterPos, setFilterPos] = useState({ top: 0, left: 0 });
   const [selectedApp, setSelectedApp] = useState(null);
   const [showNewOrder, setShowNewOrder] = useState(false);
+  const [showMerge, setShowMerge] = useState(false);
   const [notesModal, setNotesModal] = useState(null);
   const [filterSearch, setFilterSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -224,6 +268,11 @@ export default function OrdersList() {
         <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
           + Новая заявка
         </button>
+        {(user?.role === 'admin' || user?.role === 'operator') && (
+          <button className="btn" onClick={() => setShowMerge(true)} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #86efac' }}>
+            🔗 Слияние
+          </button>
+        )}
         <input
           type="text"
           placeholder="Поиск..."
@@ -325,7 +374,17 @@ export default function OrdersList() {
                               e.stopPropagation();
                               const openId = 'supply-dropdown-' + app.id;
                               const el = document.getElementById(openId);
-                              if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
+                              if (el) {
+                                if (el.style.display === 'block') {
+                                  el.style.display = 'none';
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  el.style.display = 'block';
+                                  el.style.position = 'fixed';
+                                  el.style.top = (rect.bottom + 4) + 'px';
+                                  el.style.left = rect.left + 'px';
+                                }
+                              }
                             }}
                             style={{
                               cursor: 'pointer', padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 600, border: '1px solid var(--border)',
@@ -338,7 +397,7 @@ export default function OrdersList() {
                           <div
                             id={'supply-dropdown-' + app.id}
                             style={{
-                              display: 'none', position: 'absolute', top: '100%', left: 0, zIndex: 100,
+                              display: 'none', position: 'fixed', zIndex: 9999,
                               background: '#fff', border: '1px solid var(--border)', borderRadius: 6,
                               boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 80,
                             }}
@@ -582,17 +641,11 @@ export default function OrdersList() {
       )}
 
       {notesModal && (
-        <div className="modal-overlay active" onClick={() => setNotesModal(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
-            <div className="modal-header">
-              <h3>Заметки — {notesModal.order_name}</h3>
-              <button className="close-btn" onClick={() => setNotesModal(null)}>✕</button>
-            </div>
-            <div className="modal-body">
-              <p style={{ whiteSpace: 'pre-wrap' }}>{notesModal.comments || 'Нет заметок'}</p>
-            </div>
-          </div>
-        </div>
+        <NotesModal
+          app={notesModal}
+          onClose={() => setNotesModal(null)}
+          onSaved={() => { setNotesModal(null); fetchOrders(search || undefined); }}
+        />
       )}
 
       {selectedApp && (
@@ -607,6 +660,13 @@ export default function OrdersList() {
         <NewOrderModal
           onClose={() => setShowNewOrder(false)}
           onCreated={() => { setShowNewOrder(false); fetchOrders(); }}
+        />
+      )}
+
+      {showMerge && (
+        <MergeModal
+          onClose={() => setShowMerge(false)}
+          onMerged={() => { setShowMerge(false); fetchOrders(); }}
         />
       )}
     </div>

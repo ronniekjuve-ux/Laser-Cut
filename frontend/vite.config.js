@@ -1,9 +1,16 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
+const versionPlugin = {
+  name: 'version-inject',
+  transformIndexHtml(html) {
+    const v = Date.now()
+    return html.replace(/src="([^"]+\.js)"/, `src="$1?v=${v}"`)
+  }
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), versionPlugin],
   build: {
     rollupOptions: {
       output: {

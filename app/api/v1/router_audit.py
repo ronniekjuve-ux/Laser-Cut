@@ -175,7 +175,10 @@ async def audit_applications(
     app_ids = [app.id for app, _ in rows]
 
     layouts_result = await db.execute(
-        select(ApplicationLayout).where(ApplicationLayout.application_id.in_(app_ids))
+        select(ApplicationLayout).where(
+            ApplicationLayout.application_id.in_(app_ids),
+            ApplicationLayout.status.in_(["active", None])
+        )
     )
     all_layouts = layouts_result.scalars().all()
 

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import CostCalculator from './CostCalculator';
 
 export default function ApplicationDetail({ app, onClose, onUpdate }) {
   const { user } = useAuth();
@@ -27,6 +26,24 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
       if (onUpdate) onUpdate();
     } catch (err) {
       alert('Ошибка смены статуса');
+    }
+  };
+
+  const toggleRun = async (layoutId, runIndex) => {
+    try {
+      const res = await client.patch('/api/v1/applications/layouts/' + layoutId + '/toggle-run?run_index=' + runIndex);
+      setFullApp(prev => {
+        if (!prev) return prev;
+        const layouts = prev.layouts.map(l => {
+          if (l.id === layoutId) {
+            return { ...l, completed_runs: res.data.completed_runs };
+          }
+          return l;
+        });
+        return { ...prev, layouts };
+      });
+    } catch (err) {
+      alert('Ошибка');
     }
   };
 
@@ -133,15 +150,6 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                 {data.comments && <div><span style={{fontWeight: 600}}>Комментарий:</span> {data.comments}</div>}
               </div>
 
-              {layouts.length > 0 && ['pending', 'rejected'].includes(data.status) && (
-                <CostCalculator
-                  layouts={layouts}
-                  supply_material={data.supply_material}
-                  thickness={data.thickness}
-                  steel_grade={data.steel_grade || data.material}
-                />
-              )}
-
               {data.status === 'pending' && user?.role === 'admin' && (
                 <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
                   <div style={{fontWeight: 600, marginBottom: 8}}>Решение:</div>
@@ -191,6 +199,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                   <div style={{fontWeight: 600, marginBottom: 8}}>Статус:</div>
                   <div style={{display: 'flex', gap: 6, flexWrap: 'wrap'}}>
                     {[
+                      { key: 'approved', label: 'В очереди', bg: '#f0fdf4', color: '#15803d' },
                       { key: 'in_progress', label: 'В резке', bg: '#dbeafe', color: '#1d4ed8' },
                       { key: 'partially_cut', label: 'Частично вырезано', bg: '#fef3c7', color: '#92400e' },
                       { key: 'cut', label: 'Вырезано', bg: '#dcfce7', color: '#166534' },
@@ -278,20 +287,38 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
               {layouts.length > 0 && (
                 <div style={{marginTop: 16}}>
                   <h4>Раскладки</h4>
-                  {layouts.map((layout, li) => (
-                    <div
-                      key={layout.id || li}
-                      style={{padding: 10, border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8, cursor: 'pointer'}}
-                      onClick={() => setActiveLayout(li)}
-                    >
-                      <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                        <strong>{layout.layout_code ? ('Раскладка ' + layout.layout_code) : ('Раскладка ' + (li + 1))}</strong>
-                        <span style={{fontSize: 12, color: '#64748b'}}>
-                          {layout.machine_type || ''} | {layout.sheet_size} | Деталей: {layout.parts_count}
-                        </span>
+                  {layouts.map((layout, li) => {
+                    const isReplaced = layout.replaced;
+                    return (
+                      <div
+                        key={layout.id || li}
+                        style={{
+                          padding: 10, border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8,
+                          cursor: isReplaced ? 'default' : 'pointer',
+                          opacity: isReplaced ? 0.45 : 1,
+                          background: isReplaced ? '#f1f5f9' : undefined,
+                        }}
+                        onClick={() => !isReplaced && setActiveLayout(li)}
+                      >
+                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                          <strong>{layout.layout_code ? ('Раскладка ' + layout.layout_code) : ('Раскладка ' + (li + 1))}</strong>
+                          <span style={{fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center'}}>
+                            {isReplaced && (
+                              <span style={{background: '#fee2e2', color: '#991b1b', padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600}}>
+                                Заменена
+                              </span>
+                            )}
+                            {layout.merged_from && (
+                              <span style={{background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: 4, fontSize: 11}}>
+                                Слияние
+                              </span>
+                            )}
+                            {!isReplaced && `${layout.machine_type || ''} | ${layout.sheet_size} | Деталей: ${layout.parts_count}`}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </>
@@ -322,8 +349,35 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                       {layout.cut_length != null && <div><span style={{fontWeight: 600}}>Резка (мм):</span> {layout.cut_length}</div>}
                       {layout.travel_length != null && <div><span style={{fontWeight: 600}}>Перемещение (мм):</span> {layout.travel_length}</div>}
                       {layout.pierces != null && <div><span style={{fontWeight: 600}}>Кол-во проколов:</span> {layout.pierces}</div>}
+                      <div><span style={{fontWeight: 600}}>Кол-во листов:</span> {layout.sheet_count || 1}</div>
                     </div>
                   </div>
+
+                  {layout.sheet_count > 1 && (
+                    <div style={{marginTop: 16, padding: '12px 16px', background: '#f8fafc', borderRadius: 8, border: '1px solid var(--border)'}}>
+                      <div style={{fontWeight: 600, marginBottom: 8, fontSize: 13}}>Прогресс по запускам ({layout.completed_runs?.filter(Boolean).length || 0} из {layout.sheet_count})</div>
+                      <div style={{display: 'flex', flexWrap: 'wrap', gap: 4}}>
+                        {Array.from({length: layout.sheet_count}, (_, i) => {
+                          const done = layout.completed_runs?.[i] || false;
+                          return (
+                            <div
+                              key={i}
+                              onClick={() => toggleRun(layout.id, i)}
+                              style={{
+                                width: 28, height: 28, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                                background: done ? '#22c55e' : '#e2e8f0',
+                                color: done ? '#fff' : '#64748b',
+                                border: done ? '2px solid #16a34a' : '2px solid transparent'
+                              }}
+                            >
+                              {i + 1}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {layout.parts && layout.parts.length > 0 && (
                     <div style={{marginTop: 12}}>

@@ -4,6 +4,109 @@ import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import ApplicationDetail from './ApplicationDetail';
 import NewOrderModal from './NewOrderModal';
+import CostCalculator from './CostCalculator';
+import MergeModal from './MergeModal';
+
+function NotesModal({ app, onClose, onSaved }) {
+  const [text, setText] = useState(app.comments || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await client.patch('/api/v1/applications/' + app.id + '/comments?comments=' + encodeURIComponent(text));
+      onSaved();
+    } catch (err) {
+      alert('Ошибка сохранения');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay active" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+        <div className="modal-header">
+          <h3>Заметка — {app.order_name || app.id}</h3>
+          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+        </div>
+        <div className="modal-body">
+          <textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="Введите заметку..."
+            style={{ width: '100%', minHeight: 100, padding: 8, border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? 'Сохранение...' : 'Сохранить'}
+          </button>
+          <button className="btn" onClick={onClose}>Отмена</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalcModal({ app, onClose }) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    client.get('/api/v1/applications/' + app.id).then(res => {
+      setData(res.data);
+    }).catch(() => {
+      alert('Ошибка загрузки данных');
+      onClose();
+    }).finally(() => setLoading(false));
+  }, [app.id]);
+
+  if (loading) return (
+    <div className="modal-overlay active" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+        <div className="modal-body" style={{ textAlign: 'center', padding: 40 }}>Загрузка...</div>
+      </div>
+    </div>
+  );
+
+  if (!data) return null;
+
+  const layouts = data.layouts || [];
+  const appData = data.application || app;
+
+  return (
+    <div className="modal-overlay active" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+        <div className="modal-header">
+          <h3>Предварительный просчёт — {app.order_name || app.id}</h3>
+          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ marginBottom: 12, fontSize: 13, color: '#64748b' }}>
+            <span>Материал: <b>{appData.material || appData.steel_grade || '-'}</b> · </span>
+            <span>Толщина: <b>{appData.thickness ? appData.thickness + ' мм' : '-'}</b></span>
+          </div>
+          {layouts.length > 0 ? (
+            <CostCalculator
+              layouts={layouts}
+              supply_material={appData.supply_material}
+              thickness={appData.thickness}
+              steel_grade={appData.steel_grade || appData.material}
+            />
+          ) : (
+            <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>
+              Нет загруженных раскладок
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={onClose}>Закрыть</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const COLUMNS = [
   { key: 'customer', label: 'Заказчик', sortable: true, filterable: true },
@@ -35,7 +138,9 @@ export default function ApplicationsList() {
   const [filterPos, setFilterPos] = useState({top: 0, left: 0});
   const [selectedApp, setSelectedApp] = useState(null);
   const [showNewOrder, setShowNewOrder] = useState(false);
+  const [showMerge, setShowMerge] = useState(false);
   const [notesModal, setNotesModal] = useState(null);
+  const [calcModal, setCalcModal] = useState(null);
   const [filterSearch, setFilterSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -233,6 +338,11 @@ export default function ApplicationsList() {
         <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
           + {'\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u044f\u0432\u043a\u0430'}
         </button>
+        {(user?.role === 'admin' || user?.role === 'operator') && (
+          <button className="btn" onClick={() => setShowMerge(true)} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #86efac' }}>
+            🔗 Слияние
+          </button>
+        )}
         <span style={{marginLeft: 'auto', fontSize: 13, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center'}}>
           Всего: {total} заявок | Стр. {page} из {totalPages || 1}
           <button className="btn" onClick={async () => {
@@ -429,6 +539,7 @@ export default function ApplicationsList() {
                       </button>
                     ) : col.key === 'actions' ? (
                       <div style={{display: 'flex', gap: 4}}>
+                        <button className="btn" onClick={(e) => { e.stopPropagation(); setCalcModal(app); }} title="Калькулятор" style={{padding: '4px 8px', fontSize: 11}}>🧮</button>
                         <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{padding: '4px 8px', fontSize: 11}}>✏️</button>
                         <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{padding: '4px 8px', fontSize: 11}}>🗑️</button>
                       </div>
@@ -515,21 +626,19 @@ export default function ApplicationsList() {
         />
       )}
 
+      {showMerge && (
+        <MergeModal
+          onClose={() => setShowMerge(false)}
+          onMerged={() => { setShowMerge(false); fetchApplications(); }}
+        />
+      )}
+
       {notesModal && (
-        <div className="modal-overlay active" onClick={() => setNotesModal(null)}>
-          <div className="modal-content" style={{width: 500}} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Заметка — {notesModal.order_name || notesModal.id}</h3>
-              <button className="close-btn" onClick={() => setNotesModal(null)}>{'\u2715'}</button>
-            </div>
-            <div className="modal-body">
-              <div style={{whiteSpace: 'pre-wrap', lineHeight: 1.6}}>{notesModal.comments}</div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-primary" onClick={() => setNotesModal(null)}>Закрыть</button>
-            </div>
-          </div>
-        </div>
+        <NotesModal
+          app={notesModal}
+          onClose={() => setNotesModal(null)}
+          onSaved={() => { setNotesModal(null); fetchApplications(); }}
+        />
       )}
 
       {openFilter && (
@@ -571,6 +680,13 @@ export default function ApplicationsList() {
             </div>
           )}
         </div>
+      )}
+
+      {calcModal && (
+        <CalcModal
+          app={calcModal}
+          onClose={() => setCalcModal(null)}
+        />
       )}
     </div>
   );
