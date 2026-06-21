@@ -13,7 +13,7 @@ export default function ChangeLog() {
   const fetchLogs = async (p = 1) => {
     setLoading(true);
     try {
-      const res = await client.get('/api/v1/applications/changelog', { params: { page: p, limit: 20 } });
+      const res = await client.get('/api/v1/applications/changelog', { params: { page: p, limit: 15 } });
       const data = res.data;
       setLogs(Array.isArray(data.items) ? data.items : []);
       setTotalPages(data.pages || 0);

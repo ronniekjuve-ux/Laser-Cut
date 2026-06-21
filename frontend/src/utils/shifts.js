@@ -4,7 +4,10 @@ export const SHIFT_CYCLE = [
   ['Andrey', 'Dima'],
   ['Yura', 'Dima'],
 ];
-export const SHIFT_OFFSET = 1;
+
+export const ANCHOR_DATE = new Date(2026, 5, 19);
+export const ANCHOR_DAY_INDEX = 0;
+export const ANCHOR_NIGHT_INDEX = 0;
 
 export const ALL_OPERATORS = ['Yura', 'Denis', 'Andrey', 'Dima', 'Vova'];
 
@@ -16,13 +19,12 @@ export function dateToKey(date) {
 }
 
 export function getShiftInfo(date) {
-  const now = new Date();
   const d1 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const d2 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const d2 = new Date(ANCHOR_DATE.getFullYear(), ANCHOR_DATE.getMonth(), ANCHOR_DATE.getDate());
   const diffDays = Math.floor((d1 - d2) / (1000 * 60 * 60 * 24));
-  let dayIndex = ((diffDays + SHIFT_OFFSET) % 4 + 4) % 4;
+  let dayIndex = ((diffDays + ANCHOR_DAY_INDEX) % 4 + 4) % 4;
   const pair = SHIFT_CYCLE[dayIndex];
-  let nightIndex = ((diffDays + SHIFT_OFFSET) % 8 + 8) % 8;
+  let nightIndex = ((diffDays + ANCHOR_NIGHT_INDEX) % 8 + 8) % 8;
   const isVovaOn = nightIndex < 4;
   return { pair, isVovaOn };
 }
@@ -52,6 +54,34 @@ export function saveOverrides(overrides) {
   localStorage.setItem('shift_overrides', JSON.stringify(overrides));
 }
 
+export async function loadOverridesFromServer(month) {
+  try {
+    const client = (await import('../api/client')).default;
+    const res = await client.get('/audit/overrides', { params: { month } });
+    return res.data || {};
+  } catch {
+    return {};
+  }
+}
+
+export async function saveOverrideToServer(dateStr, st1, st2, night) {
+  try {
+    const client = (await import('../api/client')).default;
+    await client.post('/audit/overrides', { date: dateStr, st1: st1 || null, st2: st2 || null, night: night || null });
+  } catch (err) {
+    console.error('Failed to save override to server', err);
+  }
+}
+
+export async function deleteOverrideFromServer(dateStr) {
+  try {
+    const client = (await import('../api/client')).default;
+    await client.delete(`/audit/overrides/${dateStr}`);
+  } catch (err) {
+    console.error('Failed to delete override from server', err);
+  }
+}
+
 export function getOperatorDaysInMonth(year, month, overrides = {}) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const result = {};
@@ -65,4 +95,45 @@ export function getOperatorDaysInMonth(year, month, overrides = {}) {
     if (isVovaOn && result['Vova']) result['Vova'].night++;
   }
   return result;
+}
+
+export function computeMonthShifts(year, month, overrides = {}) {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const shifts = [];
+  const mm = String(month + 1).padStart(2, '0');
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${mm}-${String(d).padStart(2, '0')}`;
+    const date = new Date(year, month, d);
+    const { pair, isVovaOn, isOverride } = getShiftForDate(date, overrides);
+
+    if (pair[0]) {
+      shifts.push({
+        username: pair[0],
+        date: dateStr,
+        shift_type: 'day',
+        hours: 12,
+        machine_type: 'станок 1',
+      });
+    }
+    if (pair[1]) {
+      shifts.push({
+        username: pair[1],
+        date: dateStr,
+        shift_type: 'day',
+        hours: 12,
+        machine_type: 'станок 2',
+      });
+    }
+    if (isVovaOn) {
+      shifts.push({
+        username: 'Vova',
+        date: dateStr,
+        shift_type: 'night',
+        hours: 12,
+        machine_type: null,
+      });
+    }
+  }
+  return shifts;
 }

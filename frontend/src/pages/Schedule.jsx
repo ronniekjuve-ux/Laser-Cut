@@ -6,7 +6,12 @@ import {
   loadOverrides,
   saveOverrides,
   getOperatorDaysInMonth,
+  computeMonthShifts,
+  loadOverridesFromServer,
+  saveOverrideToServer,
+  deleteOverrideFromServer,
 } from '../utils/shifts';
+import client from '../api/client';
 
 const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const DAY_NAMES = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
@@ -24,7 +29,28 @@ export default function Schedule() {
   const [overrideForm, setOverrideForm] = useState({ st1: '', st2: '', night: '' });
   const [selectedOps, setSelectedOps] = useState([]);
 
+  useEffect(() => {
+    const mm = String(month + 1).padStart(2, '0');
+    loadOverridesFromServer(`${year}-${mm}`).then(serverOverrides => {
+      const merged = { ...loadOverrides(), ...serverOverrides };
+      setOverrides(merged);
+      saveOverrides(merged);
+    });
+  }, [year, month]);
+
   useEffect(() => { saveOverrides(overrides); }, [overrides]);
+
+  const syncToAudit = async (y, m, ov) => {
+    try {
+      const mm = String(m + 1).padStart(2, '0');
+      const shifts = computeMonthShifts(y, m, ov);
+      await client.post('/audit/operators/sync', { month: `${y}-${mm}`, shifts });
+    } catch (err) {
+      console.error('Failed to sync shifts to audit', err);
+    }
+  };
+
+  useEffect(() => { syncToAudit(year, month, overrides); }, [overrides, year, month]);
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = (new Date(year, month, 1).getDay() + 6) % 7;
@@ -114,8 +140,10 @@ export default function Schedule() {
       const next = { ...overrides };
       delete next[editingOverride];
       setOverrides(next);
+      deleteOverrideFromServer(editingOverride);
     } else {
       setOverrides({ ...overrides, [editingOverride]: { ...overrideForm } });
+      saveOverrideToServer(editingOverride, overrideForm.st1, overrideForm.st2, overrideForm.night);
     }
     setEditingOverride(null);
   };
@@ -124,6 +152,7 @@ export default function Schedule() {
     const next = { ...overrides };
     delete next[key];
     setOverrides(next);
+    deleteOverrideFromServer(key);
     setEditingOverride(null);
   };
 

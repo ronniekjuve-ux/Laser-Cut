@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import client from '../../api/client';
+import { computeMonthShifts, loadOverridesFromServer } from '../../utils/shifts';
 
 const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
@@ -313,15 +314,25 @@ function OperatorsTab() {
   const [loading, setLoading] = useState(true);
   const now = new Date();
   const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);
-  const [showAdd, setShowAdd] = useState(false);
-  const [newShift, setNewShift] = useState({ user_id: '', date: '', shift_type: 'day', hours: 8, machine_type: '' });
   const [expandedOps, setExpandedOps] = useState(new Set());
   const [editingStat, setEditingStat] = useState(null);
   const [editValues, setEditValues] = useState({});
 
+  const syncMonthFromSchedule = async (monthStr) => {
+    try {
+      const [y, m] = monthStr.split('-').map(Number);
+      const overrides = await loadOverridesFromServer(monthStr);
+      const shifts = computeMonthShifts(y, m - 1, overrides);
+      await client.post('/audit/operators/sync', { month: monthStr, shifts });
+    } catch (err) {
+      console.error('Failed to sync schedule to audit', err);
+    }
+  };
+
   const fetchShifts = async () => {
     setLoading(true);
     try {
+      await syncMonthFromSchedule(month);
       const res = await client.get('/audit/operators', { params: { month } });
       setShifts(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
@@ -344,24 +355,6 @@ function OperatorsTab() {
   useEffect(() => {
     client.get('/audit/operators/users').then(r => setOperators(Array.isArray(r.data) ? r.data : []));
   }, []);
-
-  const handleAdd = async () => {
-    if (!newShift.user_id || !newShift.date) return;
-    try {
-      await client.post('/audit/operators', {
-        user_id: parseInt(newShift.user_id),
-        date: newShift.date,
-        shift_type: newShift.shift_type,
-        hours: parseFloat(newShift.hours),
-        machine_type: newShift.machine_type || null,
-      });
-      setShowAdd(false);
-      setNewShift({ user_id: '', date: '', shift_type: 'day', hours: 8, machine_type: '' });
-      fetchShifts();
-    } catch (err) {
-      console.error('Failed to add shift', err);
-    }
-  };
 
   const handleDelete = async (id) => {
     if (!confirm('Удалить смену?')) return;
@@ -401,27 +394,48 @@ function OperatorsTab() {
     }
   };
 
-  const handleStatKeyDown = (e, userId, field) => {
-    if (e.key === 'Enter') saveStat(userId, field);
-    if (e.key === 'Escape') setEditingStat(null);
-  };
-
   const aggregated = useMemo(() => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    const [y, m] = month.split('-').map(Number);
+    const isCurrentMonth = today.getFullYear() === y && (today.getMonth() + 1) === m;
+    const endOfMonth = new Date(y, m, 0);
+
+    const uniqueStats = [];
+    const seenUserIds = new Set();
+    for (const s of stats) {
+      if (!seenUserIds.has(s.user_id)) {
+        seenUserIds.add(s.user_id);
+        uniqueStats.push(s);
+      }
+    }
+
     const ops = operators.map(u => {
       const opShifts = shifts.filter(s => s.user_id === u.id);
-      const actualHours = opShifts.reduce((sum, s) => sum + (s.hours || 0), 0);
-      const stat = stats.find(s => s.user_id === u.id) || {
+      const actualHours = opShifts
+        .filter(s => {
+          if (!isCurrentMonth) return true;
+          const shiftDate = new Date(s.date);
+          return shiftDate <= today;
+        })
+        .reduce((sum, s) => sum + (s.hours || 0), 0);
+      const stat = uniqueStats.find(s => s.user_id === u.id) || {
         planned_hours: 0, sick_hours: 0, vacation_hours: 0, overtime_hours: 0, hourly_rate: 0,
       };
       return {
-        ...u,
+        id: u.id,
+        username: u.username,
         actualHours,
         shifts: opShifts,
-        ...stat,
+        planned_hours: stat.planned_hours,
+        sick_hours: stat.sick_hours,
+        vacation_hours: stat.vacation_hours,
+        overtime_hours: stat.overtime_hours,
+        hourly_rate: stat.hourly_rate,
       };
     });
     return ops.filter(o => o.shifts.length > 0 || o.planned_hours > 0 || o.sick_hours > 0 || o.vacation_hours > 0);
-  }, [operators, shifts, stats]);
+  }, [operators, shifts, stats, month]);
 
   const monthOptions = [];
   for (let i = 0; i < 12; i++) {
@@ -430,27 +444,33 @@ function OperatorsTab() {
     monthOptions.push({ val, label: `${MONTHS_RU[d.getMonth()]} ${d.getFullYear()}` });
   }
 
-  const renderEditable = (userId, field, value) => {
-    const key = `${userId}-${field}`;
+  const renderEditable = (opId, field, value) => {
+    const key = `${opId}-${field}`;
     if (editingStat === key) {
       return (
-        <span>
+        <span style={{display:'inline-flex', alignItems:'center', gap:4}}>
           <input type="number" step="0.5" value={editValues[field] ?? 0}
             onChange={e => setEditValues({ ...editValues, [field]: e.target.value })}
-            onKeyDown={e => handleStatKeyDown(e, userId, field)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') saveStat(opId, field);
+              if (e.key === 'Escape') setEditingStat(null);
+            }}
             autoFocus
             style={{width:60, padding:'4px', fontSize:13, border:'1px solid var(--border)', borderRadius:4}} />
-          <button onClick={() => saveStat(userId, field)}
-            style={{marginLeft:4, cursor:'pointer', border:'none', background:'none', color:'#16a34a', fontWeight:700}}>OK</button>
+          <button onClick={() => saveStat(opId, field)}
+            style={{cursor:'pointer', border:'none', background:'none', color:'#16a34a', fontWeight:700, fontSize:13}}>OK</button>
           <button onClick={() => setEditingStat(null)}
-            style={{cursor:'pointer', border:'none', background:'none', color:'#dc2626'}}>X</button>
+            style={{cursor:'pointer', border:'none', background:'none', color:'#dc2626', fontSize:13}}>X</button>
         </span>
       );
     }
     return (
-      <span onDoubleClick={() => { setEditingStat(key); setEditValues({ [field]: value ?? 0 }); }}
-        style={{cursor:'pointer', borderBottom:'1px dashed #94a3b8'}}>
-        {value ?? 0}
+      <span style={{display:'inline-flex', alignItems:'center', gap:4}}>
+        <span>{value ?? 0}</span>
+        <button onClick={() => { setEditingStat(key); setEditValues({ [field]: value ?? 0 }); }}
+          style={{cursor:'pointer', border:'none', background:'none', color:'#3b82f6', fontSize:11, padding:0}}>
+          ✏️
+        </button>
       </span>
     );
   };
@@ -462,51 +482,7 @@ function OperatorsTab() {
           style={{padding:'6px 8px', border:'1px solid var(--border)', borderRadius:6, fontSize:13}}>
           {monthOptions.map(m => <option key={m.val} value={m.val}>{m.label}</option>)}
         </select>
-        <button className="btn btn-primary" onClick={() => setShowAdd(!showAdd)} style={{fontSize:13}}>
-          {showAdd ? 'Отмена' : '+ Добавить смену'}
-        </button>
       </div>
-
-      {showAdd && (
-        <div style={{display:'flex', gap:8, marginBottom:12, padding:12, background:'#f8fafc', borderRadius:8, alignItems:'end', flexWrap:'wrap'}}>
-          <div>
-            <label style={{fontSize:12, display:'block', marginBottom:2}}>Оператор</label>
-            <select value={newShift.user_id} onChange={e => setNewShift({...newShift, user_id: e.target.value})}
-              style={{padding:'6px 8px', border:'1px solid var(--border)', borderRadius:6, fontSize:13}}>
-              <option value="">Выбрать</option>
-              {operators.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={{fontSize:12, display:'block', marginBottom:2}}>Дата</label>
-            <input type="date" value={newShift.date} onChange={e => setNewShift({...newShift, date: e.target.value})}
-              style={{padding:'6px 8px', border:'1px solid var(--border)', borderRadius:6, fontSize:13}} />
-          </div>
-          <div>
-            <label style={{fontSize:12, display:'block', marginBottom:2}}>Смена</label>
-            <select value={newShift.shift_type} onChange={e => setNewShift({...newShift, shift_type: e.target.value})}
-              style={{padding:'6px 8px', border:'1px solid var(--border)', borderRadius:6, fontSize:13}}>
-              <option value="day">День</option>
-              <option value="night">Ночь</option>
-            </select>
-          </div>
-          <div>
-            <label style={{fontSize:12, display:'block', marginBottom:2}}>Часы</label>
-            <input type="number" step="0.5" value={newShift.hours} onChange={e => setNewShift({...newShift, hours: e.target.value})}
-              style={{padding:'6px 8px', border:'1px solid var(--border)', borderRadius:6, fontSize:13, width:70}} />
-          </div>
-          <div>
-            <label style={{fontSize:12, display:'block', marginBottom:2}}>Станок</label>
-            <select value={newShift.machine_type} onChange={e => setNewShift({...newShift, machine_type: e.target.value})}
-              style={{padding:'6px 8px', border:'1px solid var(--border)', borderRadius:6, fontSize:13}}>
-              <option value="">-</option>
-              <option value="станок 1">станок 1</option>
-              <option value="станок 2">станок 2</option>
-            </select>
-          </div>
-          <button className="btn btn-primary" onClick={handleAdd} style={{fontSize:13}}>Сохранить</button>
-        </div>
-      )}
 
       {loading ? <div className="loading">Загрузка...</div> : (
         <div>

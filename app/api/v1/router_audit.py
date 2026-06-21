@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, desc
+from sqlalchemy import select, and_, desc, delete
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timedelta
@@ -8,7 +8,8 @@ from datetime import datetime, timedelta
 from app.db.base import get_db
 from app.db.models import (
     OperatorShift, OperatorMonthlyStats, User, UserRole,
-    Application, Customer, ApplicationLayout, ApplicationLayoutPart
+    Application, Customer, ApplicationLayout, ApplicationLayoutPart,
+    ScheduleOverride
 )
 from app.core.deps import get_current_user
 
@@ -135,6 +136,66 @@ async def delete_shift(
     return {"status": "success"}
 
 
+class SyncShiftItem(BaseModel):
+    username: str
+    date: str
+    shift_type: str = "day"
+    hours: float = 12.0
+    machine_type: Optional[str] = None
+
+
+class SyncShiftsRequest(BaseModel):
+    month: str
+    shifts: list[SyncShiftItem]
+
+
+@router.post("/operators/sync")
+async def sync_shifts(
+        data: SyncShiftsRequest,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    if user.role not in (UserRole.ADMIN, UserRole.DIRECTOR):
+        raise HTTPException(status_code=403, detail="Нет доступа")
+
+    year, mon = map(int, data.month.split("-"))
+    start = datetime(year, mon, 1)
+    if mon == 12:
+        end = datetime(year + 1, 1, 1)
+    else:
+        end = datetime(year, mon + 1, 1)
+
+    await db.execute(
+        delete(OperatorShift).where(
+            and_(OperatorShift.date >= start, OperatorShift.date < end)
+        )
+    )
+
+    usernames = list(set(s.username for s in data.shifts))
+    result = await db.execute(
+        select(User).where(User.username.in_(usernames))
+    )
+    users_by_name = {u.username: u.id for u in result.scalars().all()}
+
+    created = 0
+    for item in data.shifts:
+        user_id = users_by_name.get(item.username)
+        if not user_id:
+            continue
+        shift = OperatorShift(
+            user_id=user_id,
+            date=datetime.fromisoformat(item.date),
+            shift_type=item.shift_type,
+            hours=item.hours,
+            machine_type=item.machine_type,
+        )
+        db.add(shift)
+        created += 1
+
+    await db.commit()
+    return {"status": "success", "created": created}
+
+
 class MonthlyStatsUpdate(BaseModel):
     user_id: int
     month: str
@@ -235,6 +296,98 @@ async def list_operators(
     )
     users = result.scalars().all()
     return [{"id": u.id, "username": u.username} for u in users]
+
+
+class OverrideCreate(BaseModel):
+    date: str
+    st1: Optional[str] = None
+    st2: Optional[str] = None
+    night: Optional[str] = None
+
+
+@router.get("/overrides")
+async def list_overrides(
+        month: str = Query(..., description="YYYY-MM"),
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    if user.role not in (UserRole.ADMIN, UserRole.DIRECTOR):
+        raise HTTPException(status_code=403, detail="Нет доступа")
+
+    year, mon = map(int, month.split("-"))
+    start = datetime(year, mon, 1)
+    if mon == 12:
+        end = datetime(year + 1, 1, 1)
+    else:
+        end = datetime(year, mon + 1, 1)
+
+    result = await db.execute(
+        select(ScheduleOverride).where(
+            and_(ScheduleOverride.date >= start, ScheduleOverride.date < end)
+        ).order_by(ScheduleOverride.date)
+    )
+    rows = result.scalars().all()
+
+    overrides = {}
+    for r in rows:
+        key = r.date.strftime("%Y-%m-%d")
+        overrides[key] = {"st1": r.st1, "st2": r.st2, "night": r.night}
+    return overrides
+
+
+@router.post("/overrides")
+async def upsert_override(
+        data: OverrideCreate,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    if user.role not in (UserRole.ADMIN, UserRole.DIRECTOR):
+        raise HTTPException(status_code=403, detail="Нет доступа")
+
+    dt = datetime.fromisoformat(data.date)
+    has_any = data.st1 or data.st2 or data.night
+
+    result = await db.execute(
+        select(ScheduleOverride).where(ScheduleOverride.date == dt)
+    )
+    existing = result.scalar_one_or_none()
+
+    if not has_any:
+        if existing:
+            await db.delete(existing)
+            await db.commit()
+        return {"status": "deleted"}
+
+    if existing:
+        existing.st1 = data.st1
+        existing.st2 = data.st2
+        existing.night = data.night
+    else:
+        override = ScheduleOverride(date=dt, st1=data.st1, st2=data.st2, night=data.night)
+        db.add(override)
+
+    await db.commit()
+    return {"status": "success"}
+
+
+@router.delete("/overrides/{date}")
+async def delete_override(
+        date: str,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    if user.role not in (UserRole.ADMIN, UserRole.DIRECTOR):
+        raise HTTPException(status_code=403, detail="Нет доступа")
+
+    dt = datetime.fromisoformat(date)
+    result = await db.execute(
+        select(ScheduleOverride).where(ScheduleOverride.date == dt)
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        await db.delete(existing)
+        await db.commit()
+    return {"status": "success"}
 
 
 @router.get("/applications")

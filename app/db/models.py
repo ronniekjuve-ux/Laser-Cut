@@ -320,6 +320,17 @@ class OperatorMonthlyStats(Base):
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
 
 
+class ScheduleOverride(Base):
+    __tablename__ = "schedule_overrides"
+    __table_args__ = (UniqueConstraint("date", name="uq_schedule_override_date"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    st1: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    st2: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    night: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class WarehouseItem(Base):
     __tablename__ = "warehouse_items"
     id: Mapped[int] = mapped_column(primary_key=True)
