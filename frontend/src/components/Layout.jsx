@@ -17,8 +17,8 @@ function getActiveOps() {
 }
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Заявки', icon: '📋', end: true, roles: ['admin', 'director', 'operator', 'customer'] },
-  { to: '/orders', label: 'Заказы', icon: '📦', roles: ['admin', 'director'] },
+  { to: '/', label: 'Заявки', icon: '📋', end: true, roles: ['admin', 'director', 'customer'] },
+  { to: '/orders', label: 'Заказы', icon: '📦', roles: ['admin', 'director', 'operator'] },
   { to: '/warehouse', label: 'Склад', icon: '🏭', roles: ['admin', 'director', 'operator'] },
   { to: '/deficit', label: 'Дефицит', icon: '⚠️', roles: ['admin', 'director', 'operator', 'customer'] },
   { to: '/schedule', label: 'График', icon: '📅', roles: ['admin', 'director', 'operator'] },
@@ -99,7 +99,7 @@ export default function Layout() {
 
   const pageTitle = (() => {
     const p = location.pathname;
-    if (p === '/') return 'Предварительный просчёт';
+    if (p === '/') return 'Предварительный расчёт';
     if (p === '/orders') return 'Заказы на резку';
     if (p === '/warehouse') return 'Склад металла';
     if (p === '/deficit') return 'Дефицит материалов';
@@ -109,7 +109,7 @@ export default function Layout() {
     if (p === '/changelog') return 'История изменений';
     if (p === '/feedback') return 'Жалобы и предложения';
     if (p.startsWith('/applications/')) return 'Детали заявки';
-    return 'Предварительный просчёт';
+    return 'Предварительный расчёт';
   })();
 
   return (

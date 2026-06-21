@@ -33,7 +33,7 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
       marginTop: 16, padding: 16, background: '#f0f9ff', border: '1px solid #bae6fd',
       borderRadius: 8, fontSize: 13
     }}>
-      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Предварительный просчёт</div>
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Предварительный расчёт</div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', marginBottom: 12 }}>
         <div>

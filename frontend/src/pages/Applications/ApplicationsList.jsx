@@ -79,7 +79,7 @@ function CalcModal({ app, onClose }) {
     <div className="modal-overlay active" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
         <div className="modal-header">
-          <h3>Предварительный просчёт — {app.order_name || app.id}</h3>
+          <h3>Предварительный расчёт — {app.order_name || app.id}</h3>
           <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
         </div>
         <div className="modal-body">
@@ -335,10 +335,12 @@ export default function ApplicationsList() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
-          + {'\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u044f\u0432\u043a\u0430'}
-        </button>
-        {(user?.role === 'admin' || user?.role === 'operator') && (
+        {user?.role === 'admin' && (
+          <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
+            + {'\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u044f\u0432\u043a\u0430'}
+          </button>
+        )}
+        {user?.role === 'admin' && (
           <button className="btn" onClick={() => setShowMerge(true)} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #86efac' }}>
             🔗 Слияние
           </button>

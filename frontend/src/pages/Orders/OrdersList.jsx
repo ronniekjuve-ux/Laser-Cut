@@ -81,6 +81,7 @@ export default function OrdersList() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [statusDropdown, setStatusDropdown] = useState(null);
   const filterRef = useRef(null);
 
   const fetchOrders = useCallback(async (searchQuery, pageNum = page) => {
@@ -119,6 +120,9 @@ export default function OrdersList() {
       }
       if (!e.target.closest('[id^="supply-dropdown-"]') && !e.target.closest('button')) {
         document.querySelectorAll('[id^="supply-dropdown-"]').forEach(el => el.style.display = 'none');
+      }
+      if (!e.target.closest('.badge') && !e.target.closest('[style*="position: absolute"]')) {
+        setStatusDropdown(null);
       }
     };
     document.addEventListener('click', handleClick);
@@ -265,10 +269,12 @@ export default function OrdersList() {
   return (
     <div>
       <div className="toolbar">
-        <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
-          + Новый заказ
-        </button>
-        {(user?.role === 'admin' || user?.role === 'operator') && (
+        {user?.role === 'admin' && (
+          <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
+            + Новый заказ
+          </button>
+        )}
+        {user?.role === 'admin' && (
           <button className="btn" onClick={() => setShowMerge(true)} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #86efac' }}>
             🔗 Слияние
           </button>
@@ -359,14 +365,67 @@ export default function OrdersList() {
                   {COLUMNS.map(col => (
                     <td key={col.key}>
                       {col.key === 'status' ? (
-                        <span className={'badge ' + (
-                          app.status === 'cut' ? 'bg-done' :
-                          app.status === 'in_progress' || app.status === 'partially_cut' ? 'bg-work' : 'bg-approved'
-                        )}>
-                          {app.status === 'cut' ? 'Вырезано' :
-                           app.status === 'in_progress' ? 'В резке' :
-                           app.status === 'partially_cut' ? 'Частично вырезано' : 'В очереди'}
-                        </span>
+                        (user?.role === 'admin' || user?.role === 'operator') ? (
+                          <div style={{ position: 'relative' }}>
+                            <span
+                              className={'badge ' + (
+                                app.status === 'cut' ? 'bg-done' :
+                                app.status === 'in_progress' || app.status === 'partially_cut' ? 'bg-work' : 'bg-approved'
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setStatusDropdown(statusDropdown === app.id ? null : app.id);
+                              }}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              {app.status === 'cut' ? 'Вырезано' :
+                               app.status === 'in_progress' ? 'В резке' :
+                               app.status === 'partially_cut' ? 'Частично вырезано' : 'В очереди'} ▾
+                            </span>
+                            {statusDropdown === app.id && (
+                              <div
+                                style={{
+                                  position: 'absolute', top: '100%', left: 0, zIndex: 9999,
+                                  background: '#fff', border: '1px solid var(--border)', borderRadius: 6,
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 160, marginTop: 4,
+                                }}
+                              >
+                                {[
+                                  { key: 'approved', label: 'В очереди', bg: '#f0fdf4', color: '#15803d' },
+                                  { key: 'in_progress', label: 'В резке', bg: '#dbeafe', color: '#1d4ed8' },
+                                  { key: 'partially_cut', label: 'Частично вырезано', bg: '#fef3c7', color: '#92400e' },
+                                  { key: 'cut', label: 'Вырезано', bg: '#dcfce7', color: '#166534' },
+                                ].map(s => (
+                                  <div
+                                    key={s.key}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      client.patch('/api/v1/applications/' + app.id + '/status?status=' + s.key)
+                                        .then(() => { setStatusDropdown(null); fetchOrders(search || undefined); });
+                                    }}
+                                    style={{
+                                      padding: '6px 10px', fontSize: 12, cursor: 'pointer',
+                                      background: app.status === s.key ? s.bg : '#fff',
+                                      color: app.status === s.key ? s.color : '#334155',
+                                      fontWeight: app.status === s.key ? 600 : 400,
+                                    }}
+                                  >
+                                    {s.label}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className={'badge ' + (
+                            app.status === 'cut' ? 'bg-done' :
+                            app.status === 'in_progress' || app.status === 'partially_cut' ? 'bg-work' : 'bg-approved'
+                          )}>
+                            {app.status === 'cut' ? 'Вырезано' :
+                             app.status === 'in_progress' ? 'В резке' :
+                             app.status === 'partially_cut' ? 'Частично вырезано' : 'В очереди'}
+                          </span>
+                        )
                       ) : col.key === 'supply_material' ? (
                         <div style={{ position: 'relative' }}>
                           <button

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.db.base import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.db.models import AuditLog, ChangeLog, UserActivity, LoginHistory
@@ -39,7 +39,7 @@ async def list_users(
 ):
     res = await db.execute(select(User))
     users = res.scalars().all()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     result = []
     for u in users:
         is_online = False
@@ -99,7 +99,7 @@ async def get_user_stats(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
 
@@ -172,7 +172,7 @@ async def get_user_activity(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     day_ago = now - timedelta(hours=24)
 
     audit_result = await db.execute(
@@ -240,7 +240,7 @@ async def get_user_history(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     since = now - timedelta(days=days)
 
     logins_result = await db.execute(

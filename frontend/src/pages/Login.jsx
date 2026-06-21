@@ -25,8 +25,8 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      await login(selectedUser, password);
-      navigate('/');
+      const userData = await login(selectedUser, password);
+      navigate(userData?.role === 'operator' ? '/orders' : '/');
     } catch (err) {
       setError('Неверный логин или пароль');
     } finally {

@@ -52,11 +52,7 @@ export default function App() {
                 <AuditLog />
               </ProtectedRoute>
             } />
-            <Route path="orders" element={
-              <ProtectedRoute roles={['admin', 'director']}>
-                <OrdersList />
-              </ProtectedRoute>
-            } />
+            <Route path="orders" element={<OrdersList />} />
             <Route path="feedback" element={<Feedback />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
