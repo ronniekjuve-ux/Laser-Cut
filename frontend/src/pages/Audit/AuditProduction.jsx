@@ -308,14 +308,16 @@ function ApplicationsTab() {
 
 function OperatorsTab() {
   const [shifts, setShifts] = useState([]);
+  const [stats, setStats] = useState([]);
   const [operators, setOperators] = useState([]);
   const [loading, setLoading] = useState(true);
   const now = new Date();
   const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);
   const [showAdd, setShowAdd] = useState(false);
   const [newShift, setNewShift] = useState({ user_id: '', date: '', shift_type: 'day', hours: 8, machine_type: '' });
-  const [editingId, setEditingId] = useState(null);
-  const [editHours, setEditHours] = useState('');
+  const [expandedOps, setExpandedOps] = useState(new Set());
+  const [editingStat, setEditingStat] = useState(null);
+  const [editValues, setEditValues] = useState({});
 
   const fetchShifts = async () => {
     setLoading(true);
@@ -329,7 +331,16 @@ function OperatorsTab() {
     }
   };
 
-  useEffect(() => { fetchShifts(); }, [month]);
+  const fetchStats = async () => {
+    try {
+      const res = await client.get('/audit/operators/stats', { params: { month } });
+      setStats(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error('Failed to load stats', err);
+    }
+  };
+
+  useEffect(() => { fetchShifts(); fetchStats(); }, [month]);
   useEffect(() => {
     client.get('/audit/operators/users').then(r => setOperators(Array.isArray(r.data) ? r.data : []));
   }, []);
@@ -352,16 +363,6 @@ function OperatorsTab() {
     }
   };
 
-  const handleSaveHours = async (id) => {
-    try {
-      await client.put(`/audit/operators/${id}`, { hours: parseFloat(editHours) });
-      setEditingId(null);
-      fetchShifts();
-    } catch (err) {
-      console.error('Failed to update shift', err);
-    }
-  };
-
   const handleDelete = async (id) => {
     if (!confirm('Удалить смену?')) return;
     try {
@@ -372,7 +373,55 @@ function OperatorsTab() {
     }
   };
 
-  const totalHours = shifts.reduce((s, sh) => s + (sh.hours || 0), 0);
+  const toggleOp = (userId) => {
+    setExpandedOps(prev => {
+      const next = new Set(prev);
+      next.has(userId) ? next.delete(userId) : next.add(userId);
+      return next;
+    });
+  };
+
+  const startEditStat = (stat, field) => {
+    setEditingStat(`${stat.user_id}-${field}`);
+    setEditValues({ [field]: stat[field] ?? 0 });
+  };
+
+  const saveStat = async (userId, field) => {
+    const value = parseFloat(editValues[field]) || 0;
+    try {
+      await client.post('/audit/operators/stats', {
+        user_id: userId,
+        month,
+        [field]: value,
+      });
+      setEditingStat(null);
+      fetchStats();
+    } catch (err) {
+      console.error('Failed to save stat', err);
+    }
+  };
+
+  const handleStatKeyDown = (e, userId, field) => {
+    if (e.key === 'Enter') saveStat(userId, field);
+    if (e.key === 'Escape') setEditingStat(null);
+  };
+
+  const aggregated = useMemo(() => {
+    const ops = operators.map(u => {
+      const opShifts = shifts.filter(s => s.user_id === u.id);
+      const actualHours = opShifts.reduce((sum, s) => sum + (s.hours || 0), 0);
+      const stat = stats.find(s => s.user_id === u.id) || {
+        planned_hours: 0, sick_hours: 0, vacation_hours: 0, overtime_hours: 0, hourly_rate: 0,
+      };
+      return {
+        ...u,
+        actualHours,
+        shifts: opShifts,
+        ...stat,
+      };
+    });
+    return ops.filter(o => o.shifts.length > 0 || o.planned_hours > 0 || o.sick_hours > 0 || o.vacation_hours > 0);
+  }, [operators, shifts, stats]);
 
   const monthOptions = [];
   for (let i = 0; i < 12; i++) {
@@ -380,6 +429,31 @@ function OperatorsTab() {
     const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     monthOptions.push({ val, label: `${MONTHS_RU[d.getMonth()]} ${d.getFullYear()}` });
   }
+
+  const renderEditable = (userId, field, value) => {
+    const key = `${userId}-${field}`;
+    if (editingStat === key) {
+      return (
+        <span>
+          <input type="number" step="0.5" value={editValues[field] ?? 0}
+            onChange={e => setEditValues({ ...editValues, [field]: e.target.value })}
+            onKeyDown={e => handleStatKeyDown(e, userId, field)}
+            autoFocus
+            style={{width:60, padding:'4px', fontSize:13, border:'1px solid var(--border)', borderRadius:4}} />
+          <button onClick={() => saveStat(userId, field)}
+            style={{marginLeft:4, cursor:'pointer', border:'none', background:'none', color:'#16a34a', fontWeight:700}}>OK</button>
+          <button onClick={() => setEditingStat(null)}
+            style={{cursor:'pointer', border:'none', background:'none', color:'#dc2626'}}>X</button>
+        </span>
+      );
+    }
+    return (
+      <span onDoubleClick={() => { setEditingStat(key); setEditValues({ [field]: value ?? 0 }); }}
+        style={{cursor:'pointer', borderBottom:'1px dashed #94a3b8'}}>
+        {value ?? 0}
+      </span>
+    );
+  };
 
   return (
     <div>
@@ -391,9 +465,6 @@ function OperatorsTab() {
         <button className="btn btn-primary" onClick={() => setShowAdd(!showAdd)} style={{fontSize:13}}>
           {showAdd ? 'Отмена' : '+ Добавить смену'}
         </button>
-        <span style={{marginLeft:'auto', fontSize:13, color:'#64748b'}}>
-          Итого: {shifts.length} смен | {totalHours.toFixed(1)} ч
-        </span>
       </div>
 
       {showAdd && (
@@ -438,57 +509,65 @@ function OperatorsTab() {
       )}
 
       {loading ? <div className="loading">Загрузка...</div> : (
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Оператор</th>
-                <th>Дата</th>
-                <th>Смена</th>
-                <th>Часы</th>
-                <th>Станок</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {shifts.map(sh => (
-                <tr key={sh.id}>
-                  <td><b>{sh.username}</b></td>
-                  <td style={{fontFamily:'monospace', fontSize:12}}>{formatDate(sh.date)}</td>
-                  <td>{sh.shift_type === 'day' ? 'День' : 'Ночь'}</td>
-                  <td>
-                    {editingId === sh.id ? (
-                      <span>
-                        <input type="number" step="0.5" value={editHours}
-                          onChange={e => setEditHours(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && handleSaveHours(sh.id)}
-                          style={{width:60, padding:'4px', fontSize:13, border:'1px solid var(--border)', borderRadius:4}} />
-                        <button onClick={() => handleSaveHours(sh.id)}
-                          style={{marginLeft:4, cursor:'pointer', border:'none', background:'none', color:'#16a34a', fontWeight:700}}>OK</button>
-                        <button onClick={() => setEditingId(null)}
-                          style={{cursor:'pointer', border:'none', background:'none', color:'#dc2626'}}>X</button>
-                      </span>
-                    ) : (
-                      <span onDoubleClick={() => { setEditingId(sh.id); setEditHours(String(sh.hours)); }}
-                        style={{cursor:'pointer', borderBottom:'1px dashed #94a3b8'}}>
-                        {sh.hours}
-                      </span>
-                    )}
-                  </td>
-                  <td>{sh.machine_type || '-'}</td>
-                  <td>
-                    <button onClick={() => handleDelete(sh.id)}
-                      style={{border:'none', background:'none', cursor:'pointer', color:'#dc2626', fontSize:13}}>
-                      Удалить
-                    </button>
-                  </td>
+        <div>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Оператор</th>
+                  <th>Запланировано</th>
+                  <th>Фактически</th>
+                  <th>Больничные</th>
+                  <th>Отпускные</th>
+                  <th>Переработка</th>
+                  <th>Руб/ч</th>
+                  <th></th>
                 </tr>
-              ))}
-              {shifts.length === 0 && (
-                <tr><td colSpan={6} style={{textAlign:'center', padding:20, color:'#64748b'}}>Нет смен за этот месяц</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {aggregated.map(op => (
+                  <React.Fragment key={op.id}>
+                    <tr>
+                      <td style={{width:30, textAlign:'center', cursor:'pointer'}} onClick={() => toggleOp(op.id)}>
+                        {expandedOps.has(op.id) ? '\u25BC' : '\u25B6'}
+                      </td>
+                      <td><b>{op.username}</b></td>
+                      <td>{renderEditable(op.id, 'planned_hours', op.planned_hours)}</td>
+                      <td><b>{op.actualHours.toFixed(1)}</b></td>
+                      <td>{renderEditable(op.id, 'sick_hours', op.sick_hours)}</td>
+                      <td>{renderEditable(op.id, 'vacation_hours', op.vacation_hours)}</td>
+                      <td>{renderEditable(op.id, 'overtime_hours', op.overtime_hours)}</td>
+                      <td>{renderEditable(op.id, 'hourly_rate', op.hourly_rate)}</td>
+                      <td></td>
+                    </tr>
+                    {expandedOps.has(op.id) && op.shifts.map(sh => (
+                      <tr key={sh.id} style={{background:'#f8fafc', fontSize:12}}>
+                        <td></td>
+                        <td style={{color:'#475569'}}>{formatDate(sh.date)}</td>
+                        <td colSpan={2} style={{color:'#475569'}}>
+                          {sh.shift_type === 'day' ? 'День' : 'Ночь'} | {sh.hours} ч
+                        </td>
+                        <td colSpan={2} style={{color:'#475569'}}>
+                          {sh.machine_type || '-'}
+                        </td>
+                        <td colSpan={2}></td>
+                        <td>
+                          <button onClick={() => handleDelete(sh.id)}
+                            style={{border:'none', background:'none', cursor:'pointer', color:'#dc2626', fontSize:12}}>
+                            Удалить
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+                {aggregated.length === 0 && (
+                  <tr><td colSpan={9} style={{textAlign:'center', padding:20, color:'#64748b'}}>Нет данных за этот месяц</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

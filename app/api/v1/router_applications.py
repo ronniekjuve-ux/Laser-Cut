@@ -84,10 +84,12 @@ async def upload_application(
         if not data.order_name:
             data.order_name = order_name
 
-        result = await db.execute(
-            select(Application).where(Application.order_name == data.order_name)
-        )
-        app = result.scalar_one_or_none()
+        app = None
+        if status == "pending":
+            result = await db.execute(
+                select(Application).where(Application.order_name == data.order_name)
+            )
+            app = result.scalar_one_or_none()
 
         detail_images = extract_images(file_path, str(IMAGE_DIR), prefix="applications", filter_dft=True)
 
@@ -519,29 +521,41 @@ async def export_applications_xlsx(
 
 @router.get("/changelog")
 async def list_changelog(
-        limit: int = Query(100, le=500),
+        page: int = Query(1, ge=1),
+        limit: int = Query(50, ge=1, le=200),
         db: AsyncSession = Depends(get_db),
         user: User = Depends(get_current_user)
 ):
+    from sqlalchemy import func as sqlfunc
+
+    total_result = await db.execute(select(sqlfunc.count(ChangeLog.id)))
+    total = total_result.scalar() or 0
+
+    offset = (page - 1) * limit
     result = await db.execute(
-        select(ChangeLog).order_by(ChangeLog.created_at.desc()).limit(limit)
+        select(ChangeLog).order_by(ChangeLog.created_at.desc()).offset(offset).limit(limit)
     )
     logs = result.scalars().all()
 
-    return [
-        {
-            "id": l.id,
-            "user_name": l.user_name,
-            "change_type": l.change_type,
-            "resource": l.resource,
-            "resource_id": l.resource_id,
-            "description": l.description,
-            "old_value": l.old_value,
-            "new_value": l.new_value,
-            "created_at": l.created_at
-        }
-        for l in logs
-    ]
+    return {
+        "items": [
+            {
+                "id": l.id,
+                "user_name": l.user_name,
+                "change_type": l.change_type,
+                "resource": l.resource,
+                "resource_id": l.resource_id,
+                "description": l.description,
+                "old_value": l.old_value,
+                "new_value": l.new_value,
+                "created_at": l.created_at
+            }
+            for l in logs
+        ],
+        "total": total,
+        "page": page,
+        "pages": (total + limit - 1) // limit if total > 0 else 0
+    }
 
 
 @router.get("/notifications/unread-count")

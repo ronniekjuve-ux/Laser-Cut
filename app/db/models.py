@@ -2,7 +2,7 @@
 import enum
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, Text, Enum as SAEnum, func
+from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, Text, Enum as SAEnum, func, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -299,6 +299,22 @@ class OperatorShift(Base):
     shift_type: Mapped[str] = mapped_column(String(10), default="day")
     hours: Mapped[float] = mapped_column(Float, default=8.0)
     machine_type: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+
+
+class OperatorMonthlyStats(Base):
+    __tablename__ = "operator_monthly_stats"
+    __table_args__ = (UniqueConstraint("user_id", "month", name="uq_operator_month"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    month: Mapped[str] = mapped_column(String(7))
+    planned_hours: Mapped[float] = mapped_column(Float, default=0.0)
+    sick_hours: Mapped[float] = mapped_column(Float, default=0.0)
+    vacation_hours: Mapped[float] = mapped_column(Float, default=0.0)
+    overtime_hours: Mapped[float] = mapped_column(Float, default=0.0)
+    hourly_rate: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(foreign_keys=[user_id])

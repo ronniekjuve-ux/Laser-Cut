@@ -5,21 +5,27 @@ import client from '../../api/client';
 export default function ChangeLog() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [total, setTotal] = useState(0);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        const res = await client.get('/api/v1/applications/changelog');
-        setLogs(Array.isArray(res.data) ? res.data : []);
-      } catch (err) {
-        console.error('Failed to load changelog', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchLogs();
-  }, []);
+  const fetchLogs = async (p = 1) => {
+    setLoading(true);
+    try {
+      const res = await client.get('/api/v1/applications/changelog', { params: { page: p, limit: 20 } });
+      const data = res.data;
+      setLogs(Array.isArray(data.items) ? data.items : []);
+      setTotalPages(data.pages || 0);
+      setTotal(data.total || 0);
+    } catch (err) {
+      console.error('Failed to load changelog', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchLogs(page); }, [page]);
 
   const typeLabels = {
     status: 'Статус',
@@ -81,6 +87,29 @@ export default function ChangeLog() {
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <div style={{display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center'}}>
+          <button className="btn" onClick={() => setPage(1)} disabled={page <= 1} style={{fontSize: 12}}>«</button>
+          <button className="btn" onClick={() => setPage(page - 1)} disabled={page <= 1} style={{fontSize: 12}}>‹</button>
+          {Array.from({length: Math.min(5, totalPages)}, (_, i) => {
+            let p;
+            if (totalPages <= 5) p = i + 1;
+            else if (page <= 3) p = i + 1;
+            else if (page >= totalPages - 2) p = totalPages - 4 + i;
+            else p = page - 2 + i;
+            return (
+              <button key={p} className={'btn' + (p === page ? ' btn-primary' : '')}
+                onClick={() => setPage(p)} style={{fontSize: 12}}>
+                {p}
+              </button>
+            );
+          })}
+          <button className="btn" onClick={() => setPage(page + 1)} disabled={page >= totalPages} style={{fontSize: 12}}>›</button>
+          <button className="btn" onClick={() => setPage(totalPages)} disabled={page >= totalPages} style={{fontSize: 12}}>»</button>
+          <span style={{fontSize: 12, color: '#64748b', marginLeft: 8}}>Всего: {total}</span>
+        </div>
+      )}
     </div>
   );
 }

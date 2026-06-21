@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from app.db.base import get_db
 from app.db.models import (
-    OperatorShift, User, UserRole,
+    OperatorShift, OperatorMonthlyStats, User, UserRole,
     Application, Customer, ApplicationLayout, ApplicationLayoutPart
 )
 from app.core.deps import get_current_user
@@ -133,6 +133,95 @@ async def delete_shift(
     await db.delete(shift)
     await db.commit()
     return {"status": "success"}
+
+
+class MonthlyStatsUpdate(BaseModel):
+    user_id: int
+    month: str
+    planned_hours: Optional[float] = None
+    sick_hours: Optional[float] = None
+    vacation_hours: Optional[float] = None
+    overtime_hours: Optional[float] = None
+    hourly_rate: Optional[float] = None
+
+
+@router.get("/operators/stats")
+async def get_monthly_stats(
+        month: str = Query(..., description="YYYY-MM"),
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    if user.role not in (UserRole.ADMIN, UserRole.DIRECTOR):
+        raise HTTPException(status_code=403, detail="Нет доступа")
+
+    result = await db.execute(
+        select(OperatorMonthlyStats, User.username)
+        .join(User, OperatorMonthlyStats.user_id == User.id, isouter=True)
+        .where(OperatorMonthlyStats.month == month)
+    )
+    rows = result.all()
+
+    return [
+        {
+            "id": s.id,
+            "user_id": s.user_id,
+            "username": username,
+            "month": s.month,
+            "planned_hours": s.planned_hours,
+            "sick_hours": s.sick_hours,
+            "vacation_hours": s.vacation_hours,
+            "overtime_hours": s.overtime_hours,
+            "hourly_rate": s.hourly_rate,
+        }
+        for s, username in rows
+    ]
+
+
+@router.post("/operators/stats")
+async def upsert_monthly_stats(
+        data: MonthlyStatsUpdate,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    if user.role not in (UserRole.ADMIN, UserRole.DIRECTOR):
+        raise HTTPException(status_code=403, detail="Нет доступа")
+
+    result = await db.execute(
+        select(OperatorMonthlyStats).where(
+            and_(
+                OperatorMonthlyStats.user_id == data.user_id,
+                OperatorMonthlyStats.month == data.month,
+            )
+        )
+    )
+    stats = result.scalar_one_or_none()
+
+    if stats:
+        if data.planned_hours is not None:
+            stats.planned_hours = data.planned_hours
+        if data.sick_hours is not None:
+            stats.sick_hours = data.sick_hours
+        if data.vacation_hours is not None:
+            stats.vacation_hours = data.vacation_hours
+        if data.overtime_hours is not None:
+            stats.overtime_hours = data.overtime_hours
+        if data.hourly_rate is not None:
+            stats.hourly_rate = data.hourly_rate
+    else:
+        stats = OperatorMonthlyStats(
+            user_id=data.user_id,
+            month=data.month,
+            planned_hours=data.planned_hours or 0.0,
+            sick_hours=data.sick_hours or 0.0,
+            vacation_hours=data.vacation_hours or 0.0,
+            overtime_hours=data.overtime_hours or 0.0,
+            hourly_rate=data.hourly_rate or 0.0,
+        )
+        db.add(stats)
+
+    await db.commit()
+    await db.refresh(stats)
+    return {"id": stats.id, "status": "success"}
 
 
 @router.get("/operators/users")
