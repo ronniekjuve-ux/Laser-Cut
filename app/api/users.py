@@ -45,6 +45,8 @@ async def list_users(
         is_online = False
         if u.last_active:
             la = u.last_active
+            if la.tzinfo is None:
+                la = la.replace(tzinfo=timezone.utc)
             is_online = (now - la) < timedelta(minutes=5)
         result.append({
             "id": u.id,
@@ -99,9 +101,11 @@ async def get_user_stats(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    now_utc = datetime.now(timezone.utc)
+    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
+    today_naive = today_start.replace(tzinfo=None)
+    yesterday_naive = yesterday_start.replace(tzinfo=None)
 
     logins_today = await db.scalar(
         select(func.count(LoginHistory.id)).where(
@@ -121,7 +125,7 @@ async def get_user_stats(
     actions_today = await db.scalar(
         select(func.count(AuditLog.id)).where(
             AuditLog.user_id == user_id,
-            AuditLog.created_at >= today_start
+            AuditLog.created_at >= today_naive
         )
     ) or 0
 
@@ -172,13 +176,14 @@ async def get_user_activity(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    now = datetime.now(timezone.utc)
-    day_ago = now - timedelta(hours=24)
+    now_utc = datetime.now(timezone.utc)
+    day_ago = now_utc - timedelta(hours=24)
+    day_ago_naive = day_ago.replace(tzinfo=None)
 
     audit_result = await db.execute(
         select(AuditLog).where(
             AuditLog.user_id == user_id,
-            AuditLog.created_at >= day_ago
+            AuditLog.created_at >= day_ago_naive
         ).order_by(desc(AuditLog.created_at)).limit(20)
     )
     audit_logs = audit_result.scalars().all()
@@ -240,8 +245,9 @@ async def get_user_history(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    now = datetime.now(timezone.utc)
-    since = now - timedelta(days=days)
+    now_utc = datetime.now(timezone.utc)
+    since = now_utc - timedelta(days=days)
+    since_naive = since.replace(tzinfo=None)
 
     logins_result = await db.execute(
         select(LoginHistory).where(
@@ -267,7 +273,7 @@ async def get_user_history(
     total_actions = await db.scalar(
         select(func.count(AuditLog.id)).where(
             AuditLog.user_id == user_id,
-            AuditLog.created_at >= since
+            AuditLog.created_at >= since_naive
         )
     ) or 0
 

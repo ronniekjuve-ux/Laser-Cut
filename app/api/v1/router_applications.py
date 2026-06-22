@@ -263,20 +263,11 @@ async def upload_layout(
 
         thickness = app.thickness or 0.0
         detail_image_map = {}
-        detail_image_list = []
         if app.detail_images:
             try:
                 parsed = json.loads(app.detail_images)
                 if isinstance(parsed, dict):
                     detail_image_map = parsed
-                    detail_image_list = list(parsed.values())
-                elif isinstance(parsed, list):
-                    detail_image_list = parsed
-                    if app_data.parts:
-                        for ai, ap in enumerate(app_data.parts):
-                            key = normalize_name(ap.name_raw)
-                            if key and ai < len(parsed):
-                                detail_image_map[key] = parsed[ai]
             except Exception:
                 pass
 
@@ -287,8 +278,6 @@ async def upload_layout(
 
             part_key = normalize_name(part_data.name)
             part_image = detail_image_map.get(part_key)
-            if not part_image and pi < len(detail_image_list):
-                part_image = detail_image_list[pi]
 
             part = ApplicationLayoutPart(
                 layout_id=layout.id,
@@ -412,12 +401,17 @@ async def list_applications(
         layouts_result = await db.execute(
             select(ApplicationLayout).where(
                 ApplicationLayout.application_id == app.id,
-                ApplicationLayout.status.in_(["active", None])
-            ).limit(1)
+            )
         )
-        first_layout = layouts_result.scalar_one_or_none()
+        all_layouts = layouts_result.scalars().all()
+        active_layouts = [l for l in all_layouts if l.status in ("active", None)]
+        replaced_layouts = [l for l in all_layouts if l.status == "replaced"]
+        first_layout = active_layouts[0] if active_layouts else None
         machine = ""
-        if first_layout and first_layout.machine_type:
+        is_replaced = len(all_layouts) > 0 and len(active_layouts) == 0 and len(replaced_layouts) > 0
+        if is_replaced:
+            machine = "заменено"
+        elif first_layout and first_layout.machine_type:
             mt = first_layout.machine_type.upper()
             machine = "станок 1" if "CNF" in mt else "станок 2" if "FNF" in mt else first_layout.machine_type
 
@@ -444,6 +438,7 @@ async def list_applications(
             "total_parts": app.total_parts_count,
             "total_weight": app.total_weight,
             "machine": machine,
+            "is_replaced": is_replaced,
             "comments": app.comments,
             "status": app.status or "pending",
             "priority": app.priority or "medium",
@@ -771,18 +766,27 @@ async def merge_layouts(
         raise HTTPException(status_code=400, detail="Нужно выбрать минимум 2 раскладки")
 
     layout_ids_list = [ref.get("layout_id") for ref in source_refs if ref.get("layout_id")]
-    if len(layout_ids_list) < 2:
+    app_ids = [ref.get("app_id") for ref in source_refs if ref.get("app_id")]
+
+    if layout_ids_list:
+        result = await db.execute(
+            select(ApplicationLayout)
+            .options(joinedload(ApplicationLayout.parts), joinedload(ApplicationLayout.application))
+            .where(ApplicationLayout.id.in_(layout_ids_list))
+        )
+        source_layouts = result.unique().scalars().all()
+    elif app_ids:
+        result = await db.execute(
+            select(ApplicationLayout)
+            .options(joinedload(ApplicationLayout.parts), joinedload(ApplicationLayout.application))
+            .where(ApplicationLayout.application_id.in_(app_ids))
+        )
+        source_layouts = result.unique().scalars().all()
+    else:
         raise HTTPException(status_code=400, detail="Невалидные ID раскладок")
 
-    result = await db.execute(
-        select(ApplicationLayout)
-        .options(joinedload(ApplicationLayout.parts), joinedload(ApplicationLayout.application))
-        .where(ApplicationLayout.id.in_(layout_ids_list))
-    )
-    source_layouts = result.unique().scalars().all()
-
-    if len(source_layouts) != len(layout_ids_list):
-        raise HTTPException(status_code=404, detail="Не все раскладки найдены")
+    if not source_layouts:
+        raise HTTPException(status_code=404, detail="Раскладки не найдены")
 
     file_path = save_uploaded_file(file, "merge")
 
@@ -814,8 +818,11 @@ async def merge_layouts(
             warnings.append(f"Деталь «{new_part['name']}» есть в новой раскладке, но отсутствует в исходных")
         else:
             src = source_parts_by_name[key]
-            if abs(new_part["dx"] - src["dx"]) > 0.1 or abs(new_part["dy"] - src["dy"]) > 0.1:
-                warnings.append(f"Деталь «{new_part['name']}»: размер отличается (новая {new_part['dx']}x{new_part['dy']} vs исходная {src['dx']}x{src['dy']})")
+            ndx, ndy = new_part["dx"], new_part["dy"]
+            sdx, sdy = src["dx"], src["dy"]
+            size_match = (abs(ndx - sdx) < 0.1 and abs(ndy - sdy) < 0.1) or (abs(ndx - sdy) < 0.1 and abs(ndy - sdx) < 0.1)
+            if not size_match:
+                warnings.append(f"Деталь «{new_part['name']}»: размер отличается (новая {ndx}x{ndy} vs исходная {sdx}x{sdy})")
             if new_part["quantity"] < src["quantity"]:
                 warnings.append(f"Деталь «{new_part['name']}»: в новой раскладке {new_part['quantity']}шт, а в исходных {src['quantity']}шт")
 
@@ -823,7 +830,7 @@ async def merge_layouts(
         if key not in new_parts_map:
             warnings.append(f"Деталь «{src['name']}» есть в исходных раскладках ({src['quantity']}шт), но отсутствует в новой")
 
-    app_ids = list(set(ref.get("app_id") for ref in source_refs if ref.get("app_id")))
+    app_ids = list(set(sl.application_id for sl in source_layouts if sl.application_id))
     customers = []
     for aid in app_ids:
         app_result = await db.execute(select(Application).where(Application.id == aid))
@@ -844,6 +851,7 @@ async def merge_layouts(
     merged_name = "Слияние: " + " + ".join(order_names[:3])
     if len(order_names) > 3:
         merged_name += f" (+{len(order_names) - 3})"
+    merged_name = merged_name[:50]
 
     first_app = None
     if app_ids:
@@ -854,18 +862,40 @@ async def merge_layouts(
     if customers:
         customer = await get_or_create_customer(db, customers[0])
 
-    new_app = Application(
-        order_name=merged_name,
-        customer_id=customer.id if customer else None,
-        material=new_layout_data.material or (first_app.material if first_app else "Steel"),
-        steel_grade=first_app.steel_grade if first_app else None,
-        thickness=new_layout_data.thickness or (first_app.thickness if first_app else 0.0),
-        total_parts_count=sum(p.quantity for p in new_layout_data.parts),
-        status="pending",
-        supply_material=first_app.supply_material if first_app else None,
-        comments="Объединённые заказчики: " + ", ".join(customers) if len(customers) > 1 else None,
+    existing_result = await db.execute(
+        select(Application).where(Application.order_name == merged_name)
     )
-    db.add(new_app)
+    existing_app = existing_result.scalar_one_or_none()
+
+    if existing_app:
+        new_app = existing_app
+        new_app.material = (new_layout_data.material or (first_app.material if first_app else "Steel"))[:50]
+        new_app.steel_grade = first_app.steel_grade if first_app else new_app.steel_grade
+        new_app.thickness = new_layout_data.thickness or (first_app.thickness if first_app else new_app.thickness)
+        new_app.total_parts_count = sum(p.quantity for p in new_layout_data.parts)
+        old_layouts_result = await db.execute(
+            select(ApplicationLayout).where(
+                ApplicationLayout.application_id == new_app.id,
+                ApplicationLayout.status != "replaced"
+            )
+        )
+        for old_layout in old_layouts_result.scalars().all():
+            await db.execute(delete(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == old_layout.id))
+            await db.delete(old_layout)
+        await db.flush()
+    else:
+        new_app = Application(
+            order_name=merged_name,
+            customer_id=customer.id if customer else None,
+            material=(new_layout_data.material or (first_app.material if first_app else "Steel"))[:50],
+            steel_grade=first_app.steel_grade if first_app else None,
+            thickness=new_layout_data.thickness or (first_app.thickness if first_app else 0.0),
+            total_parts_count=sum(p.quantity for p in new_layout_data.parts),
+            status="approved",
+            supply_material=first_app.supply_material if first_app else None,
+            comments="Объединённые заказчики: " + ", ".join(customers) if len(customers) > 1 else None,
+        )
+        db.add(new_app)
     await db.flush()
 
     machine_type = "FNF" if "fnf" in file.filename.lower() else "CNF"
@@ -893,8 +923,8 @@ async def merge_layouts(
         layout_image=layout_image_path,
         status="active",
         merged_from=json.dumps({
-            "apps": [{"id": ref.get("app_id"), "name": next((a.order_name for a in [first_app] if a and a.id == ref.get("app_id")), "")} for ref in source_refs],
-            "layouts": [{"id": ref.get("layout_id"), "code": ""} for ref in source_refs]
+            "apps": [{"id": sl.application_id, "name": sl.application.order_name if sl.application else ""} for sl in source_layouts],
+            "layouts": [{"id": sl.id, "code": sl.layout_code} for sl in source_layouts]
         })
     )
     db.add(layout)
@@ -1147,11 +1177,50 @@ async def toggle_layout_run(
         completed.append(False)
 
     if 0 <= run_index < len(completed):
-        completed[run_index] = not completed[run_index]
+        if completed[run_index]:
+            for j in range(run_index, len(completed)):
+                completed[j] = False
+        else:
+            completed[run_index] = True
 
     layout.completed_runs = json.dumps(completed)
+    await db.flush()
+
+    all_layouts_result = await db.execute(
+        select(ApplicationLayout).where(ApplicationLayout.application_id == layout.application_id)
+    )
+    all_layouts = all_layouts_result.scalars().all()
+
+    total_sheets = 0
+    done_sheets = 0
+    for l in all_layouts:
+        runs = []
+        if l.completed_runs:
+            try:
+                runs = json.loads(l.completed_runs)
+            except Exception:
+                runs = []
+        while len(runs) < l.sheet_count:
+            runs.append(False)
+        total_sheets += l.sheet_count
+        done_sheets += sum(1 for r in runs[:l.sheet_count] if r)
+
+    app_result = await db.execute(select(Application).where(Application.id == layout.application_id))
+    app = app_result.scalar_one_or_none()
+    if app:
+        if total_sheets > 0 and done_sheets == total_sheets:
+            new_status = 'cut'
+        elif done_sheets > 0:
+            new_status = 'partially_cut'
+        elif app.status in ('partially_cut', 'cut'):
+            new_status = 'in_progress'
+        else:
+            new_status = app.status
+        if new_status != app.status:
+            app.status = new_status
+
     await db.commit()
-    return {"status": "success", "completed_runs": completed}
+    return {"status": "success", "completed_runs": completed, "app_status": app.status if app else None}
 
 
 @router.patch("/{app_id}/status")

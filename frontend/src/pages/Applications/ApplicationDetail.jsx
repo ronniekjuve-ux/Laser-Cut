@@ -40,7 +40,10 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
           }
           return l;
         });
-        return { ...prev, layouts };
+        const app = res.data.app_status
+          ? { ...prev.application, status: res.data.app_status }
+          : prev.application;
+        return { ...prev, layouts, application: app };
       });
     } catch (err) {
       alert('Ошибка');
@@ -112,7 +115,11 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
   );
 
   const data = fullApp ? (fullApp.application || fullApp) : app;
-  const layouts = fullApp ? (fullApp.layouts || []) : [];
+  const layouts = fullApp ? [...(fullApp.layouts || [])].sort((a, b) => {
+    const ca = a.layout_code || '';
+    const cb = b.layout_code || '';
+    return ca.localeCompare(cb, undefined, { numeric: true });
+  }) : [];
   const uniquePartTypes = layouts.reduce((sum, l) => sum + (l.parts_count || 0), 0);
   const totalPartsQty = layouts.reduce((sum, l) => {
     const partsQty = (l.parts || []).reduce((ps, p) => ps + (p.quantity || 0), 0);
@@ -136,189 +143,293 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
         <div className="modal-body">
           {activeLayout === null ? (
             <>
-              <div style={{marginBottom: 12}}>
-                <div><span style={{fontWeight: 600}}>Заказчик:</span> {data.customer || '-'}</div>
-                <div><span style={{fontWeight: 600}}>Материал:</span> {data.material || data.steel_grade || '-'}</div>
-                <div><span style={{fontWeight: 600}}>Толщина:</span> {data.thickness ? data.thickness + ' мм' : '-'}</div>
-                <div><span style={{fontWeight: 600}}>Вес:</span> {data.total_weight ? data.total_weight + ' кг' : '-'}</div>
-                <div><span style={{fontWeight: 600}}>Раскладок:</span> {layouts.length}</div>
-                <div><span style={{fontWeight: 600}}>Видов деталей:</span> {uniquePartTypes}</div>
-                <div><span style={{fontWeight: 600}}>Всего деталей:</span> {totalPartsQty}</div>
-                <div><span style={{fontWeight: 600}}>Дата:</span> {data.created_at ? new Date(data.created_at).toLocaleDateString('ru-RU') : '-'}</div>
-                {data.comments && <div><span style={{fontWeight: 600}}>Комментарий:</span> {data.comments}</div>}
-              </div>
-
-              {data.status === 'pending' && user?.role === 'admin' && (
-                <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
-                  <div style={{fontWeight: 600, marginBottom: 8}}>Решение:</div>
-                  <div style={{display: 'flex', gap: 8}}>
-                    <button
-                      onClick={() => updateStatus('approved')}
-                      style={{
-                        padding: '8px 18px', borderRadius: 6, border: '1px solid #86efac',
-                        background: '#dcfce7', color: '#166534', fontWeight: 600,
-                        cursor: 'pointer', fontSize: 13
-                      }}
-                    >
-                      ✅ Утвердить
-                    </button>
-                    <button
-                      onClick={() => updateStatus('rejected')}
-                      style={{
-                        padding: '8px 18px', borderRadius: 6, border: '1px solid #fca5a5',
-                        background: '#fee2e2', color: '#991b1b', fontWeight: 600,
-                        cursor: 'pointer', fontSize: 13
-                      }}
-                    >
-                      ❌ Отклонить
-                    </button>
+              <div style={{display: 'flex', gap: 20}}>
+                <div style={{flex: 1}}>
+                  <div style={{marginBottom: 12}}>
+                    <div><span style={{fontWeight: 600}}>Заказчик:</span> {data.customer || '-'}</div>
+                    <div><span style={{fontWeight: 600}}>Материал:</span> {data.material || data.steel_grade || '-'}</div>
+                    <div><span style={{fontWeight: 600}}>Толщина:</span> {data.thickness ? data.thickness + ' мм' : '-'}</div>
+                    <div><span style={{fontWeight: 600}}>Вес:</span> {data.total_weight ? data.total_weight + ' кг' : '-'}</div>
+                    <div><span style={{fontWeight: 600}}>Раскладок:</span> {layouts.length}</div>
+                    <div><span style={{fontWeight: 600}}>Видов деталей:</span> {uniquePartTypes}</div>
+                    <div><span style={{fontWeight: 600}}>Всего деталей:</span> {totalPartsQty}</div>
+                    <div><span style={{fontWeight: 600}}>Дата:</span> {data.created_at ? new Date(data.created_at).toLocaleDateString('ru-RU') : '-'}</div>
+                    {data.comments && <div><span style={{fontWeight: 600}}>Комментарий:</span> {data.comments}</div>}
                   </div>
-                </div>
-              )}
 
-              {data.status === 'rejected' && user?.role === 'admin' && (
-                <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
-                  <div style={{fontWeight: 600, marginBottom: 8}}>Решение:</div>
-                  <button
-                    onClick={() => updateStatus('approved')}
-                    style={{
-                      padding: '8px 18px', borderRadius: 6, border: '1px solid #86efac',
-                      background: '#dcfce7', color: '#166534', fontWeight: 600,
-                      cursor: 'pointer', fontSize: 13
-                    }}
-                  >
-                    ✅ Утвердить
-                  </button>
-                </div>
-              )}
-
-              {(user?.role === 'admin' || user?.role === 'operator') && ['approved', 'in_progress', 'partially_cut', 'cut'].includes(data.status) && (
-                <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
-                  <div style={{fontWeight: 600, marginBottom: 8}}>Статус:</div>
-                  <div style={{display: 'flex', gap: 6, flexWrap: 'wrap'}}>
-                    {[
-                      { key: 'approved', label: 'В очереди', bg: '#f0fdf4', color: '#15803d' },
-                      { key: 'in_progress', label: 'В резке', bg: '#dbeafe', color: '#1d4ed8' },
-                      { key: 'partially_cut', label: 'Частично вырезано', bg: '#fef3c7', color: '#92400e' },
-                      { key: 'cut', label: 'Вырезано', bg: '#dcfce7', color: '#166534' },
-                    ].map(s => (
-                      <button
-                        key={s.key}
-                        onClick={() => updateStatus(s.key)}
-                        style={{
-                          padding: '6px 14px', borderRadius: 6, border: '2px solid',
-                          borderColor: data.status === s.key ? s.color : 'transparent',
-                          background: data.status === s.key ? s.bg : '#f8fafc',
-                          color: s.color, fontWeight: data.status === s.key ? 700 : 400,
-                          cursor: 'pointer', fontSize: 13
-                        }}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(user?.role === 'operator') && (
-                <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
-                  {!showDeficitForm ? (
-                    <button
-                      className="btn"
-                      onClick={() => {
-                        const firstLayout = layouts[0];
-                        setDeficitSize(firstLayout ? firstLayout.sheet_size : '');
-                        setDeficitQty(firstLayout ? String(firstLayout.sheet_count || 1) : '1');
-                        setDeficitNote('');
-                        setShowDeficitForm(true);
-                      }}
-                      style={{background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d'}}
-                    >
-                      ⚠️ Заказать материал
-                    </button>
-                  ) : (
-                    <div style={{padding: 10, background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 6}}>
-                      <div style={{fontWeight: 600, marginBottom: 6}}>Нехватка металла</div>
-                      <div style={{fontSize: 13, color: '#64748b', marginBottom: 6}}>
-                        Материал: {data.material || data.steel_grade || '-'}, Толщина: {data.thickness || '-'} мм
-                      </div>
-                      <div style={{display: 'flex', gap: 8, marginBottom: 6}}>
-                        <div style={{flex: 1}}>
-                          <label style={{fontSize: 12, color: '#64748b'}}>Размер листа</label>
-                          <input
-                            value={deficitSize}
-                            onChange={e => setDeficitSize(e.target.value)}
-                            placeholder="1500x6000"
-                            style={{width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, boxSizing: 'border-box'}}
-                          />
-                        </div>
-                        <div style={{width: 80}}>
-                          <label style={{fontSize: 12, color: '#64748b'}}>Кол-во</label>
-                          <input
-                            type="number"
-                            value={deficitQty}
-                            onChange={e => setDeficitQty(e.target.value)}
-                            placeholder="1"
-                            style={{width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, boxSizing: 'border-box'}}
-                          />
-                        </div>
-                      </div>
-                      <textarea
-                        value={deficitNote}
-                        onChange={e => setDeficitNote(e.target.value)}
-                        placeholder="Комментарий (необязательно)"
-                        style={{width: '100%', padding: 6, border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, minHeight: 50, boxSizing: 'border-box'}}
-                      />
-                      <div style={{display: 'flex', gap: 6, marginTop: 6}}>
-                        <button className="btn btn-primary" onClick={submitDeficit} disabled={deficitSending}>
-                          {deficitSending ? 'Отправка...' : 'Отправить'}
+                  {data.status === 'pending' && user?.role === 'admin' && (
+                    <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
+                      <div style={{fontWeight: 600, marginBottom: 8}}>Решение:</div>
+                      <div style={{display: 'flex', gap: 8}}>
+                        <button
+                          onClick={() => updateStatus('approved')}
+                          style={{
+                            padding: '8px 18px', borderRadius: 6, border: '1px solid #86efac',
+                            background: '#dcfce7', color: '#166534', fontWeight: 600,
+                            cursor: 'pointer', fontSize: 13
+                          }}
+                        >
+                          ✅ Утвердить
                         </button>
-                        <button className="btn" onClick={() => { setShowDeficitForm(false); setDeficitNote(''); }}>
-                          Отмена
+                        <button
+                          onClick={() => updateStatus('rejected')}
+                          style={{
+                            padding: '8px 18px', borderRadius: 6, border: '1px solid #fca5a5',
+                            background: '#fee2e2', color: '#991b1b', fontWeight: 600,
+                            cursor: 'pointer', fontSize: 13
+                          }}
+                        >
+                          ❌ Отклонить
                         </button>
                       </div>
                     </div>
                   )}
-                </div>
-              )}
 
-              {layouts.length > 0 && (
-                <div style={{marginTop: 16}}>
-                  <h4>Раскладки</h4>
-                  {layouts.map((layout, li) => {
-                    const isReplaced = layout.replaced;
-                    return (
-                      <div
-                        key={layout.id || li}
+                  {data.status === 'rejected' && user?.role === 'admin' && (
+                    <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
+                      <div style={{fontWeight: 600, marginBottom: 8}}>Решение:</div>
+                      <button
+                        onClick={() => updateStatus('approved')}
                         style={{
-                          padding: 10, border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8,
-                          cursor: isReplaced ? 'default' : 'pointer',
-                          opacity: isReplaced ? 0.45 : 1,
-                          background: isReplaced ? '#f1f5f9' : undefined,
+                          padding: '8px 18px', borderRadius: 6, border: '1px solid #86efac',
+                          background: '#dcfce7', color: '#166534', fontWeight: 600,
+                          cursor: 'pointer', fontSize: 13
                         }}
-                        onClick={() => !isReplaced && setActiveLayout(li)}
                       >
-                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                          <strong>{layout.layout_code ? ('Раскладка ' + layout.layout_code) : ('Раскладка ' + (li + 1))}</strong>
-                          <span style={{fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center'}}>
-                            {isReplaced && (
-                              <span style={{background: '#fee2e2', color: '#991b1b', padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600}}>
-                                Заменена
-                              </span>
-                            )}
-                            {layout.merged_from && (
-                              <span style={{background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: 4, fontSize: 11}}>
-                                Слияние
-                              </span>
-                            )}
-                            {!isReplaced && `${layout.machine_type || ''} | ${layout.sheet_size} | Деталей: ${layout.parts_count}`}
-                          </span>
+                        ✅ Утвердить
+                      </button>
+                    </div>
+                  )}
+
+                  {(user?.role === 'operator') && (
+                    <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
+                      {!showDeficitForm ? (
+                        <button
+                          className="btn"
+                          onClick={() => {
+                            const firstLayout = layouts[0];
+                            setDeficitSize(firstLayout ? firstLayout.sheet_size : '');
+                            setDeficitQty(firstLayout ? String(firstLayout.sheet_count || 1) : '1');
+                            setDeficitNote('');
+                            setShowDeficitForm(true);
+                          }}
+                          style={{background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d'}}
+                        >
+                          ⚠️ Заказать материал
+                        </button>
+                      ) : (
+                        <div style={{padding: 10, background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 6}}>
+                          <div style={{fontWeight: 600, marginBottom: 6}}>Нехватка металла</div>
+                          <div style={{fontSize: 13, color: '#64748b', marginBottom: 6}}>
+                            Материал: {data.material || data.steel_grade || '-'}, Толщина: {data.thickness || '-'} мм
+                          </div>
+                          <div style={{display: 'flex', gap: 8, marginBottom: 6}}>
+                            <div style={{flex: 1}}>
+                              <label style={{fontSize: 12, color: '#64748b'}}>Размер листа</label>
+                              <input
+                                value={deficitSize}
+                                onChange={e => setDeficitSize(e.target.value)}
+                                placeholder="1500x6000"
+                                style={{width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, boxSizing: 'border-box'}}
+                              />
+                            </div>
+                            <div style={{width: 80}}>
+                              <label style={{fontSize: 12, color: '#64748b'}}>Кол-во</label>
+                              <input
+                                type="number"
+                                value={deficitQty}
+                                onChange={e => setDeficitQty(e.target.value)}
+                                placeholder="1"
+                                style={{width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, boxSizing: 'border-box'}}
+                              />
+                            </div>
+                          </div>
+                          <textarea
+                            value={deficitNote}
+                            onChange={e => setDeficitNote(e.target.value)}
+                            placeholder="Комментарий (необязательно)"
+                            style={{width: '100%', padding: 6, border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, minHeight: 50, boxSizing: 'border-box'}}
+                          />
+                          <div style={{display: 'flex', gap: 6, marginTop: 6}}>
+                            <button className="btn btn-primary" onClick={submitDeficit} disabled={deficitSending}>
+                              {deficitSending ? 'Отправка...' : 'Отправить'}
+                            </button>
+                            <button className="btn" onClick={() => { setShowDeficitForm(false); setDeficitNote(''); }}>
+                              Отмена
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      )}
+                    </div>
+                  )}
+
+                  {layouts.length > 0 && (
+                    <div style={{marginTop: 16}}>
+                      <h4>Раскладки</h4>
+                      {layouts.map((layout, li) => {
+                        const isReplaced = layout.replaced;
+                        const runs = Array.isArray(layout.completed_runs) ? layout.completed_runs : [];
+                        const layoutDone = runs.filter(Boolean).length;
+                        const layoutTotal = layout.sheet_count || 1;
+                        const isComplete = layoutDone >= layoutTotal;
+                        const pct = layoutTotal > 0 ? Math.round((layoutDone / layoutTotal) * 100) : 0;
+                        return (
+                          <div
+                            key={layout.id || li}
+                            style={{
+                              padding: 10, border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8,
+                              cursor: isReplaced ? 'default' : 'pointer',
+                              opacity: isReplaced ? 0.45 : 1,
+                              background: isReplaced ? '#f1f5f9' : isComplete ? '#f0fdf4' : undefined,
+                              borderColor: isComplete ? '#bbf7d0' : undefined,
+                            }}
+                            onClick={() => !isReplaced && setActiveLayout(li)}
+                          >
+                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                              <strong>{layout.layout_code ? ('Раскладка ' + layout.layout_code) : ('Раскладка ' + (li + 1))}</strong>
+                              <span style={{fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center'}}>
+                                {isReplaced && (
+                                  <span style={{background: '#fee2e2', color: '#991b1b', padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600}}>
+                                    Заменена
+                                  </span>
+                                )}
+                                {layout.merged_from && (
+                                  <span style={{background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: 4, fontSize: 11}}>
+                                    Слияние
+                                  </span>
+                                )}
+                                {!isReplaced && `${layout.machine_type || ''} | ${layout.sheet_size} | Деталей: ${layout.parts_count}`}
+                              </span>
+                            </div>
+                            {!isReplaced && layout.sheet_count > 1 && (
+                              <div style={{marginTop: 8}}>
+                                <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 4}}>
+                                  <span>Вырезано: {layoutDone} из {layoutTotal} листов</span>
+                                  <span style={{fontWeight: 600, color: isComplete ? '#166534' : '#64748b'}}>{pct}%</span>
+                                </div>
+                                <div style={{background: '#e2e8f0', borderRadius: 4, height: 6, overflow: 'hidden'}}>
+                                  <div style={{
+                                    width: pct + '%', height: '100%', borderRadius: 4,
+                                    background: isComplete ? '#22c55e' : '#3b82f6',
+                                    transition: 'width 0.3s ease'
+                                  }}/>
+                                </div>
+                                <div style={{display: 'flex', gap: 3, marginTop: 6}}>
+                                  {Array.from({length: layoutTotal}, (_, i) => {
+                                    const done = runs[i] || false;
+                                    return (
+                                      <div
+                                        key={i}
+                                        style={{
+                                          width: 20, height: 20, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                          fontSize: 9, fontWeight: 600,
+                                          background: done ? '#22c55e' : '#e2e8f0',
+                                          color: done ? '#fff' : '#64748b'
+                                        }}
+                                      >
+                                        {i + 1}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {(user?.role === 'admin' || user?.role === 'operator') && ['approved', 'in_progress', 'partially_cut', 'cut'].includes(data.status) && (
+                  <div style={{width: 180, flexShrink: 0}}>
+                    {(() => {
+                      const totalSheets = layouts.reduce((s, l) => s + (l.sheet_count || 1), 0);
+                      const doneSheets = layouts.reduce((s, l) => {
+                        const runs = Array.isArray(l.completed_runs) ? l.completed_runs : [];
+                        return s + runs.filter(Boolean).length;
+                      }, 0);
+                      const pct = totalSheets > 0 ? Math.round((doneSheets / totalSheets) * 100) : 0;
+                      const statusColors = {
+                        approved: { bg: '#f0fdf4', bar: '#22c55e', text: '#15803d', label: 'В очереди' },
+                        in_progress: { bg: '#eff6ff', bar: '#3b82f6', text: '#1d4ed8', label: 'В резке' },
+                        partially_cut: { bg: '#fffbeb', bar: '#f59e0b', text: '#92400e', label: 'Частично вырезано' },
+                        cut: { bg: '#f0fdf4', bar: '#22c55e', text: '#166534', label: 'Вырезано' },
+                      };
+                      const sc = statusColors[data.status] || statusColors.approved;
+                      return (
+                        <div style={{padding: '12px 0'}}>
+                          <div style={{
+                            padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600,
+                            background: sc.bg, color: sc.text, textAlign: 'center', marginBottom: 12
+                          }}>
+                            {sc.label}
+                          </div>
+                          <div style={{position: 'relative', height: 200, width: 32, margin: '0 auto 12px'}}>
+                            <div style={{
+                              position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+                              width: 8, height: '100%', borderRadius: 4, background: '#e2e8f0'
+                            }}/>
+                            <div style={{
+                              position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+                              width: 8, borderRadius: 4, bottom: 0,
+                              height: pct + '%', background: sc.bar,
+                              transition: 'height 0.3s ease'
+                            }}/>
+                            <div style={{
+                              position: 'absolute', left: '50%', transform: 'translate(-50%, 50%)',
+                              bottom: pct + '%', width: 28, height: 28, borderRadius: '50%',
+                              background: sc.bar, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 10, fontWeight: 700, color: '#fff', border: '2px solid #fff',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+                            }}>
+                              {pct}%
+                            </div>
+                          </div>
+                          <div style={{fontSize: 11, color: '#64748b', textAlign: 'center', marginBottom: 12}}>
+                            {doneSheets} из {totalSheets} листов
+                          </div>
+                          <div style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+                            {layouts.map((layout, li) => {
+                              const runs = Array.isArray(layout.completed_runs) ? layout.completed_runs : [];
+                              const layoutDone = runs.filter(Boolean).length;
+                              const layoutTotal = layout.sheet_count || 1;
+                              const isComplete = layoutDone >= layoutTotal;
+                              return (
+                                <div key={layout.id || li} style={{
+                                  display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px',
+                                  borderRadius: 4, fontSize: 11,
+                                  background: isComplete ? '#f0fdf4' : '#f8fafc',
+                                  border: '1px solid ' + (isComplete ? '#bbf7d0' : '#e2e8f0')
+                                }}>
+                                  <span style={{
+                                    width: 16, height: 16, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: 9, fontWeight: 600, flexShrink: 0,
+                                    background: isComplete ? '#22c55e' : '#e2e8f0',
+                                    color: isComplete ? '#fff' : '#64748b'
+                                  }}>
+                                    {isComplete ? '✓' : (li + 1)}
+                                  </span>
+                                  <span style={{flex: 1, fontWeight: 500}}>
+                                    {layout.layout_code || (li + 1)}
+                                  </span>
+                                  <span style={{
+                                    fontSize: 10, padding: '1px 4px', borderRadius: 3,
+                                    background: isComplete ? '#dcfce7' : '#f1f5f9',
+                                    color: isComplete ? '#166534' : '#64748b'
+                                  }}>
+                                    {layoutDone}/{layoutTotal}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             (() => {
@@ -353,27 +464,45 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
 
                   {layout.sheet_count > 1 && (
                     <div style={{marginTop: 16, padding: '12px 16px', background: '#f8fafc', borderRadius: 8, border: '1px solid var(--border)'}}>
-                      <div style={{fontWeight: 600, marginBottom: 8, fontSize: 13}}>Прогресс по запускам ({layout.completed_runs?.filter(Boolean).length || 0} из {layout.sheet_count})</div>
-                      <div style={{display: 'flex', flexWrap: 'wrap', gap: 4}}>
-                        {Array.from({length: layout.sheet_count}, (_, i) => {
-                          const done = layout.completed_runs?.[i] || false;
-                          return (
-                            <div
-                              key={i}
-                              onClick={() => toggleRun(layout.id, i)}
-                              style={{
-                                width: 28, height: 28, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-                                background: done ? '#22c55e' : '#e2e8f0',
-                                color: done ? '#fff' : '#64748b',
-                                border: done ? '2px solid #16a34a' : '2px solid transparent'
-                              }}
-                            >
-                              {i + 1}
+                      {(() => {
+                        const runs = Array.isArray(layout.completed_runs) ? layout.completed_runs : [];
+                        const doneCount = runs.filter(Boolean).length;
+                        return (
+                          <>
+                            <div style={{fontWeight: 600, marginBottom: 8, fontSize: 13}}>Вырезано ({doneCount} из {layout.sheet_count} листов)</div>
+                            <div style={{display: 'flex', flexWrap: 'wrap', gap: 4}}>
+                              {Array.from({length: layout.sheet_count}, (_, i) => {
+                                const done = runs[i] || false;
+                                const isNext = i === doneCount;
+                                const canClick = isNext || done;
+                                return (
+                                  <div
+                                    key={i}
+                                    onClick={() => {
+                                      if (!canClick) return;
+                                      if (isNext) {
+                                        toggleRun(layout.id, i);
+                                      } else if (done) {
+                                        toggleRun(layout.id, i);
+                                      }
+                                    }}
+                                    style={{
+                                      width: 28, height: 28, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      fontSize: 11, fontWeight: 600, cursor: canClick ? 'pointer' : 'not-allowed', transition: 'all 0.15s',
+                                      background: done ? '#22c55e' : isNext ? '#bfdbfe' : '#e2e8f0',
+                                      color: done || isNext ? '#fff' : '#64748b',
+                                      border: done ? '2px solid #16a34a' : isNext ? '2px solid #3b82f6' : '2px solid transparent',
+                                      opacity: !canClick ? 0.4 : 1
+                                    }}
+                                  >
+                                    {i + 1}
+                                  </div>
+                                );
+                              })}
                             </div>
-                          );
-                        })}
-                      </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
 

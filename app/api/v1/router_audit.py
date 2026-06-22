@@ -450,10 +450,11 @@ async def audit_applications(
         for layout in layouts:
             parts = parts_by_layout.get(layout.id, [])
             layout_parts_weight = sum(p.weight or 0 for p in parts)
+            sc = layout.sheet_count or 1
 
-            total_cut_length += layout.cut_length or 0
-            total_pierces += layout.pierces or 0
-            total_parts_weight += layout_parts_weight
+            total_cut_length += (layout.cut_length or 0) * sc
+            total_pierces += (layout.pierces or 0) * sc
+            total_parts_weight += layout_parts_weight * sc
 
             layouts_summary.append({
                 "layout_code": layout.layout_code,
@@ -461,6 +462,7 @@ async def audit_applications(
                 "sheet_w": layout.sheet_w,
                 "sheet_h": layout.sheet_h,
                 "sheet_weight": layout.sheet_weight,
+                "sheet_count": sc,
                 "cut_time": layout.cut_time,
                 "move_time": layout.move_time,
                 "pierce_time": layout.pierce_time,
@@ -473,6 +475,8 @@ async def audit_applications(
 
         mt = (layouts[0].machine_type.upper() if layouts and layouts[0].machine_type else "")
         machine = "станок 1" if "CNF" in mt else "станок 2" if "FNF" in mt else (layouts[0].machine_type if layouts else "")
+        total_sheets = sum(l.sheet_count or 1 for l in layouts)
+        total_sheets_weight = sum((l.sheet_weight or 0) * (l.sheet_count or 1) for l in layouts)
 
         enriched.append({
             "id": app.id,
@@ -486,11 +490,12 @@ async def audit_applications(
             "supply_material": app.supply_material,
             "machine": machine,
             "total_parts_count": app.total_parts_count,
-            "total_weight": app.total_weight,
+            "total_weight": round(total_sheets_weight, 1),
             "total_cut_length": round(total_cut_length, 1),
             "total_pierces": total_pierces,
             "total_parts_weight": round(total_parts_weight, 3),
             "layouts_count": len(layouts),
+            "total_sheets": total_sheets,
             "layouts": layouts_summary,
             "cut_at": app.cut_at.isoformat() if app.cut_at else None,
             "status": app.status

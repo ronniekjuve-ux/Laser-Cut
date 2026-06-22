@@ -191,6 +191,22 @@ export default function OrdersList() {
     }
     return true;
   }).sort((a, b) => {
+    const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
+    const getPriorityVal = (app) => {
+      const p = getRowData(app).priority;
+      return PRIORITY_ORDER[p] !== undefined ? PRIORITY_ORDER[p] : 4;
+    };
+
+    if (sortCol === 'priority') {
+      const pa = getPriorityVal(a);
+      const pb = getPriorityVal(b);
+      return sortDir === 'asc' ? pa - pb : pb - pa;
+    }
+
+    const pa = getPriorityVal(a);
+    const pb = getPriorityVal(b);
+    if (pa !== pb) return pa - pb;
+
     if (!sortCol) return 0;
     const ra = getRowData(a);
     const rb = getRowData(b);
@@ -199,11 +215,6 @@ export default function OrdersList() {
     if (sortCol === 'thickness') {
       va = parseFloat(va) || 0;
       vb = parseFloat(vb) || 0;
-    }
-    if (sortCol === 'priority') {
-      const order = { urgent: 0, high: 1, medium: 2, low: 3 };
-      va = order[va] !== undefined ? order[va] : 4;
-      vb = order[vb] !== undefined ? order[vb] : 4;
     }
     let cmp;
     if (typeof va === 'number' && typeof vb === 'number') {
@@ -360,7 +371,8 @@ export default function OrdersList() {
               <React.Fragment key={app.id}>
                 <tr onClick={() => setSelectedApp(app)} style={{
                   cursor: 'pointer',
-                  background: highlightId && app.id === parseInt(highlightId) ? '#fef08a' : undefined
+                  background: highlightId && app.id === parseInt(highlightId) ? '#fef08a' : app.is_replaced ? '#f1f5f9' : undefined,
+                  opacity: app.is_replaced ? 0.5 : 1,
                 }}>
                   {COLUMNS.map(col => (
                     <td key={col.key}>

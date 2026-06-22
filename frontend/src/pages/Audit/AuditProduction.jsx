@@ -16,6 +16,13 @@ function monthKey(iso) {
   return `${MONTHS_RU[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+function formatNum(n, decimals = 0) {
+  if (n == null || isNaN(n)) return '-';
+  const parts = Number(n).toFixed(decimals).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return parts.join('.');
+}
+
 const EXPORT_COLUMNS = [
   { key: 'customer', label: 'Заказчик' },
   { key: 'order_name', label: 'Заявка' },
@@ -23,11 +30,10 @@ const EXPORT_COLUMNS = [
   { key: 'steel_grade', label: 'Марка' },
   { key: 'thickness', label: 'Толщ.' },
   { key: 'supply_material', label: 'Дав.мат' },
-  { key: 'machine', label: 'Станок' },
   { key: 'layouts_count', label: 'Раскладок' },
+  { key: 'total_sheets', label: 'Листов' },
   { key: 'total_cut_length', label: 'Длина реза' },
   { key: 'total_pierces', label: 'Проколы' },
-  { key: 'total_parts_weight', label: 'Масса дет.' },
   { key: 'total_weight', label: 'Масса заявки' },
 ];
 
@@ -141,12 +147,12 @@ function ApplicationsTab() {
       case 'steel_grade': return item.steel_grade || item.material || '-';
       case 'thickness': return item.thickness ?? '';
       case 'supply_material': return item.supply_material ? 'Да' : item.supply_material === false ? 'Нет' : '-';
-      case 'machine': return item.machine || '';
       case 'layouts_count': return item.layouts_count ?? '';
-      case 'total_cut_length': return item.total_cut_length ?? '';
-      case 'total_pierces': return item.total_pierces ?? '';
-      case 'total_parts_weight': return item.total_parts_weight ?? '';
-      case 'total_weight': return item.total_weight ?? '';
+      case 'total_sheets': return item.total_sheets ?? '';
+      case 'total_cut_length': return formatNum(item.total_cut_length, 1);
+      case 'total_pierces': return formatNum(item.total_pierces);
+      case 'total_parts_weight': return formatNum(item.total_parts_weight, 3);
+      case 'total_weight': return formatNum(item.total_weight, 1);
       default: return '';
     }
   };
@@ -236,9 +242,9 @@ function ApplicationsTab() {
             >
               <span>{expandedGroups.has(g.key) ? '\u25BC' : '\u25B6'} {g.label} ({g.items.length})</span>
               <span style={{fontSize:12, fontWeight:400, color:'#64748b'}}>
-                Масса: {g.items.reduce((s,i) => s + (i.total_weight||0), 0).toFixed(1)} кг |
-                Рез: {g.items.reduce((s,i) => s + (i.total_cut_length||0), 0).toFixed(0)} мм |
-                Проколы: {g.items.reduce((s,i) => s + (i.total_pierces||0), 0)}
+                Масса: {formatNum(g.items.reduce((s,i) => s + (i.total_weight||0), 0), 1)} кг |
+                Рез: {formatNum(g.items.reduce((s,i) => s + (i.total_cut_length||0), 0), 0)} мм |
+                Проколы: {formatNum(g.items.reduce((s,i) => s + (i.total_pierces||0), 0))}
               </span>
             </div>
           )}
@@ -254,8 +260,8 @@ function ApplicationsTab() {
                     <th>Марка</th>
                     <th>Толщ.</th>
                     <th>Дав.мат</th>
-                    <th>Станок</th>
                     <th>Раскладок</th>
+                    <th>Листов</th>
                     <th>Длина реза</th>
                     <th>Проколы</th>
                     <th>Масса заявки</th>
@@ -272,26 +278,26 @@ function ApplicationsTab() {
                         <td>{item.steel_grade || item.material}</td>
                         <td>{item.thickness}</td>
                         <td>{item.supply_material ? 'Да' : item.supply_material === false ? 'Нет' : '-'}</td>
-                        <td>{item.machine}</td>
                         <td>{item.layouts_count}</td>
-                        <td>{item.total_cut_length}</td>
-                        <td>{item.total_pierces}</td>
-                        <td>{item.total_weight}</td>
+                        <td>{item.total_sheets}</td>
+                        <td>{formatNum(item.total_cut_length, 1)}</td>
+                        <td>{formatNum(item.total_pierces)}</td>
+                        <td>{formatNum(item.total_weight, 1)}</td>
                       </tr>
                       {expandedApps.has(item.id) && item.layouts.map((l, li) => (
                         <tr key={li} style={{background:'#f8fafc', fontSize:12}}>
                           <td></td>
                           <td></td>
                           <td colSpan={3} style={{color:'#475569'}}>
-                            Раскладка {l.layout_code} | {l.sheet_w}x{l.sheet_h} | {l.sheet_weight ? l.sheet_weight.toFixed(1) + ' кг' : '-'}
+                            Раскладка {l.layout_code}
                           </td>
                           <td></td>
                           <td></td>
-                          <td style={{color:'#475569'}}>{l.machine_type}</td>
-                          <td style={{color:'#475569'}}>{l.parts_count} дет.</td>
-                          <td style={{color:'#475569'}}>{l.cut_length || '-'}</td>
-                          <td style={{color:'#475569'}}>{l.pierces || '-'}</td>
-                          <td style={{color:'#475569'}}>{l.sheet_weight ? l.sheet_weight.toFixed(1) + ' кг' : '-'}</td>
+                          <td style={{color:'#475569'}}>{l.sheet_w}x{l.sheet_h}</td>
+                          <td style={{color:'#475569'}}>{l.sheet_count || 1}</td>
+                          <td style={{color:'#475569'}}>{formatNum(l.cut_length, 1)}</td>
+                          <td style={{color:'#475569'}}>{formatNum(l.pierces)}</td>
+                          <td style={{color:'#475569'}}>{l.sheet_weight ? formatNum(l.sheet_weight * (l.sheet_count || 1), 1) + ' кг' : '-'}</td>
                         </tr>
                       ))}
                     </React.Fragment>

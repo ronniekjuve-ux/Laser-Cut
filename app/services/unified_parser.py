@@ -260,8 +260,12 @@ def normalize_name(name: str) -> str:
     """Нормализует имя для сопоставления"""
     clean = name.replace('\\', '/').split('/')[-1]
     clean = re.sub(r'\.dft$', '', clean, flags=re.IGNORECASE).strip()
+    clean = re.sub(r'<[^>]*>', '', clean)
+    clean = re.sub(r'^[a-zA-Z]+>\s*', '', clean)
     clean = re.sub(r'\s+', ' ', clean).strip()
-    return clean.lower()
+    clean = clean.lower()
+    clean = clean.replace('мм', 'mm').replace('шт', 'sht')
+    return clean
 
 
 def parse_application_text(text: str) -> ApplicationData:
@@ -697,7 +701,8 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft:
                     if not dft_match:
                         continue
                     dft_name = dft_match.group(2)
-                    dft_name = re.sub(r'<[^>]+>', '', dft_name)
+                    dft_name = re.sub(r'<[^>]*>', '', dft_name)
+                    dft_name = re.sub(r'^[^\\\/\w]*', '', dft_name)
                     dft_name = re.sub(r'\s+', ' ', dft_name).strip()
                     if not dft_name:
                         continue

@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import client from '../../api/client';
 
 export default function MergeModal({ onClose, onMerged }) {
   const [step, setStep] = useState(1);
   const [allApps, setAllApps] = useState([]);
-  const [selected, setSelected] = useState([]);
+  const [layoutsByApp, setLayoutsByApp] = useState({});
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [selectedLayouts, setSelectedLayouts] = useState({});
+  const [expandedApps, setExpandedApps] = useState(new Set());
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [merging, setMerging] = useState(false);
@@ -21,21 +24,86 @@ export default function MergeModal({ onClose, onMerged }) {
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  const toggleApp = (appId) => {
-    setSelected(prev => prev.includes(appId) ? prev.filter(id => id !== appId) : [...prev, appId]);
+  const toggleOrder = (appId) => {
+    setSelectedOrders(prev => {
+      const next = prev.includes(appId) ? prev.filter(id => id !== appId) : [...prev, appId];
+      if (!prev.includes(appId) && layoutsByApp[appId]) {
+        setSelectedLayouts(prev2 => {
+          const next2 = { ...prev2 };
+          next2[appId] = layoutsByApp[appId].map(l => l.id);
+          return next2;
+        });
+      } else if (prev.includes(appId)) {
+        setSelectedLayouts(prev2 => {
+          const next2 = { ...prev2 };
+          delete next2[appId];
+          return next2;
+        });
+      }
+      return next;
+    });
+  };
+
+  const toggleLayout = (appId, layoutId) => {
+    setSelectedLayouts(prev => {
+      const current = prev[appId] || [];
+      const next = current.includes(layoutId)
+        ? current.filter(id => id !== layoutId)
+        : [...current, layoutId];
+      const result = { ...prev, [appId]: next };
+      if (next.length === 0) {
+        setSelectedOrders(prev2 => prev2.filter(id => id !== appId));
+      } else if (!selectedOrders.includes(appId)) {
+        setSelectedOrders(prev2 => [...prev2, appId]);
+      }
+      return result;
+    });
+  };
+
+  const toggleExpand = async (appId) => {
+    if (expandedApps.has(appId)) {
+      setExpandedApps(prev => { const n = new Set(prev); n.delete(appId); return n; });
+      return;
+    }
+    setExpandedApps(prev => new Set(prev).add(appId));
+    if (!layoutsByApp[appId]) {
+      try {
+        const res = await client.get('/api/v1/applications/' + appId);
+        const layouts = res.data.layouts || [];
+        setLayoutsByApp(prev => ({ ...prev, [appId]: layouts }));
+        if (selectedOrders.includes(appId)) {
+          setSelectedLayouts(prev => ({ ...prev, [appId]: layouts.map(l => l.id) }));
+        }
+      } catch (err) {
+        console.error('Failed to load layouts', err);
+      }
+    }
+  };
+
+  const selectAllLayouts = (appId) => {
+    if (layoutsByApp[appId]) {
+      setSelectedLayouts(prev => ({ ...prev, [appId]: layoutsByApp[appId].map(l => l.id) }));
+      if (!selectedOrders.includes(appId)) {
+        setSelectedOrders(prev => [...prev, appId]);
+      }
+    }
+  };
+
+  const getSelectedLayoutIds = () => {
+    const ids = [];
+    for (const appId of selectedOrders) {
+      const layouts = selectedLayouts[appId] || [];
+      ids.push(...layouts);
+    }
+    return ids;
   };
 
   const handleMerge = async () => {
-    if (!file || selected.length < 2) return;
+    const layoutIds = getSelectedLayoutIds();
+    if (!file || layoutIds.length < 2) return;
     setMerging(true);
     try {
-      const refs = [];
-      for (const appId of selected) {
-        const app = allApps.find(a => a.id === appId);
-        if (!app) continue;
-        refs.push({ app_id: appId, layout_id: null, order_name: app.order_name });
-      }
-
+      const refs = layoutIds.map(lid => ({ layout_id: lid }));
       const fd = new FormData();
       fd.append('file', file);
       fd.append('layout_ids', JSON.stringify(refs));
@@ -56,12 +124,10 @@ export default function MergeModal({ onClose, onMerged }) {
   };
 
   const handleConfirmWithWarnings = async () => {
+    const layoutIds = getSelectedLayoutIds();
     setMerging(true);
     try {
-      const refs = [];
-      for (const appId of selected) {
-        refs.push({ app_id: appId, layout_id: null });
-      }
+      const refs = layoutIds.map(lid => ({ layout_id: lid }));
       const fd = new FormData();
       fd.append('file', file);
       fd.append('layout_ids', JSON.stringify(refs));
@@ -77,7 +143,7 @@ export default function MergeModal({ onClose, onMerged }) {
     }
   };
 
-  const selectedApps = allApps.filter(a => selected.includes(a.id));
+  const selectedLayoutCount = getSelectedLayoutIds().length;
 
   return (
     <div className="modal-overlay active" onClick={onClose}>
@@ -92,52 +158,110 @@ export default function MergeModal({ onClose, onMerged }) {
           ) : step === 1 ? (
             <>
               <div style={{ marginBottom: 12, fontSize: 13, color: '#64748b' }}>
-                Выберите 2 или более заявки/заказа для слияния:
+                Выберите заказы и раскладки для слияния:
               </div>
-              <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
+              <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
                 <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
                       <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)' }}></th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)' }}></th>
                       <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>Заказ</th>
                       <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>Заказчик</th>
                       <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>Материал</th>
-                      <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>Вкладка</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {allApps.map(app => (
-                      <tr
-                        key={app.id}
-                        onClick={() => toggleApp(app.id)}
-                        style={{
-                          cursor: 'pointer',
-                          background: selected.includes(app.id) ? '#eff6ff' : '#fff',
-                        }}
-                      >
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}>
-                          <input
-                            type="checkbox"
-                            checked={selected.includes(app.id)}
-                            onChange={() => toggleApp(app.id)}
-                            onClick={e => e.stopPropagation()}
-                          />
-                        </td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}>{app.order_name}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}>{app.customer}</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}>{app.steel_grade || app.material} {app.thickness}мм</td>
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}>{app._tab === 'applications' ? 'Заявки' : 'Заказы'}</td>
-                      </tr>
-                    ))}
+                    {allApps.map(app => {
+                      const isExpanded = expandedApps.has(app.id);
+                      const isSelected = selectedOrders.includes(app.id);
+                      const appLayouts = layoutsByApp[app.id] || [];
+                      const selectedLayoutCountForApp = (selectedLayouts[app.id] || []).length;
+                      return (
+                        <React.Fragment key={app.id}>
+                          <tr
+                            style={{
+                              cursor: 'pointer',
+                              background: isSelected ? '#eff6ff' : '#fff',
+                            }}
+                          >
+                            <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleOrder(app.id)}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </td>
+                            <td
+                              style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', width: 24, textAlign: 'center' }}
+                              onClick={() => toggleExpand(app.id)}
+                            >
+                              {isExpanded ? '\u25BC' : '\u25B6'}
+                            </td>
+                            <td
+                              style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}
+                              onClick={() => toggleExpand(app.id)}
+                            >
+                              {app.order_name}
+                              {isSelected && appLayouts.length > 0 && (
+                                <span style={{ color: '#64748b', marginLeft: 6 }}>({selectedLayoutCountForApp}/{appLayouts.length})</span>
+                              )}
+                            </td>
+                            <td
+                              style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}
+                              onClick={() => toggleExpand(app.id)}
+                            >{app.customer}</td>
+                            <td
+                              style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}
+                              onClick={() => toggleExpand(app.id)}
+                            >{app.steel_grade || app.material} {app.thickness}мм</td>
+                          </tr>
+                          {isExpanded && appLayouts.length > 0 && (
+                            <tr>
+                              <td colSpan={5} style={{ padding: '4px 0 4px 40px', borderBottom: '1px solid var(--border)', background: '#f8fafc' }}>
+                                <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                                  <button
+                                    onClick={() => selectAllLayouts(app.id)}
+                                    style={{ fontSize: 11, padding: '2px 6px', border: '1px solid var(--border)', borderRadius: 3, background: '#fff', cursor: 'pointer' }}
+                                  >
+                                    Все раскладки
+                                  </button>
+                                </div>
+                                {appLayouts.map(l => {
+                                  const lSelected = (selectedLayouts[app.id] || []).includes(l.id);
+                                  return (
+                                    <div
+                                      key={l.id}
+                                      onClick={() => toggleLayout(app.id, l.id)}
+                                      style={{
+                                        padding: '3px 8px', cursor: 'pointer', fontSize: 11,
+                                        background: lSelected ? '#dbeafe' : 'transparent',
+                                        borderRadius: 3, marginBottom: 2
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={lSelected}
+                                        readOnly
+                                        style={{ marginRight: 6 }}
+                                      />
+                                      {l.layout_code || 'Раскладка'} | {l.sheet_w}x{l.sheet_h} | {l.sheet_count || 1} лист. | {l.parts_count || 0} дет.
+                                    </div>
+                                  );
+                                })}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-              {selected.length >= 2 && (
+              {selectedLayoutCount >= 2 && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Выбрано: {selected.length} заявок</div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
-                    {selectedApps.map(a => a.order_name).join(' + ')}
-                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Выбрано: {selectedLayoutCount} раскладок</div>
                   <div>
                     <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>Загрузите объединённую раскладку (.doc):</label>
                     <input
@@ -157,7 +281,7 @@ export default function MergeModal({ onClose, onMerged }) {
               </div>
               <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, padding: 12, marginBottom: 12 }}>
                 {result.warnings.map((w, i) => (
-                  <div key={i} style={{ fontSize: 12, marginBottom: 4 }}>⚠ {w}</div>
+                  <div key={i} style={{ fontSize: 12, marginBottom: 4 }}>{w}</div>
                 ))}
               </div>
               <div style={{ fontSize: 13, color: '#64748b' }}>
@@ -167,7 +291,7 @@ export default function MergeModal({ onClose, onMerged }) {
           ) : null}
         </div>
         <div className="modal-footer">
-          {step === 1 && selected.length >= 2 && file && (
+          {step === 1 && selectedLayoutCount >= 2 && file && (
             <button className="btn btn-primary" onClick={handleMerge} disabled={merging}>
               {merging ? 'Слияние...' : 'Проверить и объединить'}
             </button>
