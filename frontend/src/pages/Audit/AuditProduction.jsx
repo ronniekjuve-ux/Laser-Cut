@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import client from '../../api/client';
 import { computeMonthShifts, loadOverridesFromServer } from '../../utils/shifts';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
@@ -323,6 +324,7 @@ function OperatorsTab() {
   const [expandedOps, setExpandedOps] = useState(new Set());
   const [editingStat, setEditingStat] = useState(null);
   const [editValues, setEditValues] = useState({});
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const syncMonthFromSchedule = async (monthStr) => {
     try {
@@ -363,7 +365,12 @@ function OperatorsTab() {
   }, []);
 
   const handleDelete = async (id) => {
-    if (!confirm('Удалить смену?')) return;
+    setConfirmDelete(id);
+  };
+
+  const confirmDeleteAction = async () => {
+    const id = confirmDelete;
+    setConfirmDelete(null);
     try {
       await client.delete(`/audit/operators/${id}`);
       fetchShifts();
@@ -551,6 +558,15 @@ function OperatorsTab() {
             </table>
           </div>
         </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Удалить смену?"
+          message="Запись о смене будет удалена безвозвратно."
+          onConfirm={confirmDeleteAction}
+          onCancel={() => setConfirmDelete(null)}
+        />
       )}
     </div>
   );

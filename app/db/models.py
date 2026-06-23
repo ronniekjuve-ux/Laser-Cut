@@ -94,6 +94,15 @@ class Object(Base):
     orders: Mapped[List["Order"]] = relationship(back_populates="object_rel")
 
 
+class OrderGroup(Base):
+    __tablename__ = "order_groups"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    applications: Mapped[List["Application"]] = relationship(back_populates="group")
+
+
 class Application(Base):
     __tablename__ = "applications"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -115,11 +124,13 @@ class Application(Base):
     cut_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     cut_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("order_groups.id"), nullable=True)
 
     customer: Mapped["Customer"] = relationship(back_populates="applications")
     updater: Mapped[Optional["User"]] = relationship(foreign_keys=[updated_by])
     cutter: Mapped[Optional["User"]] = relationship(foreign_keys=[cut_by])
     layouts: Mapped[List["ApplicationLayout"]] = relationship(back_populates="application", cascade="all, delete-orphan")
+    group: Mapped[Optional["OrderGroup"]] = relationship(back_populates="applications")
 
 
 class ApplicationLayout(Base):

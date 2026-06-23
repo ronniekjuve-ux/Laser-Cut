@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import ConfirmModal from '../../components/ConfirmModal';
 
 export default function ApplicationDetail({ app, onClose, onUpdate }) {
   const { user } = useAuth();
@@ -13,6 +14,8 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
   const [deficitSize, setDeficitSize] = useState('');
   const [deficitQty, setDeficitQty] = useState('');
   const [deficitSending, setDeficitSending] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmUnmerge, setConfirmUnmerge] = useState(null);
 
   const highlightPart = app.highlightPart || null;
 
@@ -96,13 +99,34 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
   }, [fullApp, highlightPart]);
 
   const handleDelete = async () => {
-    if (!window.confirm('Удалить заявку?')) return;
+    setConfirmDelete(true);
+  };
+
+  const confirmDeleteAction = async () => {
+    setConfirmDelete(false);
     try {
       await client.delete('/api/v1/applications/' + app.id);
       onUpdate();
       onClose();
     } catch (err) {
       alert('Ошибка удаления');
+    }
+  };
+
+  const handleUnmerge = async (layoutId, action) => {
+    setConfirmUnmerge({ layoutId, action });
+  };
+
+  const confirmUnmergeAction = async () => {
+    const { layoutId, action } = confirmUnmerge;
+    setConfirmUnmerge(null);
+    try {
+      await client.post('/api/v1/applications/layouts/' + layoutId + '/unmerge?action=' + action);
+      const res = await client.get('/api/v1/applications/' + app.id);
+      setFullApp(res.data);
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -268,37 +292,72 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                       <h4>Раскладки</h4>
                       {layouts.map((layout, li) => {
                         const isReplaced = layout.replaced;
+                        const isMergeCancelled = layout.status === 'merge_cancelled';
                         const runs = Array.isArray(layout.completed_runs) ? layout.completed_runs : [];
                         const layoutDone = runs.filter(Boolean).length;
                         const layoutTotal = layout.sheet_count || 1;
                         const isComplete = layoutDone >= layoutTotal;
                         const pct = layoutTotal > 0 ? Math.round((layoutDone / layoutTotal) * 100) : 0;
+                        const isDisabled = isReplaced || isMergeCancelled;
                         return (
                           <div
                             key={layout.id || li}
                             style={{
                               padding: 10, border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8,
-                              cursor: isReplaced ? 'default' : 'pointer',
-                              opacity: isReplaced ? 0.45 : 1,
-                              background: isReplaced ? '#f1f5f9' : isComplete ? '#f0fdf4' : undefined,
+                              cursor: isDisabled ? 'default' : 'pointer',
+                              opacity: isDisabled ? 0.45 : 1,
+                              background: isMergeCancelled ? '#fef2f2' : isReplaced ? '#f1f5f9' : isComplete ? '#f0fdf4' : undefined,
                               borderColor: isComplete ? '#bbf7d0' : undefined,
                             }}
-                            onClick={() => !isReplaced && setActiveLayout(li)}
+                            onClick={() => !isDisabled && setActiveLayout(li)}
                           >
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                              <strong>{layout.layout_code ? ('Раскладка ' + layout.layout_code) : ('Раскладка ' + (li + 1))}</strong>
+                              <strong>{layout.layout_code ? (`Раскладка ${data.id}.${layout.layout_code}`) : (`Раскладка ${data.id}.${String(li + 1).padStart(3, '0')}`)}</strong>
                               <span style={{fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center'}}>
-                                {isReplaced && (
+                                {isMergeCancelled && (
+                                  <span style={{background: '#fee2e2', color: '#991b1b', padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600}}>
+                                    Слияние отменено
+                                  </span>
+                                )}
+                                {isReplaced && !isMergeCancelled && (
                                   <span style={{background: '#fee2e2', color: '#991b1b', padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600}}>
                                     Заменена
                                   </span>
                                 )}
-                                {layout.merged_from && (
+                                {layout.merged_from && !isMergeCancelled && !isReplaced && (
                                   <span style={{background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: 4, fontSize: 11}}>
-                                    Слияние
+                                    Слияние: {(layout.merged_from.layouts || []).map(l => `${l.app_id || '?'}.${l.code}`).join(' + ')}
                                   </span>
                                 )}
-                                {!isReplaced && `${layout.machine_type || ''} | ${layout.sheet_size} | Деталей: ${layout.parts_count}`}
+                                {!isDisabled && `${layout.machine_type || ''} | ${layout.sheet_size} | Деталей: ${layout.parts_count}`}
+                                {layout.merged_from && !isMergeCancelled && !isReplaced && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUnmerge(layout.id, 'cancel');
+                                    }}
+                                    style={{
+                                      fontSize: 11, padding: '2px 8px', borderRadius: 4, border: '1px solid #fca5a5',
+                                      background: '#fef2f2', color: '#991b1b', cursor: 'pointer', fontWeight: 600
+                                    }}
+                                  >
+                                    Отменить слияние
+                                  </button>
+                                )}
+                                {isMergeCancelled && layout.merged_from && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUnmerge(layout.id, 'restore');
+                                    }}
+                                    style={{
+                                      fontSize: 11, padding: '2px 8px', borderRadius: 4, border: '1px solid #86efac',
+                                      background: '#f0fdf4', color: '#166534', cursor: 'pointer', fontWeight: 600
+                                    }}
+                                  >
+                                    Восстановить
+                                  </button>
+                                )}
                               </span>
                             </div>
                             {!isReplaced && layout.sheet_count > 1 && (
@@ -395,30 +454,32 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                               const layoutDone = runs.filter(Boolean).length;
                               const layoutTotal = layout.sheet_count || 1;
                               const isComplete = layoutDone >= layoutTotal;
+                              const isDisabled = layout.replaced || layout.status === 'merge_cancelled';
                               return (
                                 <div key={layout.id || li} style={{
                                   display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px',
                                   borderRadius: 4, fontSize: 11,
-                                  background: isComplete ? '#f0fdf4' : '#f8fafc',
-                                  border: '1px solid ' + (isComplete ? '#bbf7d0' : '#e2e8f0')
+                                  background: isDisabled ? '#f1f5f9' : isComplete ? '#f0fdf4' : '#f8fafc',
+                                  border: '1px solid ' + (isDisabled ? '#e2e8f0' : isComplete ? '#bbf7d0' : '#e2e8f0'),
+                                  opacity: isDisabled ? 0.5 : 1,
                                 }}>
                                   <span style={{
                                     width: 16, height: 16, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     fontSize: 9, fontWeight: 600, flexShrink: 0,
-                                    background: isComplete ? '#22c55e' : '#e2e8f0',
-                                    color: isComplete ? '#fff' : '#64748b'
+                                    background: isDisabled ? '#e2e8f0' : isComplete ? '#22c55e' : '#e2e8f0',
+                                    color: isDisabled ? '#94a3b8' : isComplete ? '#fff' : '#64748b'
                                   }}>
-                                    {isComplete ? '✓' : (li + 1)}
+                                    {isDisabled ? '—' : isComplete ? '✓' : (li + 1)}
                                   </span>
                                   <span style={{flex: 1, fontWeight: 500}}>
-                                    {layout.layout_code || (li + 1)}
+                                    {layout.layout_code ? `${data.id}.${layout.layout_code}` : `${data.id}.${String(li + 1).padStart(3, '0')}`}
                                   </span>
                                   <span style={{
                                     fontSize: 10, padding: '1px 4px', borderRadius: 3,
-                                    background: isComplete ? '#dcfce7' : '#f1f5f9',
-                                    color: isComplete ? '#166534' : '#64748b'
+                                    background: isDisabled ? '#f1f5f9' : isComplete ? '#dcfce7' : '#f1f5f9',
+                                    color: isDisabled ? '#94a3b8' : isComplete ? '#166534' : '#64748b'
                                   }}>
-                                    {layoutDone}/{layoutTotal}
+                                    {isDisabled ? '—' : `${layoutDone}/${layoutTotal}`}
                                   </span>
                                 </div>
                               );
@@ -443,7 +504,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                   <div style={{display: 'flex', gap: 20, alignItems: 'flex-start'}}>
                     <div style={{flex: '0 0 65%'}}>
                       {layoutImg ? (
-                        <img src={layoutImg} alt={layout.layout_code} style={{width: '100%', borderRadius: 6, border: '1px solid var(--border)'}} />
+                        <img src={layoutImg} alt={`${data.id}.${layout.layout_code}`} style={{width: '100%', borderRadius: 6, border: '1px solid var(--border)'}} />
                       ) : (
                         <div style={{background: '#f1f5f9', borderRadius: 6, padding: 60, textAlign: 'center', color: '#94a3b8'}}>Раскладка</div>
                       )}
@@ -568,6 +629,28 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
             </div>
           </div>
         </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Удалить заявку?"
+          message="Заявка и все связанные раскладки будут удалены безвозвратно."
+          onConfirm={confirmDeleteAction}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+
+      {confirmUnmerge && (
+        <ConfirmModal
+          title={confirmUnmerge.action === 'cancel' ? "Отменить слияние?" : "Восстановить слияние?"}
+          message={confirmUnmerge.action === 'cancel'
+            ? "Исходные раскладки вернутся в рабочее состояние."
+            : "Слияние будет восстановлено. Исходные раскладки снова будут заменены."}
+          confirmText={confirmUnmerge.action === 'cancel' ? "Отменить слияние" : "Восстановить"}
+          danger={confirmUnmerge.action === 'cancel'}
+          onConfirm={confirmUnmergeAction}
+          onCancel={() => setConfirmUnmerge(null)}
+        />
       )}
     </div>
   );

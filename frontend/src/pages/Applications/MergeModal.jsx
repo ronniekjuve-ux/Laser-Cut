@@ -166,6 +166,7 @@ export default function MergeModal({ onClose, onMerged }) {
                     <tr style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
                       <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)' }}></th>
                       <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)' }}></th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)', fontWeight: 600, color: '#64748b' }}>№</th>
                       <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>Заказ</th>
                       <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>Заказчик</th>
                       <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>Материал</th>
@@ -200,6 +201,12 @@ export default function MergeModal({ onClose, onMerged }) {
                               {isExpanded ? '\u25BC' : '\u25B6'}
                             </td>
                             <td
+                              style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', fontWeight: 600, color: '#64748b' }}
+                              onClick={() => toggleExpand(app.id)}
+                            >
+                              #{app.id}
+                            </td>
+                            <td
                               style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}
                               onClick={() => toggleExpand(app.id)}
                             >
@@ -219,7 +226,7 @@ export default function MergeModal({ onClose, onMerged }) {
                           </tr>
                           {isExpanded && appLayouts.length > 0 && (
                             <tr>
-                              <td colSpan={5} style={{ padding: '4px 0 4px 40px', borderBottom: '1px solid var(--border)', background: '#f8fafc' }}>
+                              <td colSpan={6} style={{ padding: '4px 0 4px 40px', borderBottom: '1px solid var(--border)', background: '#f8fafc' }}>
                                 <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
                                   <button
                                     onClick={() => selectAllLayouts(app.id)}
@@ -246,7 +253,7 @@ export default function MergeModal({ onClose, onMerged }) {
                                         readOnly
                                         style={{ marginRight: 6 }}
                                       />
-                                      {l.layout_code || 'Раскладка'} | {l.sheet_w}x{l.sheet_h} | {l.sheet_count || 1} лист. | {l.parts_count || 0} дет.
+                                      {l.layout_code ? `${app.id}.${l.layout_code}` : `${app.id}.???`} | {l.sheet_w}x{l.sheet_h} | {l.sheet_count || 1} лист. | {l.parts_count || 0} дет.
                                     </div>
                                   );
                                 })}

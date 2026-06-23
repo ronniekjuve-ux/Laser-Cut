@@ -5,6 +5,9 @@ import { useAuth } from '../../context/AuthContext';
 import ApplicationDetail from '../Applications/ApplicationDetail';
 import NewOrderModal from '../Applications/NewOrderModal';
 import MergeModal from '../Applications/MergeModal';
+import ConfirmModal from '../../components/ConfirmModal';
+import GroupDetail from '../../components/GroupDetail';
+import CreateGroupModal from '../../components/CreateGroupModal';
 
 function NotesModal({ app, onClose, onSaved }) {
   const [text, setText] = useState(app.comments || '');
@@ -49,7 +52,10 @@ function NotesModal({ app, onClose, onSaved }) {
 }
 
 const COLUMNS = [
+  { key: 'checkbox', label: '', sortable: false, filterable: false },
+  { key: 'number', label: '№', sortable: true, filterable: false },
   { key: 'customer', label: 'Заказчик', sortable: true, filterable: true },
+  { key: 'group', label: 'Группа', sortable: true, filterable: true },
   { key: 'machine', label: 'Станок', sortable: true, filterable: true },
   { key: 'material', label: 'Материал', sortable: true, filterable: true },
   { key: 'thickness', label: 'Толщ.', sortable: true, filterable: true },
@@ -82,6 +88,10 @@ export default function OrdersList() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [statusDropdown, setStatusDropdown] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [groupDetailId, setGroupDetailId] = useState(null);
+  const [selectedApps, setSelectedApps] = useState([]);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
   const filterRef = useRef(null);
 
   const fetchOrders = useCallback(async (searchQuery, pageNum = page) => {
@@ -130,7 +140,9 @@ export default function OrdersList() {
   }, []);
 
   const getRowData = (app) => ({
+    number: app.id || '',
     customer: app.customer || '',
+    group: app.group_name || '',
     machine: app.machine || '',
     material: app.steel_grade || app.material || '',
     thickness: app.thickness || '',
@@ -216,6 +228,10 @@ export default function OrdersList() {
       va = parseFloat(va) || 0;
       vb = parseFloat(vb) || 0;
     }
+    if (sortCol === 'number') {
+      va = parseInt(va) || 0;
+      vb = parseInt(vb) || 0;
+    }
     let cmp;
     if (typeof va === 'number' && typeof vb === 'number') {
       cmp = va - vb;
@@ -251,7 +267,12 @@ export default function OrdersList() {
 
   const handleDelete = async (e, appId) => {
     e.stopPropagation();
-    if (!window.confirm('Удалить заявку?')) return;
+    setConfirmDelete(appId);
+  };
+
+  const confirmDeleteAction = async () => {
+    const appId = confirmDelete;
+    setConfirmDelete(null);
     try {
       await client.delete('/api/v1/applications/' + appId);
       fetchOrders();
@@ -288,6 +309,11 @@ export default function OrdersList() {
         {user?.role === 'admin' && (
           <button className="btn" onClick={() => setShowMerge(true)} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #86efac' }}>
             🔗 Слияние
+          </button>
+        )}
+        {user?.role === 'admin' && selectedApps.length >= 2 && (
+          <button className="btn" onClick={() => setShowCreateGroup(true)} style={{ background: '#ede9fe', color: '#7c3aed', border: '1px solid #c4b5fd' }}>
+            📁 Создать группу ({selectedApps.length})
           </button>
         )}
         <input
@@ -376,7 +402,48 @@ export default function OrdersList() {
                 }}>
                   {COLUMNS.map(col => (
                     <td key={col.key}>
-                      {col.key === 'status' ? (
+                      {col.key === 'checkbox' ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedApps.includes(app.id)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setSelectedApps(prev =>
+                              prev.includes(app.id)
+                                ? prev.filter(id => id !== app.id)
+                                : [...prev, app.id]
+                            );
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : col.key === 'number' ? (
+                      <span style={{fontWeight: 600, color: '#64748b'}}>
+                        #{app.id}
+                        {app.has_merged && (
+                          <span title="Содержит слияние" style={{
+                            marginLeft: 4, fontSize: 10, padding: '1px 4px', borderRadius: 3,
+                            background: '#dbeafe', color: '#1d4ed8', fontWeight: 600, verticalAlign: 'middle'
+                          }}>
+                            { '\u{1F517}' }
+                          </span>
+                        )}
+                      </span>
+                    ) : col.key === 'group' ? (
+                      app.group_name ? (
+                        <span
+                          onClick={(e) => { e.stopPropagation(); setGroupDetailId(app.group_id); }}
+                          style={{
+                            background: '#ede9fe', color: '#7c3aed', padding: '2px 6px', borderRadius: 4,
+                            fontSize: 11, fontWeight: 600, cursor: 'pointer'
+                          }}
+                          title="Открыть группу"
+                        >
+                          {app.group_name}
+                        </span>
+                      ) : (
+                        <span style={{color: '#cbd5e1', fontSize: 11}}>—</span>
+                      )
+                    ) : col.key === 'status' ? (
                         (user?.role === 'admin' || user?.role === 'operator') ? (
                           <div style={{ position: 'relative' }}>
                             <span
@@ -588,6 +655,7 @@ export default function OrdersList() {
             <table>
               <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                 <tr>
+                  <th>№</th>
                   <th>Заказчик</th>
                   <th>Станок</th>
                   <th>Материал</th>
@@ -602,6 +670,7 @@ export default function OrdersList() {
               <tbody>
                 {completedApps.map(app => (
                   <tr key={app.id} onClick={() => setSelectedApp(app)} style={{ cursor: 'pointer', opacity: 0.7 }}>
+                    <td style={{fontWeight: 600, color: '#64748b'}}>#{app.id}</td>
                     <td>{app.customer}</td>
                     <td>{app.machine}</td>
                     <td>{app.steel_grade || app.material}</td>
@@ -739,6 +808,34 @@ export default function OrdersList() {
         <MergeModal
           onClose={() => setShowMerge(false)}
           onMerged={() => { setShowMerge(false); fetchOrders(); }}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Удалить заявку?"
+          message="Заявка и все связанные раскладки будут удалены безвозвратно."
+          onConfirm={confirmDeleteAction}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+
+      {groupDetailId && (
+        <GroupDetail
+          groupId={groupDetailId}
+          onClose={() => setGroupDetailId(null)}
+          onRefresh={() => fetchOrders(search || undefined)}
+        />
+      )}
+
+      {showCreateGroup && (
+        <CreateGroupModal
+          appIds={selectedApps}
+          onClose={() => setShowCreateGroup(false)}
+          onCreated={(groupId) => {
+            setSelectedApps([]);
+            fetchOrders(search || undefined);
+          }}
         />
       )}
     </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import client from '../../api/client';
+import ConfirmModal from '../../components/ConfirmModal';
 
 export default function Warehouse() {
   const [items, setItems] = useState([]);
@@ -8,6 +9,7 @@ export default function Warehouse() {
   const [form, setForm] = useState({ metal: '', grade: '', size: '', sheet_count: '', owner: '', note: '' });
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -42,7 +44,12 @@ export default function Warehouse() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Удалить запись?')) return;
+    setConfirmDelete(id);
+  };
+
+  const confirmDeleteAction = async () => {
+    const id = confirmDelete;
+    setConfirmDelete(null);
     try {
       await client.delete('/api/v1/warehouse/' + id);
       fetchItems();
@@ -180,6 +187,15 @@ export default function Warehouse() {
           </tbody>
         </table>
       </div>
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Удалить запись?"
+          message="Запись склада будет удалена безвозвратно."
+          onConfirm={confirmDeleteAction}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </div>
   );
 }

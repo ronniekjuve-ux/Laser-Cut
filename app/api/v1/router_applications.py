@@ -12,7 +12,7 @@ from app.db.base import get_db
 from app.db.models import (
     Application, ApplicationLayout, ApplicationLayoutPart, Customer,
     User, UserRole, ApplicationStatus, ApplicationPriority,
-    DeficitRequest, Notification, ChangeLog
+    DeficitRequest, Notification, ChangeLog, OrderGroup
 )
 from app.core.deps import get_current_user, require_role
 from app.services.unified_parser import (
@@ -376,7 +376,7 @@ async def list_applications(
         result_ids = await db.execute(select(combined.c.id))
         matching_app_ids = set(r[0] for r in result_ids.all())
 
-    query = select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True)
+    query = select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True).options(joinedload(Application.group))
     if customer_filter:
         query = query.where(Application.customer_id == customer_filter)
 
@@ -406,9 +406,11 @@ async def list_applications(
         all_layouts = layouts_result.scalars().all()
         active_layouts = [l for l in all_layouts if l.status in ("active", None)]
         replaced_layouts = [l for l in all_layouts if l.status == "replaced"]
+        merged_layouts = [l for l in all_layouts if l.merged_from]
         first_layout = active_layouts[0] if active_layouts else None
         machine = ""
         is_replaced = len(all_layouts) > 0 and len(active_layouts) == 0 and len(replaced_layouts) > 0
+        has_merged = len(merged_layouts) > 0
         if is_replaced:
             machine = "заменено"
         elif first_layout and first_layout.machine_type:
@@ -439,6 +441,7 @@ async def list_applications(
             "total_weight": app.total_weight,
             "machine": machine,
             "is_replaced": is_replaced,
+            "has_merged": has_merged,
             "comments": app.comments,
             "status": app.status or "pending",
             "priority": app.priority or "medium",
@@ -446,7 +449,9 @@ async def list_applications(
             "cut_at": app.cut_at.isoformat() if app.cut_at else None,
             "cut_by_id": app.cut_by,
             "matched_parts": matched_parts,
-            "created_at": app.created_at
+            "created_at": app.created_at,
+            "group_id": app.group_id,
+            "group_name": app.group.name if app.group else None,
         })
 
     cut_user_ids = set(e["cut_by_id"] for e in enriched if e.get("cut_by_id"))
@@ -862,6 +867,19 @@ async def merge_layouts(
     if customers:
         customer = await get_or_create_customer(db, customers[0])
 
+    # Собираем detail_images из всех исходных заявок
+    merged_detail_images = {}
+    for aid in app_ids:
+        app_result = await db.execute(select(Application).where(Application.id == aid))
+        app_obj = app_result.scalar_one_or_none()
+        if app_obj and app_obj.detail_images:
+            try:
+                parsed = json.loads(app_obj.detail_images)
+                if isinstance(parsed, dict):
+                    merged_detail_images.update(parsed)
+            except Exception:
+                pass
+
     existing_result = await db.execute(
         select(Application).where(Application.order_name == merged_name)
     )
@@ -873,6 +891,8 @@ async def merge_layouts(
         new_app.steel_grade = first_app.steel_grade if first_app else new_app.steel_grade
         new_app.thickness = new_layout_data.thickness or (first_app.thickness if first_app else new_app.thickness)
         new_app.total_parts_count = sum(p.quantity for p in new_layout_data.parts)
+        if merged_detail_images:
+            new_app.detail_images = json.dumps(merged_detail_images)
         old_layouts_result = await db.execute(
             select(ApplicationLayout).where(
                 ApplicationLayout.application_id == new_app.id,
@@ -894,6 +914,7 @@ async def merge_layouts(
             status="approved",
             supply_material=first_app.supply_material if first_app else None,
             comments="Объединённые заказчики: " + ", ".join(customers) if len(customers) > 1 else None,
+            detail_images=json.dumps(merged_detail_images) if merged_detail_images else None,
         )
         db.add(new_app)
     await db.flush()
@@ -924,7 +945,7 @@ async def merge_layouts(
         status="active",
         merged_from=json.dumps({
             "apps": [{"id": sl.application_id, "name": sl.application.order_name if sl.application else ""} for sl in source_layouts],
-            "layouts": [{"id": sl.id, "code": sl.layout_code} for sl in source_layouts]
+            "layouts": [{"id": sl.id, "code": sl.layout_code, "app_id": sl.application_id} for sl in source_layouts]
         })
     )
     db.add(layout)
@@ -935,6 +956,8 @@ async def merge_layouts(
         part_weight = None
         if thickness > 0 and part_data.dx > 0 and part_data.dy > 0:
             part_weight = round(part_data.dx * part_data.dy * thickness * 7.85 / 1000000, 4)
+        part_key = normalize_name(part_data.name)
+        part_image = merged_detail_images.get(part_key)
         db.add(ApplicationLayoutPart(
             layout_id=layout.id,
             name=part_data.name,
@@ -942,6 +965,7 @@ async def merge_layouts(
             dy=part_data.dy,
             quantity=part_data.quantity,
             weight=part_weight,
+            image_path=part_image,
         ))
 
     for sl in source_layouts:
@@ -960,6 +984,209 @@ async def merge_layouts(
         "new_app_id": new_app.id,
         "order_name": merged_name,
         "warnings": warnings
+    }
+
+
+@router.post("/layouts/{layout_id}/unmerge")
+async def unmerge_layout(
+        layout_id: int,
+        action: str = "cancel",
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
+):
+    result = await db.execute(
+        select(ApplicationLayout)
+        .options(joinedload(ApplicationLayout.application))
+        .where(ApplicationLayout.id == layout_id)
+    )
+    layout = result.unique().scalar_one_or_none()
+    if not layout:
+        raise HTTPException(status_code=404, detail="Раскладка не найдена")
+
+    if not layout.merged_from:
+        raise HTTPException(status_code=400, detail="Это не раскладка слияния")
+
+    merged_data = json.loads(layout.merged_from)
+    source_layout_ids = [l["id"] for l in merged_data.get("layouts", [])]
+
+    if action == "cancel":
+        if source_layout_ids:
+            source_result = await db.execute(
+                select(ApplicationLayout).where(ApplicationLayout.id.in_(source_layout_ids))
+            )
+            for sl in source_result.scalars().all():
+                sl.status = "active"
+        layout.status = "merge_cancelled"
+    elif action == "restore":
+        if source_layout_ids:
+            source_result = await db.execute(
+                select(ApplicationLayout).where(ApplicationLayout.id.in_(source_layout_ids))
+            )
+            for sl in source_result.scalars().all():
+                sl.status = "replaced"
+        layout.status = "active"
+    else:
+        raise HTTPException(status_code=400, detail="Неизвестное действие")
+
+    await db.commit()
+
+    try:
+        from app.services.cache import invalidate
+        await invalidate("apps:")
+    except Exception:
+        pass
+
+    return {"status": "success", "message": "Слияние отменено" if action == "cancel" else "Слияние восстановлено"}
+
+
+@router.post("/group")
+async def create_group(
+        body: dict,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
+):
+    app_ids = body.get("app_ids", [])
+    name = body.get("name", "")
+    if len(app_ids) < 2:
+        raise HTTPException(status_code=400, detail="Нужно минимум 2 заявки")
+
+    group = OrderGroup(name=name[:100] if name else None)
+    db.add(group)
+    await db.flush()
+
+    result = await db.execute(
+        select(Application).where(Application.id.in_(app_ids))
+    )
+    for app in result.scalars().all():
+        app.group_id = group.id
+
+    await db.commit()
+    return {"status": "success", "group_id": group.id}
+
+
+@router.delete("/group/{group_id}")
+async def delete_group(
+        group_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
+):
+    result = await db.execute(select(OrderGroup).where(OrderGroup.id == group_id))
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Группа не найдена")
+
+    apps_result = await db.execute(
+        select(Application).where(Application.group_id == group_id)
+    )
+    for app in apps_result.scalars().all():
+        app.group_id = None
+
+    await db.delete(group)
+    await db.commit()
+    return {"status": "success"}
+
+
+@router.patch("/group/{group_id}/apps")
+async def update_group_apps(
+        group_id: int,
+        body: dict,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
+):
+    add_ids = body.get("add", [])
+    remove_ids = body.get("remove", [])
+
+    if add_ids:
+        result = await db.execute(
+            select(Application).where(Application.id.in_(add_ids))
+        )
+        for app in result.scalars().all():
+            app.group_id = group_id
+
+    if remove_ids:
+        result = await db.execute(
+            select(Application).where(Application.id.in_(remove_ids))
+        )
+        for app in result.scalars().all():
+            app.group_id = None
+
+    await db.commit()
+    return {"status": "success"}
+
+
+@router.get("/group/{group_id}")
+async def get_group_details(
+        group_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(OrderGroup).where(OrderGroup.id == group_id))
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Группа не найдена")
+
+    apps_result = await db.execute(
+        select(Application)
+        .options(joinedload(Application.layouts))
+        .where(Application.group_id == group_id)
+        .order_by(Application.thickness)
+    )
+    apps = apps_result.unique().scalars().all()
+
+    apps_data = []
+    total_weight = 0
+    total_parts = 0
+    for app in apps:
+        cust_result = await db.execute(select(Customer).where(Customer.id == app.customer_id))
+        cust = cust_result.scalar_one_or_none()
+        layouts_result = await db.execute(
+            select(ApplicationLayout).where(ApplicationLayout.application_id == app.id)
+        )
+        layouts = layouts_result.scalars().all()
+        active_layouts = [l for l in layouts if l.status == "active"]
+        first_layout = active_layouts[0] if active_layouts else None
+        machine = ""
+        if first_layout and first_layout.machine_type:
+            mt = first_layout.machine_type.upper()
+            machine = "станок 1" if "CNF" in mt else "станок 2" if "FNF" in mt else first_layout.machine_type
+
+        total_sheets = sum(l.sheet_count or 1 for l in active_layouts)
+        done_sheets = 0
+        for l in active_layouts:
+            runs = json.loads(l.completed_runs) if l.completed_runs else []
+            done_sheets += sum(1 for r in runs if r)
+        pct = round((done_sheets / total_sheets) * 100) if total_sheets > 0 else 0
+
+        if app.total_weight:
+            total_weight += app.total_weight
+        total_parts += app.total_parts_count or 0
+
+        apps_data.append({
+            "id": app.id,
+            "order_name": app.order_name,
+            "customer": cust.name if cust else "-",
+            "material": app.steel_grade or app.material,
+            "thickness": app.thickness,
+            "status": app.status,
+            "machine": machine,
+            "total_parts": app.total_parts_count,
+            "total_weight": app.total_weight,
+            "layouts_count": len(active_layouts),
+            "progress_pct": pct,
+        })
+
+    return {
+        "group": {
+            "id": group.id,
+            "name": group.name,
+            "created_at": group.created_at.isoformat() if group.created_at else None,
+        },
+        "applications": apps_data,
+        "summary": {
+            "total_apps": len(apps_data),
+            "total_weight": total_weight,
+            "total_parts": total_parts,
+        }
     }
 
 
@@ -1010,6 +1237,7 @@ async def get_application_details(
             "sheet_weight": layout.sheet_weight,
             "sheet_count": layout.sheet_count or 1,
             "completed_runs": json.loads(layout.completed_runs) if layout.completed_runs else [],
+            "status": layout.status,
             "replaced": layout.status == "replaced",
             "merged_from": json.loads(layout.merged_from) if layout.merged_from else None,
             "cut_time": layout.cut_time,
