@@ -18,8 +18,15 @@
     <script type="module" src="/src/main.jsx?v=2"></script>
     <script>
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(regs => {
-          regs.forEach(r => r.unregister());
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(
+            (registration) => {
+              console.log('SW registered:', registration.scope);
+            },
+            (error) => {
+              console.log('SW registration failed:', error);
+            }
+          );
         });
       }
     </script>

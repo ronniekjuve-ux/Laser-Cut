@@ -91,6 +91,16 @@ async def create_warehouse_item(
     db.add(item)
     await db.commit()
     await db.refresh(item)
+
+    try:
+        from app.main import manager
+        await manager.broadcast({
+            "type": "notification",
+            "message": f"Склад: добавлен {metal}"
+        })
+    except Exception:
+        pass
+
     return {"status": "success", "id": item.id}
 
 
@@ -113,6 +123,16 @@ async def update_warehouse_item(
         item.sheet_count = int(body["sheet_count"]) if body["sheet_count"] else 0
 
     await db.commit()
+
+    try:
+        from app.main import manager
+        await manager.broadcast({
+            "type": "notification",
+            "message": f"Склад: обновлена запись #{item_id}"
+        })
+    except Exception:
+        pass
+
     return {"status": "success"}
 
 
@@ -129,4 +149,14 @@ async def delete_warehouse_item(
 
     await db.delete(item)
     await db.commit()
+
+    try:
+        from app.main import manager
+        await manager.broadcast({
+            "type": "notification",
+            "message": f"Склад: удалена запись #{item_id}"
+        })
+    except Exception:
+        pass
+
     return {"status": "success"}

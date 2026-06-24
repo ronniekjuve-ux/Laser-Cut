@@ -362,7 +362,7 @@ export default function ApplicationsList() {
           </button>
         )}
         {user?.role === 'admin' && (
-          <button className="btn" onClick={() => setShowMerge(true)} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #86efac' }}>
+          <button className="btn" onClick={() => setShowMerge(true)} style={{ background: '#fef9c3', color: '#854d0e', border: '1px solid #fde047' }}>
             🔗 Слияние
           </button>
         )}
@@ -445,7 +445,8 @@ export default function ApplicationsList() {
               <React.Fragment key={app.id}>
               <tr onClick={() => setSelectedApp(app)} style={{
                 cursor: 'pointer',
-                background: highlightId && app.id === parseInt(highlightId) ? '#fef08a' : undefined
+                background: highlightId && app.id === parseInt(highlightId) ? '#fef08a' : app.is_replaced ? '#f9fafb' : app.has_merged ? '#fde68a' : undefined,
+                opacity: app.is_replaced ? 0.5 : 1
               }}>
                 {COLUMNS.map(col => (
                   <td key={col.key}>
@@ -469,7 +470,7 @@ export default function ApplicationsList() {
                         {app.has_merged && (
                           <span title="Содержит слияние" style={{
                             marginLeft: 4, fontSize: 10, padding: '1px 4px', borderRadius: 3,
-                            background: '#dbeafe', color: '#1d4ed8', fontWeight: 600, verticalAlign: 'middle'
+                            background: '#fef9c3', color: '#854d0e', fontWeight: 600, verticalAlign: 'middle'
                           }}>
                             { '\u{1F517}' }
                           </span>

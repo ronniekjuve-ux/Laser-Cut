@@ -12,6 +12,37 @@ from app.core.security import get_password_hash
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
+def parse_user_agent(ua: str) -> str:
+    if not ua:
+        return ""
+    ua_lower = ua.lower()
+    if "python" in ua_lower or "httpx" in ua_lower or "curl" in ua_lower:
+        return "API"
+    os = "Другое"
+    if "windows" in ua_lower:
+        os = "Windows"
+    elif "iphone" in ua_lower:
+        os = "iPhone"
+    elif "android" in ua_lower:
+        os = "Android"
+    elif "mac os" in ua_lower or "macintosh" in ua_lower:
+        os = "Mac"
+    elif "linux" in ua_lower:
+        os = "Linux"
+    browser = "Другое"
+    if "edg" in ua_lower:
+        browser = "Edge"
+    elif "chrome" in ua_lower:
+        browser = "Chrome"
+    elif "firefox" in ua_lower:
+        browser = "Firefox"
+    elif "safari" in ua_lower:
+        browser = "Safari"
+    elif "opr" in ua_lower or "opera" in ua_lower:
+        browser = "Opera"
+    return f"{os} {browser}"
+
+
 @router.post("/", response_model=UserOut, status_code=201)
 async def create_user(
         payload: UserCreate,
@@ -47,7 +78,15 @@ async def list_users(
             la = u.last_active
             if la.tzinfo is None:
                 la = la.replace(tzinfo=timezone.utc)
-            is_online = (now - la) < timedelta(minutes=5)
+            is_online = (now - la) < timedelta(minutes=2)
+
+        last_login_res = await db.execute(
+            select(LoginHistory).where(LoginHistory.user_id == u.id)
+            .order_by(LoginHistory.login_at.desc()).limit(1)
+        )
+        last_login = last_login_res.scalar_one_or_none()
+        device_info = parse_user_agent(last_login.user_agent) if last_login and last_login.user_agent else None
+
         result.append({
             "id": u.id,
             "username": u.username,
@@ -56,6 +95,7 @@ async def list_users(
             "status": u.status,
             "last_active": u.last_active.isoformat() if u.last_active else None,
             "is_online": is_online,
+            "device_info": device_info,
         })
     return result
 

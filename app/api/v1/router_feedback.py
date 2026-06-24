@@ -167,4 +167,14 @@ async def update_feedback(
         db.add(Notification(user_id=fb.user_id, type="feedback_response", message=msg))
 
     await db.commit()
+
+    try:
+        from app.main import manager
+        await manager.broadcast({
+            "type": "notification",
+            "message": f"Отзыв #{fb_id} обновлён"
+        })
+    except Exception:
+        pass
+
     return {"status": "success"}

@@ -17,15 +17,15 @@ function getActiveOps() {
 }
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Заявки', icon: '📋', end: true, roles: ['admin', 'director', 'customer'] },
-  { to: '/orders', label: 'Заказы', icon: '📦', roles: ['admin', 'director', 'operator'] },
-  { to: '/warehouse', label: 'Склад', icon: '🏭', roles: ['admin', 'director', 'operator'] },
-  { to: '/deficit', label: 'Дефицит', icon: '⚠️', roles: ['admin', 'director', 'operator', 'customer'] },
-  { to: '/schedule', label: 'График', icon: '📅', roles: ['admin', 'director', 'operator'] },
-  { to: '/users', label: 'Пользователи', icon: '👥', roles: ['admin', 'director'] },
-  { to: '/changelog', label: 'История изменений', icon: '📝', roles: ['admin', 'director'] },
-  { to: '/audit', label: 'Аудит', icon: '📊', roles: ['admin', 'director'] },
-  { to: '/feedback', label: 'Отзывы', icon: '💬' },
+  { to: '/', label: 'Заявки', icon: '📋', end: true, roles: ['admin', 'director', 'accountant'] },
+  { to: '/orders', label: 'Заказы', icon: '📦', roles: ['admin', 'director', 'accountant', 'operator', 'customer'] },
+  { to: '/warehouse', label: 'Склад', icon: '🏭', roles: ['admin', 'director', 'accountant', 'operator', 'customer'] },
+  { to: '/deficit', label: 'Дефицит', icon: '⚠️', roles: ['admin', 'director', 'accountant', 'operator', 'customer'] },
+  { to: '/schedule', label: 'График', icon: '📅', roles: ['admin', 'director', 'accountant', 'operator'] },
+  { to: '/users', label: 'Пользователи', icon: '👥', roles: ['admin'] },
+  { to: '/changelog', label: 'История изменений', icon: '📝', roles: ['admin'] },
+  { to: '/audit', label: 'Аудит', icon: '📊', roles: ['admin', 'director', 'accountant'] },
+  { to: '/feedback', label: 'Отзывы', icon: '💬', roles: ['admin', 'director', 'accountant', 'operator', 'customer'] },
 ];
 
 export default function Layout() {

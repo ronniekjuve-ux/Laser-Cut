@@ -193,6 +193,16 @@ async def sync_shifts(
         created += 1
 
     await db.commit()
+
+    try:
+        from app.main import manager
+        await manager.broadcast({
+            "type": "notification",
+            "message": f"График смен обновлён на {data.month}"
+        })
+    except Exception:
+        pass
+
     return {"status": "success", "created": created}
 
 
@@ -367,6 +377,16 @@ async def upsert_override(
         db.add(override)
 
     await db.commit()
+
+    try:
+        from app.main import manager
+        await manager.broadcast({
+            "type": "notification",
+            "message": f"Смена на {date} изменена"
+        })
+    except Exception:
+        pass
+
     return {"status": "success"}
 
 
@@ -387,6 +407,16 @@ async def delete_override(
     if existing:
         await db.delete(existing)
         await db.commit()
+
+        try:
+            from app.main import manager
+            await manager.broadcast({
+                "type": "notification",
+                "message": f"Смена на {date} сброшена"
+            })
+        except Exception:
+            pass
+
     return {"status": "success"}
 
 
@@ -401,6 +431,7 @@ async def audit_applications(
     query = (
         select(Application, Customer)
         .join(Customer, Application.customer_id == Customer.id, isouter=True)
+        .where(~Application.order_name.like("Слияние%"))
         .order_by(Application.created_at.desc())
     )
 

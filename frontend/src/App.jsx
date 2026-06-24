@@ -32,28 +32,40 @@ export default function App() {
             <Route path="applications/:id" element={<ApplicationDetail />} />
             <Route path="deficit" element={<Deficit />} />
             <Route path="warehouse" element={
-              <ProtectedRoute roles={['admin', 'director', 'operator']}>
+              <ProtectedRoute roles={['admin', 'director', 'accountant', 'operator', 'customer']}>
                 <Warehouse />
               </ProtectedRoute>
             } />
-            <Route path="schedule" element={<Schedule />} />
+            <Route path="schedule" element={
+              <ProtectedRoute roles={['admin', 'director', 'accountant', 'operator']}>
+                <Schedule />
+              </ProtectedRoute>
+            } />
             <Route path="users" element={
-              <ProtectedRoute roles={['admin', 'director']}>
+              <ProtectedRoute roles={['admin']}>
                 <UsersList />
               </ProtectedRoute>
             } />
             <Route path="changelog" element={
-              <ProtectedRoute roles={['admin', 'director']}>
+              <ProtectedRoute roles={['admin']}>
                 <ChangeLog />
               </ProtectedRoute>
             } />
             <Route path="audit" element={
-              <ProtectedRoute roles={['admin', 'director']}>
+              <ProtectedRoute roles={['admin', 'director', 'accountant']}>
                 <AuditLog />
               </ProtectedRoute>
             } />
-            <Route path="orders" element={<OrdersList />} />
-            <Route path="feedback" element={<Feedback />} />
+            <Route path="orders" element={
+              <ProtectedRoute roles={['admin', 'director', 'accountant', 'operator', 'customer']}>
+                <OrdersList />
+              </ProtectedRoute>
+            } />
+            <Route path="feedback" element={
+              <ProtectedRoute roles={['admin', 'director', 'accountant', 'operator', 'customer']}>
+                <Feedback />
+              </ProtectedRoute>
+            } />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
