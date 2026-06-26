@@ -2,25 +2,22 @@ services:
   frontend:
     build:
       context: ./frontend
-    ports:
-      - "3000:80"
-      - "80:80"
+    labels:
+      - "coolify.fqdn=laser-cut.pro,www.laser-cut.pro"
+      - "coolify.port=80"
     depends_on:
       - backend
     restart: unless-stopped
 
   backend:
     build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     volumes:
-      - ./data/images:/app/data/images
-    ports:
-      - "8000:8000"
+      - images_data:/app/data/images
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/laser_cut
-      - SECRET_KEY=supersecretjwtkeychangeme
+      - FRONTEND_URL=https://laser-cut.pro
     depends_on:
       - db
       - redis
@@ -32,16 +29,12 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: laser_cut
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -49,3 +42,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  images_data:

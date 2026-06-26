@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     LONG_TOKEN_EXPIRE_MINUTES: int = 43200
     QR_TOKEN_EXPIRE_MINUTES: int = 5
+    FRONTEND_URL: str = "http://localhost:3000"
     ENVIRONMENT: Literal["dev", "prod"] = "dev"
 
     class Config:
