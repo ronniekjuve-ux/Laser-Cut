@@ -2,9 +2,6 @@ services:
   frontend:
     build:
       context: ./frontend
-    labels:
-      - "coolify.fqdn=laser-cut.pro,www.laser-cut.pro"
-      - "coolify.port=80"
     depends_on:
       - backend
     restart: unless-stopped
