@@ -2,6 +2,8 @@ services:
   frontend:
     build:
       context: ./frontend
+    environment:
+      SERVICE_FQDN_FRONTEND: https://laser-cut.pro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`laser-cut.pro`)"
