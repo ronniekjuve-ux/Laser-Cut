@@ -22,6 +22,7 @@ services:
     env_file:
       - .env
     environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/laser_cut
       - FRONTEND_URL=https://laser-cut.pro
     depends_on:
       - db
