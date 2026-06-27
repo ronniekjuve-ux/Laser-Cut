@@ -3,11 +3,13 @@ services:
     build:
       context: ./frontend
     labels:
-    - traefik.enable=true
-    - traefik.http.routers.frontend.rule=Host(`laser-cut.pro`) || Host(`www.laser-cut.pro`)
-    - traefik.http.routers.frontend.entrypoints=websecure
-    - traefik.http.routers.frontend.tls.certresolver=letsencrypt
-    - traefik.http.services.frontend.loadbalancer.server.port=80
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`laser-cut.pro`) || Host(`www.laser-cut.pro`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend.middlewares=gzip"
+      - "traefik.http.middlewares.gzip.compress=true"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
     depends_on:
       - backend
     restart: unless-stopped
