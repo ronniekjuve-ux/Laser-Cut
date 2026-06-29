@@ -5,7 +5,3 @@
 __pycache__/
 .git/
 .vscode/
-docker-compose.override.yml
-.mimocode/
-**/node_modules/
-**/dist/
