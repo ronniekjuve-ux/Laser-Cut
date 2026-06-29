@@ -19,6 +19,7 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     volumes:
       - images_data:/app/data/images
+      - uploads_data:/app/data/uploads
     env_file:
       - .env
     environment:
@@ -54,3 +55,4 @@ volumes:
   postgres_data:
   redis_data:
   images_data:
+  uploads_data:

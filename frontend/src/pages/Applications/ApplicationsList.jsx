@@ -9,6 +9,7 @@ import MergeModal from './MergeModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import GroupDetail from '../../components/GroupDetail';
 import CreateGroupModal from '../../components/CreateGroupModal';
+import EditModal from './EditModal';
 
 function NotesModal({ app, onClose, onSaved }) {
   const [text, setText] = useState(app.comments || '');
@@ -152,6 +153,7 @@ export default function ApplicationsList() {
   const [groupDetailId, setGroupDetailId] = useState(null);
   const [selectedApps, setSelectedApps] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [editModal, setEditModal] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -342,7 +344,7 @@ export default function ApplicationsList() {
 
   const handleEdit = (e, app) => {
     e.stopPropagation();
-    setSelectedApp(app);
+    setEditModal(app);
   };
 
   if (loading) return <div className="loading">{'\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430...'}</div>;
@@ -784,6 +786,14 @@ export default function ApplicationsList() {
             setSelectedApps([]);
             fetchApplications(search || undefined);
           }}
+        />
+      )}
+
+      {editModal && (
+        <EditModal
+          app={editModal}
+          onClose={() => setEditModal(null)}
+          onSaved={() => { setEditModal(null); fetchApplications(search || undefined); }}
         />
       )}
     </div>

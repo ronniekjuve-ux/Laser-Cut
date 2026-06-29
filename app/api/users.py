@@ -126,6 +126,24 @@ async def update_user(
     return user
 
 
+@router.delete("/{user_id}")
+async def delete_user(
+        user_id: int,
+        db: AsyncSession = Depends(get_db),
+        admin: User = Depends(require_role(UserRole.ADMIN))
+):
+    res = await db.execute(select(User).where(User.id == user_id))
+    user = res.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="Нельзя удалить себя")
+    await db.delete(user)
+    await db.commit()
+    await log_audit(admin, "DELETE", "user", user_id, f"Deleted user {user.username}", db)
+    return {"status": "success"}
+
+
 @router.get("/me", response_model=UserOut)
 async def get_me(current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR, UserRole.CUSTOMER, UserRole.ACCOUNTANT))):
     return current_user

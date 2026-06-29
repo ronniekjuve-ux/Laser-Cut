@@ -8,6 +8,7 @@ import MergeModal from '../Applications/MergeModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import GroupDetail from '../../components/GroupDetail';
 import CreateGroupModal from '../../components/CreateGroupModal';
+import EditModal from '../Applications/EditModal';
 
 function NotesModal({ app, onClose, onSaved }) {
   const [text, setText] = useState(app.comments || '');
@@ -92,6 +93,7 @@ export default function OrdersList() {
   const [groupDetailId, setGroupDetailId] = useState(null);
   const [selectedApps, setSelectedApps] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [editModal, setEditModal] = useState(null);
   const filterRef = useRef(null);
 
   const fetchOrders = useCallback(async (searchQuery, pageNum = page) => {
@@ -283,7 +285,7 @@ export default function OrdersList() {
 
   const handleEdit = (e, app) => {
     e.stopPropagation();
-    setSelectedApp(app);
+    setEditModal(app);
   };
 
   const handleCancelCut = async (e, appId) => {
@@ -836,6 +838,14 @@ export default function OrdersList() {
             setSelectedApps([]);
             fetchOrders(search || undefined);
           }}
+        />
+      )}
+
+      {editModal && (
+        <EditModal
+          app={editModal}
+          onClose={() => setEditModal(null)}
+          onSaved={() => { setEditModal(null); fetchOrders(search || undefined); }}
         />
       )}
     </div>

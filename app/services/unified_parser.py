@@ -696,19 +696,27 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft:
                     continue
 
                 if filter_dft:
-                    lookback = html_text[max(0, m.start() - 500):m.start() + 200]
-                    dft_match = re.search(r'([\\\/]|^)([^\\\/]+?)\.dft\b', lookback, re.IGNORECASE)
-                    if not dft_match:
+                    img_pos = m.start()
+                    context = html_text[max(0, img_pos - 3000):img_pos + 200]
+                    stripped = re.sub(r'<[^>]*>', '', context)
+                    dft_pos = stripped.lower().rfind('.dft')
+                    if dft_pos <= 0:
                         continue
-                    dft_name = dft_match.group(2)
-                    dft_name = re.sub(r'<[^>]*>', '', dft_name)
-                    dft_name = re.sub(r'^[^\\\/\w]*', '', dft_name)
-                    dft_name = re.sub(r'\s+', ' ', dft_name).strip()
-                    if not dft_name:
+                    before = stripped[max(0, dft_pos - 200):dft_pos]
+                    # Join lines that form the filename (stop at blank lines or table separators)
+                    lines = before.split('\n')
+                    name_lines = []
+                    for line in reversed(lines):
+                        line = line.strip()
+                        if not line or line.startswith('|') or line.startswith('---'):
+                            break
+                        name_lines.insert(0, line)
+                    name = ' '.join(name_lines).strip()
+                    if not name:
                         continue
                     dest_path = dest_dir / img_ref
                     shutil.copy2(src, dest_path)
-                    saved.append((f"/api/v1/images/{prefix}/{img_ref}", dft_name))
+                    saved.append((f"/api/v1/images/{prefix}/{img_ref}", name))
                 else:
                     dest_path = dest_dir / img_ref
                     shutil.copy2(src, dest_path)

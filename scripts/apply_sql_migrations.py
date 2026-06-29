@@ -6,7 +6,7 @@ from app.db.base import engine
 from sqlalchemy import text
 
 MIGRATIONS = [
-    # 1. Добавить колонки в users
+    # 1. Р”РѕР±Р°РІРёС‚СЊ РєРѕР»РѕРЅРєРё РІ users
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id);",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ;",
 
@@ -277,6 +277,9 @@ MIGRATIONS = [
         admin_response_image VARCHAR(500),
         created_at TIMESTAMPTZ DEFAULT NOW()
     );""",
+
+    # 24. Drop UNIQUE constraint on order_name (allow duplicate names, unique ID only)
+    "ALTER TABLE applications DROP CONSTRAINT IF EXISTS applications_order_name_key;",
 ]
 
 async def main():

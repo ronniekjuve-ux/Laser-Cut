@@ -106,7 +106,7 @@ class OrderGroup(Base):
 class Application(Base):
     __tablename__ = "applications"
     id: Mapped[int] = mapped_column(primary_key=True)
-    order_name: Mapped[str] = mapped_column(String(50), unique=True)
+    order_name: Mapped[str] = mapped_column(String(50))
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

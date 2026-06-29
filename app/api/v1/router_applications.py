@@ -1382,6 +1382,44 @@ async def update_application_comments(
     return {"status": "success"}
 
 
+@router.patch("/{app_id}/edit")
+async def update_application(
+        app_id: int,
+        body: dict,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
+):
+    result = await db.execute(select(Application).where(Application.id == app_id))
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    if "customer_name" in body:
+        customer = await get_or_create_customer(db, body["customer_name"])
+        app.customer_id = customer.id
+
+    if "material" in body:
+        app.material = body["material"][:50] if body["material"] else app.material
+
+    if "steel_grade" in body:
+        app.steel_grade = body["steel_grade"][:50] if body["steel_grade"] else None
+
+    if "machine_type" in body:
+        mt = body["machine_type"]
+        if mt in ("CNF", "FNF"):
+            layouts_result = await db.execute(
+                select(ApplicationLayout).where(
+                    ApplicationLayout.application_id == app_id,
+                    ApplicationLayout.status.in_(["active", None])
+                )
+            )
+            for layout in layouts_result.scalars().all():
+                layout.machine_type = mt
+
+    await db.commit()
+    return {"status": "success"}
+
+
 @router.patch("/layouts/{layout_id}/toggle-run")
 async def toggle_layout_run(
         layout_id: int,
