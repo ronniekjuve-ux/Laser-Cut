@@ -1,8 +1,8 @@
 services:
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`laser-cut.pro`) || Host(`www.laser-cut.pro`)"
