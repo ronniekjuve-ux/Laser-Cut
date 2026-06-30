@@ -98,8 +98,6 @@ export default function Schedule() {
     }
   };
 
-  useEffect(() => { syncToAudit(year, month, overrides); }, [overrides, year, month]);
-
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = (new Date(year, month, 1).getDay() + 6) % 7;
   const isCurrentMonth = month === now.getMonth() && year === now.getFullYear();
@@ -187,16 +185,19 @@ export default function Schedule() {
 
   const saveOverride = () => {
     const hasAny = overrideForm.st1 || overrideForm.st2 || overrideForm.night;
+    let newOverrides;
     if (!hasAny) {
-      const next = { ...overrides };
-      delete next[editingOverride];
-      setOverrides(next);
+      newOverrides = { ...overrides };
+      delete newOverrides[editingOverride];
+      setOverrides(newOverrides);
       deleteOverrideFromServer(editingOverride);
     } else {
-      setOverrides({ ...overrides, [editingOverride]: { ...overrideForm } });
+      newOverrides = { ...overrides, [editingOverride]: { ...overrideForm } };
+      setOverrides(newOverrides);
       saveOverrideToServer(editingOverride, overrideForm);
     }
     setEditingOverride(null);
+    syncToAudit(year, month, newOverrides);
   };
 
   const resetOverride = (key) => {
@@ -205,6 +206,7 @@ export default function Schedule() {
     setOverrides(next);
     deleteOverrideFromServer(key);
     setEditingOverride(null);
+    syncToAudit(year, month, next);
   };
 
   const cells = [];
