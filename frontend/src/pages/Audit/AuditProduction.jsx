@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import client from '../../api/client';
-import { computeMonthShifts, loadOverridesFromServer } from '../../utils/shifts';
 import ConfirmModal from '../../components/ConfirmModal';
 
 const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
@@ -357,21 +356,9 @@ function OperatorsTab() {
   const [editValues, setEditValues] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null);
 
-  const syncMonthFromSchedule = async (monthStr) => {
-    try {
-      const [y, m] = monthStr.split('-').map(Number);
-      const overrides = await loadOverridesFromServer(monthStr);
-      const shifts = computeMonthShifts(y, m - 1, overrides);
-      await client.post('/audit/operators/sync', { month: monthStr, shifts });
-    } catch (err) {
-      console.error('Failed to sync schedule to audit', err);
-    }
-  };
-
   const fetchShifts = async () => {
     setLoading(true);
     try {
-      await syncMonthFromSchedule(month);
       const res = await client.get('/audit/operators', { params: { month } });
       setShifts(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
