@@ -98,7 +98,7 @@ export default function OrdersList() {
 
   const fetchOrders = useCallback(async (searchQuery, pageNum = page) => {
     try {
-      const params = { page: pageNum, limit: 50, tab: 'orders' };
+      const params = { page: pageNum, limit: 10, tab: 'orders' };
       if (searchQuery) params.search = searchQuery;
       const res = await client.get('/api/v1/applications/', { params });
       if (res.data.items) {
@@ -291,7 +291,7 @@ export default function OrdersList() {
   const handleCancelCut = async (e, appId) => {
     e.stopPropagation();
     try {
-      await client.patch('/api/v1/applications/' + appId + '/status?status=pending');
+      await client.patch('/api/v1/applications/' + appId + '/status?status=approved');
       fetchOrders(search || undefined);
     } catch (err) {
       alert('Ошибка');

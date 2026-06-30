@@ -284,7 +284,7 @@ async def upload_layout(
                 name=part_data.name,
                 dx=part_data.dx,
                 dy=part_data.dy,
-                quantity=part_data.quantity,
+                quantity=part_data.qty_layout,
                 weight=part_weight,
                 image_path=part_image
             )
