@@ -48,6 +48,8 @@ function ApplicationsTab() {
   const [groupBy, setGroupBy] = useState('date');
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [expandedApps, setExpandedApps] = useState(new Set());
+  const [groupPages, setGroupPages] = useState({});
+  const AUDIT_PAGE_SIZE = 10;
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState(
     EXPORT_COLUMNS.map(c => c.key)
@@ -249,64 +251,93 @@ function ApplicationsTab() {
               </span>
             </div>
           )}
-          {(groupBy === 'none' || expandedGroups.has(g.key)) && (
-            <div className="table-container" style={{marginTop: groupBy !== 'none' ? 4 : 0}}>
-              <table>
-                <thead>
-                  <tr>
-                    <th></th>
-                    <th>Заказчик</th>
-                    <th>Заявка</th>
-                    <th>Дата</th>
-                    <th>Марка</th>
-                    <th>Толщ.</th>
-                    <th>Дав.мат</th>
-                    <th>Раскладок</th>
-                    <th>Листов</th>
-                    <th>Длина реза</th>
-                    <th>Проколы</th>
-                    <th>Масса заявки</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {g.items.map(item => (
-                    <React.Fragment key={item.id}>
-                      <tr onClick={() => toggleApp(item.id)} style={{cursor:'pointer'}}>
-                        <td style={{width:30, textAlign:'center'}}>{expandedApps.has(item.id) ? '\u25BC' : '\u25B6'}</td>
-                        <td>{item.customer}</td>
-                        <td><b>{item.order_name}</b></td>
-                        <td style={{fontFamily:'monospace', fontSize:12}}>{formatDate(item.created_at)}</td>
-                        <td>{item.steel_grade || item.material}</td>
-                        <td>{item.thickness}</td>
-                        <td>{item.supply_material ? 'Да' : item.supply_material === false ? 'Нет' : '-'}</td>
-                        <td>{item.layouts_count}</td>
-                        <td>{item.total_sheets}</td>
-                        <td>{formatNum(item.total_cut_length, 1)}</td>
-                        <td>{formatNum(item.total_pierces)}</td>
-                        <td>{formatNum(item.total_weight, 1)}</td>
+          {(groupBy === 'none' || expandedGroups.has(g.key)) && (() => {
+            const pg = groupPages[g.key] || 1;
+            const totalPages = Math.ceil(g.items.length / AUDIT_PAGE_SIZE);
+            const pageItems = g.items.slice((pg - 1) * AUDIT_PAGE_SIZE, pg * AUDIT_PAGE_SIZE);
+            return (
+              <div style={{marginTop: groupBy !== 'none' ? 4 : 0}}>
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <th>Заказчик</th>
+                        <th>Заявка</th>
+                        <th>Дата</th>
+                        <th>Марка</th>
+                        <th>Толщ.</th>
+                        <th>Дав.мат</th>
+                        <th>Раскладок</th>
+                        <th>Листов</th>
+                        <th>Длина реза</th>
+                        <th>Проколы</th>
+                        <th>Масса заявки</th>
                       </tr>
-                      {expandedApps.has(item.id) && item.layouts.map((l, li) => (
-                        <tr key={li} style={{background:'#f8fafc', fontSize:12}}>
-                          <td></td>
-                          <td></td>
-                          <td colSpan={3} style={{color:'#475569'}}>
-                            Раскладка {l.layout_code}
-                          </td>
-                          <td></td>
-                          <td></td>
-                          <td style={{color:'#475569'}}>{l.sheet_w}x{l.sheet_h}</td>
-                          <td style={{color:'#475569'}}>{l.sheet_count || 1}</td>
-                          <td style={{color:'#475569'}}>{formatNum(l.cut_length, 1)}</td>
-                          <td style={{color:'#475569'}}>{formatNum(l.pierces)}</td>
-                          <td style={{color:'#475569'}}>{l.sheet_weight ? formatNum(l.sheet_weight * (l.sheet_count || 1), 1) + ' кг' : '-'}</td>
-                        </tr>
+                    </thead>
+                    <tbody>
+                      {pageItems.map(item => (
+                        <React.Fragment key={item.id}>
+                          <tr onClick={() => toggleApp(item.id)} style={{cursor:'pointer'}}>
+                            <td style={{width:30, textAlign:'center'}}>{expandedApps.has(item.id) ? '\u25BC' : '\u25B6'}</td>
+                            <td>{item.customer}</td>
+                            <td><b>{item.order_name}</b></td>
+                            <td style={{fontFamily:'monospace', fontSize:12}}>{formatDate(item.created_at)}</td>
+                            <td>{item.steel_grade || item.material}</td>
+                            <td>{item.thickness}</td>
+                            <td>{item.supply_material ? 'Да' : item.supply_material === false ? 'Нет' : '-'}</td>
+                            <td>{item.layouts_count}</td>
+                            <td>{item.total_sheets}</td>
+                            <td>{formatNum(item.total_cut_length, 1)}</td>
+                            <td>{formatNum(item.total_pierces)}</td>
+                            <td>{formatNum(item.total_weight, 1)}</td>
+                          </tr>
+                          {expandedApps.has(item.id) && item.layouts.map((l, li) => (
+                            <tr key={li} style={{background:'#f8fafc', fontSize:12}}>
+                              <td></td>
+                              <td></td>
+                              <td colSpan={3} style={{color:'#475569'}}>
+                                Раскладка {l.layout_code}
+                              </td>
+                              <td></td>
+                              <td></td>
+                              <td style={{color:'#475569'}}>{l.sheet_w}x{l.sheet_h}</td>
+                              <td style={{color:'#475569'}}>{l.sheet_count || 1}</td>
+                              <td style={{color:'#475569'}}>{formatNum(l.cut_length, 1)}</td>
+                              <td style={{color:'#475569'}}>{formatNum(l.pierces)}</td>
+                              <td style={{color:'#475569'}}>{l.sheet_weight ? formatNum(l.sheet_weight * (l.sheet_count || 1), 1) + ' кг' : '-'}</td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
                       ))}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                    </tbody>
+                  </table>
+                </div>
+                {totalPages > 1 && (
+                  <div style={{display:'flex', gap:4, justifyContent:'center', marginTop:8, alignItems:'center'}}>
+                    <button className="btn" disabled={pg <= 1}
+                      onClick={() => setGroupPages(p => ({...p, [g.key]: pg - 1}))}>&lsaquo;</button>
+                    {Array.from({length: Math.min(5, totalPages)}, (_, i) => {
+                      let p;
+                      if (totalPages <= 5) p = i + 1;
+                      else if (pg <= 3) p = i + 1;
+                      else if (pg >= totalPages - 2) p = totalPages - 4 + i;
+                      else p = pg - 2 + i;
+                      return (
+                        <button key={p} className={'btn' + (p === pg ? ' btn-primary' : '')}
+                          onClick={() => setGroupPages(prev => ({...prev, [g.key]: p}))}>{p}</button>
+                      );
+                    })}
+                    <button className="btn" disabled={pg >= totalPages}
+                      onClick={() => setGroupPages(p => ({...p, [g.key]: pg + 1}))}>&rsaquo;</button>
+                    <span style={{fontSize:12, color:'#64748b', marginLeft:8}}>
+                      {g.items.length} заявок | Стр. {pg} из {totalPages}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       ))}
     </div>

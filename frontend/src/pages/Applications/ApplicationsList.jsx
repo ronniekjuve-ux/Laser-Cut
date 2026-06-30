@@ -171,7 +171,7 @@ export default function ApplicationsList() {
 
   const fetchApplications = useCallback(async (searchQuery, pageNum = page) => {
     try {
-      const params = { page: pageNum, limit: 50, tab: 'applications' };
+      const params = { page: pageNum, limit: 10, tab: 'applications' };
       if (searchQuery) params.search = searchQuery;
       const res = await client.get('/api/v1/applications/', { params });
       if (res.data.items) {

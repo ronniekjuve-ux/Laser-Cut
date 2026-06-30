@@ -2,19 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const QUICK_USERS = [
-  { username: 'admin', password: 'admin', label: 'Администратор' },
-  { username: 'Andrey', password: 'password', label: 'Оператор: Андрей' },
-  { username: 'Denis', password: 'password', label: 'Оператор: Денис' },
-  { username: 'Promstalmash', password: 'password', label: 'Заказчик: ПромСтальМаш' },
-  { username: 'GSKB', password: 'password', label: 'Заказчик: ГСКБ' },
-  { username: 'Director_V', password: 'password', label: 'Директор В.' },
-  { username: 'Director_D', password: 'password', label: 'Директор Д.' },
-];
-
 export default function Login() {
-  const [selectedUser, setSelectedUser] = useState(QUICK_USERS[0].username);
-  const [password, setPassword] = useState('password');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -25,7 +15,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const userData = await login(selectedUser, password);
+      const userData = await login(username, password);
       navigate(userData?.role === 'operator' ? '/orders' : '/');
     } catch (err) {
       setError('Неверный логин или пароль');
@@ -39,19 +29,19 @@ export default function Login() {
       <div className="login-box">
         <h2>LaserCut Login</h2>
         <form onSubmit={handleLogin}>
-          <select
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-          >
-            {QUICK_USERS.map((u) => (
-              <option key={u.username} value={u.username}>{u.label}</option>
-            ))}
-          </select>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Логин"
+            autoComplete="username"
+          />
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Пароль"
+            autoComplete="current-password"
           />
           <div className="login-check">
             <input type="checkbox" defaultChecked />
