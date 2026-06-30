@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ALL_OPERATORS,
   dateToKey,
@@ -12,6 +12,54 @@ import {
   deleteOverrideFromServer,
 } from '../utils/shifts';
 import client from '../api/client';
+
+function OperatorSelect({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={ref} style={{flex: 1, position: 'relative'}}>
+      <input
+        type="text"
+        value={value}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder="Оператор"
+        style={{width: '100%', padding: 6, border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 13}}
+      />
+      {open && (
+        <div style={{position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff',
+          border: '1px solid #e2e8f0', borderRadius: 4, zIndex: 10, maxHeight: 150, overflowY: 'auto',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'}}>
+          <div
+            onClick={() => { onChange(''); setOpen(false); }}
+            style={{padding: '6px 8px', cursor: 'pointer', fontSize: 12, color: '#64748b',
+              borderBottom: '1px solid #f1f5f9'}}>
+            — расписание —
+          </div>
+          {ALL_OPERATORS.map(op => (
+            <div
+              key={op}
+              onClick={() => { onChange(op); setOpen(false); }}
+              style={{padding: '6px 8px', cursor: 'pointer', fontSize: 13,
+                background: value === op ? '#eff6ff' : 'transparent',
+                fontWeight: value === op ? 600 : 400}}>
+              {op}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const DAY_NAMES = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
@@ -131,6 +179,9 @@ export default function Schedule() {
       st1: existing.st1 || '',
       st2: existing.st2 || '',
       night: existing.night || '',
+      st1_hours: existing.st1_hours ?? HOURS_PER_SHIFT,
+      st2_hours: existing.st2_hours ?? HOURS_PER_SHIFT,
+      night_hours: existing.night_hours ?? HOURS_PER_SHIFT,
     });
   };
 
@@ -143,7 +194,7 @@ export default function Schedule() {
       deleteOverrideFromServer(editingOverride);
     } else {
       setOverrides({ ...overrides, [editingOverride]: { ...overrideForm } });
-      saveOverrideToServer(editingOverride, overrideForm.st1, overrideForm.st2, overrideForm.night);
+      saveOverrideToServer(editingOverride, overrideForm);
     }
     setEditingOverride(null);
   };
@@ -271,40 +322,42 @@ export default function Schedule() {
               </div>
               <div style={{marginBottom: 10}}>
                 <label style={{fontSize: 12, color: '#64748b', display: 'block', marginBottom: 4}}>Станок 1 (день)</label>
-                <select
-                  value={overrideForm.st1}
-                  onChange={e => setOverrideForm({...overrideForm, st1: e.target.value})}
-                  style={{width: '100%', padding: 6, border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 13}}
-                >
-                  <option value="">— расписание —</option>
-                  {ALL_OPERATORS.filter(x => x !== 'Vova').map(op => (
-                    <option key={op} value={op}>{op}</option>
-                  ))}
-                </select>
+                <div style={{display: 'flex', gap: 6}}>
+                  <OperatorSelect value={overrideForm.st1} onChange={v => setOverrideForm({...overrideForm, st1: v})} />
+                  <input
+                    type="number"
+                    min="1" max="24" step="0.5"
+                    value={overrideForm.st1_hours}
+                    onChange={e => setOverrideForm({...overrideForm, st1_hours: parseFloat(e.target.value) || HOURS_PER_SHIFT})}
+                    style={{width: 60, padding: 6, border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 13, textAlign: 'center'}}
+                  />
+                </div>
               </div>
               <div style={{marginBottom: 10}}>
                 <label style={{fontSize: 12, color: '#64748b', display: 'block', marginBottom: 4}}>Станок 2 (день)</label>
-                <select
-                  value={overrideForm.st2}
-                  onChange={e => setOverrideForm({...overrideForm, st2: e.target.value})}
-                  style={{width: '100%', padding: 6, border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 13}}
-                >
-                  <option value="">— расписание —</option>
-                  {ALL_OPERATORS.filter(x => x !== 'Vova').map(op => (
-                    <option key={op} value={op}>{op}</option>
-                  ))}
-                </select>
+                <div style={{display: 'flex', gap: 6}}>
+                  <OperatorSelect value={overrideForm.st2} onChange={v => setOverrideForm({...overrideForm, st2: v})} />
+                  <input
+                    type="number"
+                    min="1" max="24" step="0.5"
+                    value={overrideForm.st2_hours}
+                    onChange={e => setOverrideForm({...overrideForm, st2_hours: parseFloat(e.target.value) || HOURS_PER_SHIFT})}
+                    style={{width: 60, padding: 6, border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 13, textAlign: 'center'}}
+                  />
+                </div>
               </div>
               <div style={{marginBottom: 14}}>
                 <label style={{fontSize: 12, color: '#64748b', display: 'block', marginBottom: 4}}>Ночь (20:00-08:00)</label>
-                <select
-                  value={overrideForm.night}
-                  onChange={e => setOverrideForm({...overrideForm, night: e.target.value})}
-                  style={{width: '100%', padding: 6, border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 13}}
-                >
-                  <option value="">— нет —</option>
-                  <option value="Vova">Vova</option>
-                </select>
+                <div style={{display: 'flex', gap: 6}}>
+                  <OperatorSelect value={overrideForm.night} onChange={v => setOverrideForm({...overrideForm, night: v})} />
+                  <input
+                    type="number"
+                    min="1" max="24" step="0.5"
+                    value={overrideForm.night_hours}
+                    onChange={e => setOverrideForm({...overrideForm, night_hours: parseFloat(e.target.value) || HOURS_PER_SHIFT})}
+                    style={{width: 60, padding: 6, border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 13, textAlign: 'center'}}
+                  />
+                </div>
               </div>
               <div style={{display: 'flex', gap: 6}}>
                 <button className="btn btn-primary" onClick={saveOverride} style={{fontSize: 12}}>Сохранить</button>

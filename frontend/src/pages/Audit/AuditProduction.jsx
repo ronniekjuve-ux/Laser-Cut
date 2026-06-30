@@ -424,7 +424,8 @@ function OperatorsTab() {
   };
 
   const saveStat = async (userId, field) => {
-    const value = parseFloat(editValues[field]) || 0;
+    const raw = editValues[field];
+    const value = raw === '' || raw == null ? null : parseFloat(raw);
     try {
       await client.post('/audit/operators/stats', {
         user_id: userId,
@@ -443,7 +444,6 @@ function OperatorsTab() {
     today.setHours(23, 59, 59, 999);
     const [y, m] = month.split('-').map(Number);
     const isCurrentMonth = today.getFullYear() === y && (today.getMonth() + 1) === m;
-    const endOfMonth = new Date(y, m, 0);
 
     const uniqueStats = [];
     const seenUserIds = new Set();
@@ -464,21 +464,22 @@ function OperatorsTab() {
         })
         .reduce((sum, s) => sum + (s.hours || 0), 0);
       const stat = uniqueStats.find(s => s.user_id === u.id) || {
-        planned_hours: 0, sick_hours: 0, vacation_hours: 0, overtime_hours: 0, hourly_rate: 0,
+        planned_hours: null, sick_hours: 0, vacation_hours: 0,
       };
+      const plannedHours = stat.planned_hours;
+      const overtimeHours = plannedHours > 0 ? Math.max(0, actualHours - plannedHours) : 0;
       return {
         id: u.id,
         username: u.username,
         actualHours,
         shifts: opShifts,
-        planned_hours: stat.planned_hours,
+        planned_hours: plannedHours,
         sick_hours: stat.sick_hours,
         vacation_hours: stat.vacation_hours,
-        overtime_hours: stat.overtime_hours,
-        hourly_rate: stat.hourly_rate,
+        overtime_hours: overtimeHours,
       };
     });
-    return ops.filter(o => o.shifts.length > 0 || o.planned_hours > 0 || o.sick_hours > 0 || o.vacation_hours > 0);
+    return ops.filter(o => o.shifts.length > 0 || o.sick_hours > 0 || o.vacation_hours > 0);
   }, [operators, shifts, stats, month]);
 
   const monthOptions = [];
@@ -493,7 +494,8 @@ function OperatorsTab() {
     if (editingStat === key) {
       return (
         <span style={{display:'inline-flex', alignItems:'center', gap:4}}>
-          <input type="number" step="0.5" value={editValues[field] ?? 0}
+          <input type="number" step="0.5" value={editValues[field] ?? ''}
+            placeholder="-"
             onChange={e => setEditValues({ ...editValues, [field]: e.target.value })}
             onKeyDown={e => {
               if (e.key === 'Enter') saveStat(opId, field);
@@ -510,8 +512,8 @@ function OperatorsTab() {
     }
     return (
       <span style={{display:'inline-flex', alignItems:'center', gap:4}}>
-        <span>{value ?? 0}</span>
-        <button onClick={() => { setEditingStat(key); setEditValues({ [field]: value ?? 0 }); }}
+        <span>{value != null ? value : '-'}</span>
+        <button onClick={() => { setEditingStat(key); setEditValues({ [field]: value ?? '' }); }}
           style={{cursor:'pointer', border:'none', background:'none', color:'#3b82f6', fontSize:11, padding:0}}>
           ✏️
         </button>
@@ -541,7 +543,6 @@ function OperatorsTab() {
                   <th>Больничные</th>
                   <th>Отпускные</th>
                   <th>Переработка</th>
-                  <th>Руб/ч</th>
                   <th></th>
                 </tr>
               </thead>
@@ -557,29 +558,23 @@ function OperatorsTab() {
                       <td><b>{op.actualHours.toFixed(1)}</b></td>
                       <td>{renderEditable(op.id, 'sick_hours', op.sick_hours)}</td>
                       <td>{renderEditable(op.id, 'vacation_hours', op.vacation_hours)}</td>
-                      <td>{renderEditable(op.id, 'overtime_hours', op.overtime_hours)}</td>
-                      <td>{renderEditable(op.id, 'hourly_rate', op.hourly_rate)}</td>
+                      <td><b style={{color: op.overtime_hours > 0 ? '#dc2626' : '#64748b'}}>{op.overtime_hours.toFixed(1)}</b></td>
                       <td></td>
                     </tr>
-                    {expandedOps.has(op.id) && op.shifts.map(sh => (
-                      <tr key={sh.id} style={{background:'#f8fafc', fontSize:12}}>
-                        <td></td>
-                        <td style={{color:'#475569'}}>{formatDate(sh.date)}</td>
-                        <td colSpan={2} style={{color:'#475569'}}>
-                          {sh.shift_type === 'day' ? 'День' : 'Ночь'} | {sh.hours} ч
-                        </td>
-                        <td colSpan={2} style={{color:'#475569'}}>
-                          {sh.machine_type || '-'}
-                        </td>
-                        <td colSpan={2}></td>
-                        <td>
-                          <button onClick={() => handleDelete(sh.id)}
-                            style={{border:'none', background:'none', cursor:'pointer', color:'#dc2626', fontSize:12}}>
-                            Удалить
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {expandedOps.has(op.id) && (() => {
+                      const st1Hours = op.shifts.filter(s => s.machine_type === 'станок 1').reduce((sum, s) => sum + (s.hours || 0), 0);
+                      const st2Hours = op.shifts.filter(s => s.machine_type === 'станок 2').reduce((sum, s) => sum + (s.hours || 0), 0);
+                      const nightHours = op.shifts.filter(s => s.shift_type === 'night').reduce((sum, s) => sum + (s.hours || 0), 0);
+                      return (
+                        <tr style={{background:'#f8fafc', fontSize:12}}>
+                          <td></td>
+                          <td style={{color:'#475569'}} colSpan={6}>
+                            Станок 1: <b>{st1Hours}</b> ч | Станок 2: <b>{st2Hours}</b> ч | Ночь: <b>{nightHours}</b> ч | Итого: <b>{st1Hours + st2Hours + nightHours}</b> ч
+                          </td>
+                          <td></td>
+                        </tr>
+                      );
+                    })()}
                   </React.Fragment>
                 ))}
                 {aggregated.length === 0 && (

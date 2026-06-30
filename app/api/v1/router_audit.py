@@ -313,6 +313,9 @@ class OverrideCreate(BaseModel):
     st1: Optional[str] = None
     st2: Optional[str] = None
     night: Optional[str] = None
+    st1_hours: Optional[float] = None
+    st2_hours: Optional[float] = None
+    night_hours: Optional[float] = None
 
 
 @router.get("/overrides")
@@ -341,7 +344,7 @@ async def list_overrides(
     overrides = {}
     for r in rows:
         key = r.date.strftime("%Y-%m-%d")
-        overrides[key] = {"st1": r.st1, "st2": r.st2, "night": r.night}
+        overrides[key] = {"st1": r.st1, "st2": r.st2, "night": r.night, "st1_hours": r.st1_hours, "st2_hours": r.st2_hours, "night_hours": r.night_hours}
     return overrides
 
 
@@ -372,8 +375,11 @@ async def upsert_override(
         existing.st1 = data.st1
         existing.st2 = data.st2
         existing.night = data.night
+        existing.st1_hours = data.st1_hours
+        existing.st2_hours = data.st2_hours
+        existing.night_hours = data.night_hours
     else:
-        override = ScheduleOverride(date=dt, st1=data.st1, st2=data.st2, night=data.night)
+        override = ScheduleOverride(date=dt, st1=data.st1, st2=data.st2, night=data.night, st1_hours=data.st1_hours, st2_hours=data.st2_hours, night_hours=data.night_hours)
         db.add(override)
 
     await db.commit()

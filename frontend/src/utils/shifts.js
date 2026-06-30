@@ -64,10 +64,18 @@ export async function loadOverridesFromServer(month) {
   }
 }
 
-export async function saveOverrideToServer(dateStr, st1, st2, night) {
+export async function saveOverrideToServer(dateStr, form) {
   try {
     const client = (await import('../api/client')).default;
-    await client.post('/audit/overrides', { date: dateStr, st1: st1 || null, st2: st2 || null, night: night || null });
+    await client.post('/audit/overrides', {
+      date: dateStr,
+      st1: form.st1 || null,
+      st2: form.st2 || null,
+      night: form.night || null,
+      st1_hours: form.st1_hours ?? null,
+      st2_hours: form.st2_hours ?? null,
+      night_hours: form.night_hours ?? null,
+    });
   } catch (err) {
     console.error('Failed to save override to server', err);
   }
@@ -106,13 +114,14 @@ export function computeMonthShifts(year, month, overrides = {}) {
     const dateStr = `${year}-${mm}-${String(d).padStart(2, '0')}`;
     const date = new Date(year, month, d);
     const { pair, isVovaOn, isOverride } = getShiftForDate(date, overrides);
+    const ov = overrides[dateStr] || {};
 
     if (pair[0]) {
       shifts.push({
         username: pair[0],
         date: dateStr,
         shift_type: 'day',
-        hours: 12,
+        hours: ov.st1_hours ?? 12,
         machine_type: 'станок 1',
       });
     }
@@ -121,7 +130,7 @@ export function computeMonthShifts(year, month, overrides = {}) {
         username: pair[1],
         date: dateStr,
         shift_type: 'day',
-        hours: 12,
+        hours: ov.st2_hours ?? 12,
         machine_type: 'станок 2',
       });
     }
@@ -130,7 +139,7 @@ export function computeMonthShifts(year, month, overrides = {}) {
         username: 'Vova',
         date: dateStr,
         shift_type: 'night',
-        hours: 12,
+        hours: ov.night_hours ?? 12,
         machine_type: null,
       });
     }

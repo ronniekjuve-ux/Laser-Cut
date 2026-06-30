@@ -339,6 +339,9 @@ class ScheduleOverride(Base):
     st1: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     st2: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     night: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    st1_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    st2_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    night_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
