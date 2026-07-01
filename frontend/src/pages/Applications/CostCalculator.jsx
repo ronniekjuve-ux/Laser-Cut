@@ -21,9 +21,10 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
     return { cutLength, pierces, sheetWeight, sheetW, sheetH };
   }, [layouts]);
 
-  const cutCost = (parseFloat(pricePerCut) || 0) * totals.cutLength;
+  const cutLengthDisplay = showMeters ? totals.cutLength / 1000 : totals.cutLength;
+  const cutCost = (parseFloat(pricePerCut) || 0) * cutLengthDisplay;
   const pierceCost = (parseFloat(pricePerPierce) || 0) * totals.pierces;
-  const materialCost = !supply_material ? (parseFloat(pricePerKg) || 0) * totals.sheetWeight : 0;
+  const materialCost = (parseFloat(pricePerKg) || 0) * totals.sheetWeight;
   const totalCost = cutCost + pierceCost + materialCost;
 
   const fmt = (n) => n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -48,7 +49,9 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px 12px', marginBottom: 12 }}>
         <div>
-          <label style={{ display: 'block', color: '#64748b', marginBottom: 2, fontSize: 12 }}>Цена за мм реза (руб.)</label>
+          <label style={{ display: 'block', color: '#64748b', marginBottom: 2, fontSize: 12 }}>
+            {showMeters ? 'Цена за м реза (руб.)' : 'Цена за мм реза (руб.)'}
+          </label>
           <input
             type="number"
             value={pricePerCut}
@@ -67,21 +70,19 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
             style={{ width: '100%', padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, boxSizing: 'border-box' }}
           />
         </div>
-        {!supply_material && (
-          <div>
-            <label style={{ display: 'block', color: '#64748b', marginBottom: 2, fontSize: 12 }}>Цена за кг материала (руб.)</label>
-            <input
-              type="number"
-              value={pricePerKg}
-              onChange={e => setPricePerKg(e.target.value)}
-              placeholder="0"
-              style={{ width: '100%', padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, boxSizing: 'border-box' }}
-            />
-          </div>
-        )}
+        <div>
+          <label style={{ display: 'block', color: '#64748b', marginBottom: 2, fontSize: 12 }}>Цена за кг материала (руб.)</label>
+          <input
+            type="number"
+            value={pricePerKg}
+            onChange={e => setPricePerKg(e.target.value)}
+            placeholder="0"
+            style={{ width: '100%', padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, boxSizing: 'border-box' }}
+          />
+        </div>
       </div>
 
-      {!supply_material && totals.sheetWeight > 0 && (
+      {totals.sheetWeight > 0 && (
         <div style={{ padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, marginBottom: 12 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Данные по материалу</div>
           <div style={{ color: '#64748b' }}>
@@ -94,7 +95,7 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
       )}
 
       <div style={{
-        display: 'grid', gridTemplateColumns: !supply_material ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr',
+        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr',
         gap: 8, padding: '10px 12px', background: '#e0f2fe', borderRadius: 6, fontWeight: 600
       }}>
         <div>
@@ -105,12 +106,10 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
           <div style={{ color: '#64748b', fontSize: 11, fontWeight: 400 }}>Проколы</div>
           <div>{fmt(pierceCost)} руб.</div>
         </div>
-        {!supply_material && (
-          <div>
-            <div style={{ color: '#64748b', fontSize: 11, fontWeight: 400 }}>Материал</div>
-            <div>{fmt(materialCost)} руб.</div>
-          </div>
-        )}
+        <div>
+          <div style={{ color: '#64748b', fontSize: 11, fontWeight: 400 }}>Материал</div>
+          <div>{fmt(materialCost)} руб.</div>
+        </div>
         <div>
           <div style={{ color: '#64748b', fontSize: 11, fontWeight: 400 }}>ИТОГО</div>
           <div style={{ fontSize: 16, color: '#1d4ed8' }}>{fmt(totalCost)} руб.</div>

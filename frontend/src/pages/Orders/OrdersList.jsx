@@ -98,8 +98,14 @@ export default function OrdersList() {
 
   const fetchOrders = useCallback(async (searchQuery, pageNum = page) => {
     try {
-      const params = { page: pageNum, limit: 10, tab: 'orders' };
+      const params = { page: pageNum, limit: 15, tab: 'orders' };
       if (searchQuery) params.search = searchQuery;
+      if (filters.customer) params.customer_name = filters.customer[0];
+      if (filters.machine) params.machine = filters.machine[0];
+      if (filters.material) params.material = filters.material[0];
+      if (filters.thickness) params.thickness = filters.thickness[0];
+      if (filters.supply_material) params.supply_material = filters.supply_material[0] === 'Да' ? 'true' : 'false';
+      if (filters.priority) params.priority = filters.priority[0];
       const res = await client.get('/api/v1/applications/', { params });
       if (res.data.items) {
         setApplications(res.data.items);
@@ -113,7 +119,7 @@ export default function OrdersList() {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, filters]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
@@ -123,7 +129,7 @@ export default function OrdersList() {
       fetchOrders(search || undefined, 1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, filters]);
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -195,16 +201,7 @@ export default function OrdersList() {
     );
   };
 
-  const filtered = applications.filter(app => {
-    const rd = getRowData(app);
-    for (const [key, values] of Object.entries(filters)) {
-      if (values && values.length > 0) {
-        const val = String(rd[key] || '').trim();
-        if (!values.includes(val)) return false;
-      }
-    }
-    return true;
-  }).sort((a, b) => {
+  const filtered = applications.sort((a, b) => {
     const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
     const getPriorityVal = (app) => {
       const p = getRowData(app).priority;

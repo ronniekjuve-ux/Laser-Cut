@@ -333,12 +333,19 @@ async def list_applications(
         search: Optional[str] = None,
         page: int = Query(1, ge=1),
         limit: int = Query(50, ge=1, le=200),
+        customer_name: Optional[str] = None,
+        material: Optional[str] = None,
+        thickness: Optional[str] = None,
+        supply_material: Optional[str] = None,
+        priority: Optional[str] = None,
+        machine: Optional[str] = None,
+        status: Optional[str] = None,
         db: AsyncSession = Depends(get_db),
         user: User = Depends(get_current_user)
 ):
     from app.services.cache import get_redis, cache_key
     r = await get_redis()
-    ckey = cache_key("apps", tab, search, page, limit, user.id)
+    ckey = cache_key("apps", tab, search, page, limit, user.id, customer_name, material, thickness, supply_material, priority, machine)
     try:
         cached = await r.get(ckey)
         if cached:
@@ -384,6 +391,29 @@ async def list_applications(
         query = query.where(Application.status.in_(["pending", "rejected"]))
     elif tab == "orders":
         query = query.where(Application.status.in_(["approved", "in_progress", "partially_cut", "cut"]))
+
+    # Server-side column filters
+    if customer_name:
+        query = query.where(Customer.name.ilike(f"%{customer_name}%"))
+    if material:
+        query = query.where(Application.steel_grade.ilike(f"%{material}%"))
+    if thickness:
+        try:
+            query = query.where(Application.thickness == float(thickness))
+        except ValueError:
+            pass
+    if supply_material is not None and supply_material != '':
+        val = supply_material.lower() in ('true', 'да', '1', 'yes')
+        query = query.where(Application.supply_material == val)
+    if priority:
+        query = query.where(Application.priority == priority)
+    if machine:
+        machine_subq = select(ApplicationLayout.application_id).where(
+            ApplicationLayout.machine_type.ilike(f"%{machine}%")
+        ).distinct().subquery()
+        query = query.where(Application.id.in_(select(machine_subq.c.application_id)))
+    if status:
+        query = query.where(Application.status == status)
 
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)

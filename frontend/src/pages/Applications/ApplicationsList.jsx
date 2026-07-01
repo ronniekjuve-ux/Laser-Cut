@@ -171,8 +171,12 @@ export default function ApplicationsList() {
 
   const fetchApplications = useCallback(async (searchQuery, pageNum = page) => {
     try {
-      const params = { page: pageNum, limit: 10, tab: 'applications' };
+      const params = { page: pageNum, limit: 15, tab: 'applications' };
       if (searchQuery) params.search = searchQuery;
+      if (filters.customer) params.customer_name = filters.customer[0];
+      if (filters.material) params.material = filters.material[0];
+      if (filters.thickness) params.thickness = filters.thickness[0];
+      if (filters.supply_material) params.supply_material = filters.supply_material[0] === 'Да' ? 'true' : 'false';
       const res = await client.get('/api/v1/applications/', { params });
       if (res.data.items) {
         setApplications(res.data.items);
@@ -186,7 +190,7 @@ export default function ApplicationsList() {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, filters]);
 
   useEffect(() => { fetchApplications(); }, [fetchApplications]);
 
@@ -197,7 +201,7 @@ export default function ApplicationsList() {
       fetchApplications(search || undefined, 1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, filters]);
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -266,16 +270,7 @@ export default function ApplicationsList() {
     );
   };
 
-  const filtered = applications.filter(app => {
-    const rd = getRowData(app);
-    for (const [key, values] of Object.entries(filters)) {
-      if (values && values.length > 0) {
-        const val = String(rd[key] || '').trim();
-        if (!values.includes(val)) return false;
-      }
-    }
-    return true;
-  }).sort((a, b) => {
+  const filtered = applications.sort((a, b) => {
     if (!sortCol) return 0;
     const ra = getRowData(a);
     const rb = getRowData(b);

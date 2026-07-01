@@ -6,18 +6,28 @@ export default function CompletedOrdersList() {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
-  const fetchCompleted = useCallback(async () => {
+  const fetchCompleted = useCallback(async (pageNum = page) => {
     try {
-      const res = await client.get('/api/v1/applications/', { params: { tab: 'orders', limit: 100 } });
-      const items = res.data.items || (Array.isArray(res.data) ? res.data : []);
-      setApplications(items.filter(app => app.status === 'cut'));
+      const res = await client.get('/api/v1/applications/', {
+        params: { tab: 'orders', status: 'cut', page: pageNum, limit: 15 }
+      });
+      if (res.data.items) {
+        setApplications(res.data.items);
+        setTotal(res.data.total);
+        setTotalPages(res.data.pages);
+      } else {
+        setApplications(Array.isArray(res.data) ? res.data : []);
+      }
     } catch (err) {
       console.error('Failed to load completed orders', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => { fetchCompleted(); }, [fetchCompleted]);
 
@@ -36,7 +46,7 @@ export default function CompletedOrdersList() {
   return (
     <div>
       <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>
-        Выполнено: {applications.length} заказов
+        Выполнено: {total} заказов
       </div>
 
       <div className="table-container">
@@ -98,11 +108,33 @@ export default function CompletedOrdersList() {
         </table>
       </div>
 
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center' }}>
+          <button className="btn" onClick={() => { setPage(1); fetchCompleted(1); }} disabled={page <= 1} style={{ fontSize: 12 }}>«</button>
+          <button className="btn" onClick={() => { const p = page - 1; setPage(p); fetchCompleted(p); }} disabled={page <= 1} style={{ fontSize: 12 }}>‹</button>
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let p;
+            if (totalPages <= 5) p = i + 1;
+            else if (page <= 3) p = i + 1;
+            else if (page >= totalPages - 2) p = totalPages - 4 + i;
+            else p = page - 2 + i;
+            return (
+              <button key={p} className={'btn' + (p === page ? ' btn-primary' : '')}
+                onClick={() => { setPage(p); fetchCompleted(p); }}
+                style={{ fontSize: 12 }}>{p}</button>
+            );
+          })}
+          <button className="btn" onClick={() => { const p = page + 1; setPage(p); fetchCompleted(p); }} disabled={page >= totalPages} style={{ fontSize: 12 }}>›</button>
+          <button className="btn" onClick={() => { setPage(totalPages); fetchCompleted(totalPages); }} disabled={page >= totalPages} style={{ fontSize: 12 }}>»</button>
+          <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8 }}>{total} заказов | Стр. {page} из {totalPages}</span>
+        </div>
+      )}
+
       {selectedApp && (
         <ApplicationDetail
           app={selectedApp}
           onClose={() => setSelectedApp(null)}
-          onUpdate={fetchCompleted}
+          onUpdate={() => fetchCompleted()}
         />
       )}
     </div>
