@@ -3,8 +3,8 @@ const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  '/icons/icon-192.svg',
+  '/icons/icon-512.svg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -46,6 +46,21 @@ self.addEventListener('fetch', event => {
           }
           return fetchResponse;
         });
+      })
+    );
+  }
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data && event.data.type === 'CLEAR_AND_RELOAD') {
+    caches.keys().then(names =>
+      Promise.all(names.map(n => caches.delete(n)))
+    ).then(() =>
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => client.postMessage({ type: 'CACHE_CLEARED' }));
       })
     );
   }

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
 import InstallPWA from './InstallPWA';
+import UpdateBanner from './UpdateBanner';
+import CacheManager from './CacheManager';
 import { getShiftForDate, loadOverrides } from '../utils/shifts';
 
 function getActiveOps() {
@@ -141,6 +143,7 @@ export default function Layout() {
           </div>
           <div className="header-right">
             <span className="clock">{clock}</span>
+            <CacheManager />
             <span className="notif-bell" onClick={openNotifications} style={{cursor: 'pointer', position: 'relative', fontSize: 18}}>
               🔔
               {unreadCount > 0 && (
@@ -180,6 +183,7 @@ export default function Layout() {
             <span className="user-badge">👤 {user?.username || '...'}</span>
           </div>
         </div>
+        <UpdateBanner />
         <div className="content">
           <Outlet />
         </div>
