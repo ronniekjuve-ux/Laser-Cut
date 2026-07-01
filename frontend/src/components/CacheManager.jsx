@@ -63,15 +63,13 @@ export default function CacheManager() {
     }
   };
 
-  const clearCache = () => {
-    if (!navigator.serviceWorker?.controller) {
-      // Fallback: clear caches directly
-      caches.keys().then(names =>
-        Promise.all(names.map(n => caches.delete(n)))
-      ).then(() => window.location.reload());
-      return;
-    }
-    navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_AND_RELOAD' });
+  const clearCache = async () => {
+    // Clear all caches directly, then reload
+    try {
+      const names = await caches.keys();
+      await Promise.all(names.map(n => caches.delete(n)));
+    } catch {}
+    window.location.reload();
   };
 
   return (
