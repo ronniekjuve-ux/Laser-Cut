@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import client from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
+import CostCalculator from '../Applications/CostCalculator';
 
 const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
@@ -30,6 +31,7 @@ const EXPORT_COLUMNS = [
   { key: 'steel_grade', label: 'Марка' },
   { key: 'thickness', label: 'Толщ.' },
   { key: 'supply_material', label: 'Дав.мат' },
+  { key: 'position', label: 'Положение' },
   { key: 'layouts_count', label: 'Раскладок' },
   { key: 'total_sheets', label: 'Листов' },
   { key: 'total_cut_length', label: 'Длина реза' },
@@ -118,6 +120,8 @@ function ApplicationsTab() {
   const selectAllColumns = () => setSelectedColumns(EXPORT_COLUMNS.map(c => c.key));
   const deselectAllColumns = () => setSelectedColumns([]);
 
+  const [calcModal, setCalcModal] = useState(null);
+
   const exportToExcel = async () => {
     if (selectedColumns.length === 0) return;
     const XLSX = await import('xlsx');
@@ -149,6 +153,12 @@ function ApplicationsTab() {
       case 'steel_grade': return item.steel_grade || item.material || '-';
       case 'thickness': return item.thickness ?? '';
       case 'supply_material': return item.supply_material ? 'Да' : item.supply_material === false ? 'Нет' : '-';
+      case 'position': {
+        const s = item.status;
+        if (s === 'cut') return 'Выполнено';
+        if (s === 'approved' || s === 'in_progress' || s === 'partially_cut') return 'В заказах';
+        return 'В заявках';
+      }
       case 'layouts_count': return item.layouts_count ?? '';
       case 'total_sheets': return item.total_sheets ?? '';
       case 'total_cut_length': return formatNum(item.total_cut_length, 1);
@@ -267,6 +277,7 @@ function ApplicationsTab() {
                         <th>Марка</th>
                         <th>Толщ.</th>
                         <th>Дав.мат</th>
+                        <th>Положение</th>
                         <th>Раскладок</th>
                         <th>Листов</th>
                         <th>Длина реза</th>
@@ -285,6 +296,14 @@ function ApplicationsTab() {
                             <td>{item.steel_grade || item.material}</td>
                             <td>{item.thickness}</td>
                             <td>{item.supply_material ? 'Да' : item.supply_material === false ? 'Нет' : '-'}</td>
+                            <td style={{fontSize:12}}>
+                              {(() => {
+                                const s = item.status;
+                                if (s === 'cut') return <span style={{color:'#047857',fontWeight:600}}>Выполнено</span>;
+                                if (s === 'approved' || s === 'in_progress' || s === 'partially_cut') return <span style={{color:'#b45309'}}>В заказах</span>;
+                                return <span style={{color:'#0369a1'}}>В заявках</span>;
+                              })()}
+                            </td>
                             <td>{item.layouts_count}</td>
                             <td>{item.total_sheets}</td>
                             <td>{formatNum(item.total_cut_length, 1)}</td>
@@ -307,6 +326,16 @@ function ApplicationsTab() {
                               <td style={{color:'#475569'}}>{l.sheet_weight ? formatNum(l.sheet_weight * (l.sheet_count || 1), 1) + ' кг' : '-'}</td>
                             </tr>
                           ))}
+                          {expandedApps.has(item.id) && (
+                            <tr style={{background:'#f0f9ff'}}>
+                              <td colSpan={13} style={{padding:'8px 12px'}}>
+                                <button className="btn" onClick={(e) => { e.stopPropagation(); setCalcModal(item); }}
+                                  style={{fontSize:12}}>
+                                  🧮 Калькулятор
+                                </button>
+                              </td>
+                            </tr>
+                          )}
                         </React.Fragment>
                       ))}
                     </tbody>
@@ -339,6 +368,39 @@ function ApplicationsTab() {
           })()}
         </div>
       ))}
+
+      {calcModal && (
+        <div className="modal-overlay active" onClick={() => setCalcModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+            <div className="modal-header">
+              <h3>Предварительный расчёт — {calcModal.order_name || calcModal.id}</h3>
+              <button className="close-btn" onClick={() => setCalcModal(null)}>{'\u2715'}</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: 12, fontSize: 13, color: '#64748b' }}>
+                <span>Материал: <b>{calcModal.steel_grade || calcModal.material || '-'}</b> · </span>
+                <span>Толщина: <b>{calcModal.thickness ? calcModal.thickness + ' мм' : '-'}</b></span>
+              </div>
+              {calcModal.layouts && calcModal.layouts.length > 0 ? (
+                <CostCalculator
+                  layouts={calcModal.layouts}
+                  supply_material={calcModal.supply_material}
+                  thickness={calcModal.thickness}
+                  steel_grade={calcModal.steel_grade || calcModal.material}
+                  showMeters
+                />
+              ) : (
+                <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>
+                  Нет загруженных раскладок
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={() => setCalcModal(null)}>Закрыть</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

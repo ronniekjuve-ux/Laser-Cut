@@ -244,7 +244,6 @@ export default function OrdersList() {
   });
 
   const activeApps = filtered.filter(app => app.status !== 'cut');
-  const completedApps = filtered.filter(app => app.status === 'cut');
 
   const toggleFilterItem = (colKey, val) => {
     setFilters(prev => {
@@ -649,63 +648,6 @@ export default function OrdersList() {
           </tbody>
         </table>
       </div>
-
-      {completedApps.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#64748b' }}>Выполненные заказы</h4>
-          <div className="table-container" style={{ maxHeight: 150, overflowY: 'auto' }}>
-            <table>
-              <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-                <tr>
-                  <th>№</th>
-                  <th>Заказчик</th>
-                  <th>Станок</th>
-                  <th>Материал</th>
-                  <th>Толщ.</th>
-                  <th>Дав. мат</th>
-                  <th>Поступил</th>
-                  <th>Выполнена</th>
-                  <th>Оператор</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {completedApps.map(app => (
-                  <tr key={app.id} onClick={() => setSelectedApp(app)} style={{ cursor: 'pointer', opacity: 0.7 }}>
-                    <td style={{fontWeight: 600, color: '#64748b'}}>#{app.id}</td>
-                    <td>{app.customer}</td>
-                    <td>{app.machine}</td>
-                    <td>{app.steel_grade || app.material}</td>
-                    <td>{app.thickness}</td>
-                    <td>
-                      <span style={{
-                        padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600,
-                        background: app.supply_material === true ? '#d1fae5' : app.supply_material === false ? '#fee2e2' : '#f1f5f9',
-                        color: app.supply_material === true ? '#047857' : app.supply_material === false ? '#b91c1c' : '#94a3b8',
-                      }}>
-                        {app.supply_material === true ? 'Да' : app.supply_material === false ? 'Нет' : '—'}
-                      </span>
-                    </td>
-                    <td>{app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : ''}</td>
-                    <td>{app.cut_at ? new Date(app.cut_at).toLocaleDateString('ru-RU') : ''}</td>
-                    <td>{app.cut_by || ''}</td>
-                    <td>
-                      <button
-                        className="btn"
-                        onClick={(e) => handleCancelCut(e, app.id)}
-                        title="Отменить вырезание"
-                        style={{ padding: '3px 8px', fontSize: 11 }}
-                      >
-                        ↩️
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {totalPages > 1 && (
         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center' }}>

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 
-export default function CostCalculator({ layouts, supply_material, thickness, steel_grade }) {
+export default function CostCalculator({ layouts, supply_material, thickness, steel_grade, showMeters }) {
   const [pricePerCut, setPricePerCut] = useState('');
   const [pricePerPierce, setPricePerPierce] = useState('');
   const [pricePerKg, setPricePerKg] = useState('');
@@ -14,7 +14,7 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
     for (const l of (layouts || [])) {
       cutLength += l.cut_length || 0;
       pierces += l.pierces || 0;
-      if (!sheetWeight && l.sheet_weight) sheetWeight = l.sheet_weight;
+      if (!sheetWeight) sheetWeight = l.sheet_weight || l.parts_weight || 0;
       if (!sheetW && l.sheet_w) sheetW = l.sheet_w;
       if (!sheetH && l.sheet_h) sheetH = l.sheet_h;
     }
@@ -38,7 +38,7 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', marginBottom: 12 }}>
         <div>
           <span style={{ color: '#64748b' }}>Суммарная длина реза: </span>
-          <b>{fmt(totals.cutLength)} мм</b>
+          <b>{showMeters ? (totals.cutLength / 1000).toLocaleString('ru-RU', { maximumFractionDigits: 4 }) + ' м' : fmt(totals.cutLength) + ' мм'}</b>
         </div>
         <div>
           <span style={{ color: '#64748b' }}>Кол-во проколов: </span>

@@ -12,6 +12,7 @@ import AuditLog from './pages/Audit/AuditProduction';
 import ChangeLog from './pages/ChangeLog/ChangeLog';
 import Warehouse from './pages/Warehouse/Warehouse';
 import OrdersList from './pages/Orders/OrdersList';
+import CompletedOrdersList from './pages/Orders/CompletedOrdersList';
 import Feedback from './pages/Feedback';
 
 export default function App() {
@@ -59,6 +60,11 @@ export default function App() {
             <Route path="orders" element={
               <ProtectedRoute roles={['admin', 'director', 'accountant', 'operator', 'customer']}>
                 <OrdersList />
+              </ProtectedRoute>
+            } />
+            <Route path="completed" element={
+              <ProtectedRoute roles={['admin', 'director', 'accountant', 'operator', 'customer']}>
+                <CompletedOrdersList />
               </ProtectedRoute>
             } />
             <Route path="feedback" element={
