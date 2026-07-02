@@ -460,6 +460,10 @@ async def list_applications(
             )
             matched_parts = list(parts_result.scalars().all())
 
+        total_sheets = sum(l.sheet_count or 1 for l in active_layouts)
+        first_sheet_size = f"{first_layout.sheet_w}x{first_layout.sheet_h}" if first_layout else None
+        first_layout_image = first_layout.layout_image if first_layout else None
+
         enriched.append({
             "id": app.id,
             "order_name": app.order_name,
@@ -476,6 +480,9 @@ async def list_applications(
             "status": app.status or "pending",
             "priority": app.priority or "medium",
             "supply_material": app.supply_material,
+            "layout_image": first_layout_image,
+            "sheet_size": first_sheet_size,
+            "sheet_count": total_sheets,
             "cut_at": app.cut_at.isoformat() if app.cut_at else None,
             "cut_by_id": app.cut_by,
             "matched_parts": matched_parts,

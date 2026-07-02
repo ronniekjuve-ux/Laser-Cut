@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import client from '../../api/client';
 import ApplicationDetail from '../Applications/ApplicationDetail';
+import MobileOrderCard from '../../components/MobileOrderCard';
+import MobileOrderDetail from '../../components/MobileOrderDetail';
 
 export default function CompletedOrdersList() {
   const [applications, setApplications] = useState([]);
@@ -9,6 +11,14 @@ export default function CompletedOrdersList() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const fetchCompleted = useCallback(async (pageNum = page) => {
     try {
@@ -49,64 +59,91 @@ export default function CompletedOrdersList() {
         Выполнено: {total} заказов
       </div>
 
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>№</th>
-              <th>Заказчик</th>
-              <th>Станок</th>
-              <th>Материал</th>
-              <th>Толщ.</th>
-              <th>Дав. мат</th>
-              <th>Поступил</th>
-              <th>Выполнена</th>
-              <th>Оператор</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {applications.map(app => (
-              <tr key={app.id} onClick={() => setSelectedApp(app)} style={{ cursor: 'pointer', opacity: 0.7 }}>
-                <td style={{ fontWeight: 600, color: '#64748b' }}>#{app.id}</td>
-                <td>{app.customer}</td>
-                <td>{app.machine}</td>
-                <td>{app.steel_grade || app.material}</td>
-                <td>{app.thickness}</td>
-                <td>
-                  <span style={{
-                    padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600,
-                    background: app.supply_material === true ? '#d1fae5' : app.supply_material === false ? '#fee2e2' : '#f1f5f9',
-                    color: app.supply_material === true ? '#047857' : app.supply_material === false ? '#b91c1c' : '#94a3b8',
-                  }}>
-                    {app.supply_material === true ? 'Да' : app.supply_material === false ? 'Нет' : '—'}
-                  </span>
-                </td>
-                <td>{app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : ''}</td>
-                <td>{app.cut_at ? new Date(app.cut_at).toLocaleDateString('ru-RU') : ''}</td>
-                <td>{app.cut_by || ''}</td>
-                <td>
-                  <button
-                    className="btn"
-                    onClick={(e) => handleCancelCut(e, app.id)}
-                    title="Вернуть в заказы"
-                    style={{ padding: '3px 8px', fontSize: 11 }}
-                  >
-                    ↩️
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {applications.length === 0 && (
+      {isMobile ? (
+        <div className="order-cards">
+          {applications.map(app => (
+            <div key={app.id} style={{ position: 'relative' }}>
+              <MobileOrderCard
+                app={app}
+                onClick={(a) => setSelectedApp(a)}
+              />
+              <button
+                className="btn"
+                onClick={(e) => handleCancelCut(e, app.id)}
+                title="Вернуть в заказы"
+                style={{
+                  position: 'absolute', top: 8, right: 8, padding: '4px 8px', fontSize: 11,
+                  background: '#fff', zIndex: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                }}
+              >
+                ↩️
+              </button>
+            </div>
+          ))}
+          {applications.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Нет выполненных заказов</div>
+          )}
+        </div>
+      ) : (
+        <div className="table-container">
+          <table>
+            <thead>
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>
-                  Нет выполненных заказов
-                </td>
+                <th>№</th>
+                <th>Заказчик</th>
+                <th>Станок</th>
+                <th>Материал</th>
+                <th>Толщ.</th>
+                <th>Дав. мат</th>
+                <th>Поступил</th>
+                <th>Выполнена</th>
+                <th>Оператор</th>
+                <th></th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {applications.map(app => (
+                <tr key={app.id} onClick={() => setSelectedApp(app)} style={{ cursor: 'pointer', opacity: 0.7 }}>
+                  <td style={{ fontWeight: 600, color: '#64748b' }}>#{app.id}</td>
+                  <td>{app.customer}</td>
+                  <td>{app.machine}</td>
+                  <td>{app.steel_grade || app.material}</td>
+                  <td>{app.thickness}</td>
+                  <td>
+                    <span style={{
+                      padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+                      background: app.supply_material === true ? '#d1fae5' : app.supply_material === false ? '#fee2e2' : '#f1f5f9',
+                      color: app.supply_material === true ? '#047857' : app.supply_material === false ? '#b91c1c' : '#94a3b8',
+                    }}>
+                      {app.supply_material === true ? 'Да' : app.supply_material === false ? 'Нет' : '—'}
+                    </span>
+                  </td>
+                  <td>{app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : ''}</td>
+                  <td>{app.cut_at ? new Date(app.cut_at).toLocaleDateString('ru-RU') : ''}</td>
+                  <td>{app.cut_by || ''}</td>
+                  <td>
+                    <button
+                      className="btn"
+                      onClick={(e) => handleCancelCut(e, app.id)}
+                      title="Вернуть в заказы"
+                      style={{ padding: '3px 8px', fontSize: 11 }}
+                    >
+                      ↩️
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {applications.length === 0 && (
+                <tr>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>
+                    Нет выполненных заказов
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {totalPages > 1 && (
         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center' }}>
@@ -131,11 +168,19 @@ export default function CompletedOrdersList() {
       )}
 
       {selectedApp && (
-        <ApplicationDetail
-          app={selectedApp}
-          onClose={() => setSelectedApp(null)}
-          onUpdate={() => fetchCompleted()}
-        />
+        isMobile ? (
+          <MobileOrderDetail
+            app={selectedApp}
+            onClose={() => setSelectedApp(null)}
+            onUpdate={() => fetchCompleted()}
+          />
+        ) : (
+          <ApplicationDetail
+            app={selectedApp}
+            onClose={() => setSelectedApp(null)}
+            onUpdate={() => fetchCompleted()}
+          />
+        )
       )}
     </div>
   );

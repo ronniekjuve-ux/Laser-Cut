@@ -213,4 +213,15 @@ tr:hover{background:#eff6ff}
   .content { padding: 12px; }
   table { font-size: 12px; }
   th, td { padding: 6px 8px; }
+
+  .order-cards { display: flex; flex-direction: column; gap: 12px; }
+  .order-card { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+  .order-card:active { transform: scale(0.98); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .order-card-image { width: 100%; height: 180px; object-fit: contain; background: #f8fafc; display: block; }
+  .order-card-body { padding: 12px; }
+  .order-card-customer { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 4px; line-height: 1.3; }
+  .order-card-meta { font-size: 13px; color: #64748b; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .order-card-meta span { display: inline-flex; align-items: center; gap: 3px; }
+  .order-card-footer { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .order-card-no-image { width: 100%; height: 120px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 13px; }
 }

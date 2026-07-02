@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import ApplicationDetail from '../Applications/ApplicationDetail';
+import MobileOrderCard from '../../components/MobileOrderCard';
+import MobileOrderDetail from '../../components/MobileOrderDetail';
 import NewOrderModal from '../Applications/NewOrderModal';
 import MergeModal from '../Applications/MergeModal';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -95,6 +97,14 @@ export default function OrdersList() {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [editModal, setEditModal] = useState(null);
   const filterRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const fetchOrders = useCallback(async (searchQuery, pageNum = page) => {
     try {
@@ -354,297 +364,312 @@ export default function OrdersList() {
         </div>
       )}
 
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              {COLUMNS.map(col => (
-                <th
-                  key={col.key}
-                  className={col.sortable ? 'sortable' : ''}
-                  onClick={() => col.sortable && handleSort(col.key)}
-                >
-                  {col.label}
-                  {col.sortable && (
-                    <span className="sort-indicator">
-                      {sortCol === col.key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ⇅'}
-                    </span>
-                  )}
-                  {col.filterable && (
-                    <span
-                      className="filter-icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (openFilter === col.key) { setOpenFilter(null); return; }
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setFilterPos({ top: rect.bottom + 4, left: rect.left });
-                        setOpenFilter(col.key);
-                        setFilterSearch('');
-                      }}
-                      style={{ marginLeft: 5, cursor: 'pointer', fontSize: 12, position: 'relative' }}
-                    >
-                      ▼
-                    </span>
-                  )}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {activeApps.map(app => (
-              <React.Fragment key={app.id}>
-                <tr onClick={() => setSelectedApp(app)} style={{
-                  cursor: 'pointer',
-                  background: highlightId && app.id === parseInt(highlightId) ? '#fef08a' : app.is_replaced ? '#f9fafb' : app.has_merged ? '#fde68a' : undefined,
-                  opacity: app.is_replaced ? 0.5 : 1,
-                }}>
-                  {COLUMNS.map(col => (
-                    <td key={col.key}>
-                      {col.key === 'checkbox' ? (
-                        <input
-                          type="checkbox"
-                          checked={selectedApps.includes(app.id)}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            setSelectedApps(prev =>
-                              prev.includes(app.id)
-                                ? prev.filter(id => id !== app.id)
-                                : [...prev, app.id]
-                            );
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : col.key === 'number' ? (
-                      <span style={{fontWeight: 600, color: '#64748b'}}>
-                        #{app.id}
-                        {app.has_merged && (
-                          <span title="Содержит слияние" style={{
-                            marginLeft: 4, fontSize: 10, padding: '1px 4px', borderRadius: 3,
-                            background: '#fef9c3', color: '#854d0e', fontWeight: 600, verticalAlign: 'middle'
-                          }}>
-                            { '\u{1F517}' }
-                          </span>
-                        )}
+      {isMobile ? (
+        <div className="order-cards">
+          {activeApps.map(app => (
+            <MobileOrderCard
+              key={app.id}
+              app={app}
+              onClick={(a) => setSelectedApp(a)}
+            />
+          ))}
+          {activeApps.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Нет активных заказов</div>
+          )}
+        </div>
+      ) : (
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                {COLUMNS.map(col => (
+                  <th
+                    key={col.key}
+                    className={col.sortable ? 'sortable' : ''}
+                    onClick={() => col.sortable && handleSort(col.key)}
+                  >
+                    {col.label}
+                    {col.sortable && (
+                      <span className="sort-indicator">
+                        {sortCol === col.key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ⇅'}
                       </span>
-                    ) : col.key === 'group' ? (
-                      app.group_name ? (
-                        <span
-                          onClick={(e) => { e.stopPropagation(); setGroupDetailId(app.group_id); }}
-                          style={{
-                            background: '#ede9fe', color: '#7c3aed', padding: '2px 6px', borderRadius: 4,
-                            fontSize: 11, fontWeight: 600, cursor: 'pointer'
-                          }}
-                          title="Открыть группу"
-                        >
-                          {app.group_name}
-                        </span>
-                      ) : (
-                        <span style={{color: '#cbd5e1', fontSize: 11}}>—</span>
-                      )
-                    ) : col.key === 'status' ? (
-                        (user?.role === 'admin' || user?.role === 'operator') ? (
-                          <div style={{ position: 'relative' }}>
+                    )}
+                    {col.filterable && (
+                      <span
+                        className="filter-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (openFilter === col.key) { setOpenFilter(null); return; }
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setFilterPos({ top: rect.bottom + 4, left: rect.left });
+                          setOpenFilter(col.key);
+                          setFilterSearch('');
+                        }}
+                        style={{ marginLeft: 5, cursor: 'pointer', fontSize: 12, position: 'relative' }}
+                      >
+                        ▼
+                      </span>
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {activeApps.map(app => (
+                <React.Fragment key={app.id}>
+                  <tr onClick={() => setSelectedApp(app)} style={{
+                    cursor: 'pointer',
+                    background: highlightId && app.id === parseInt(highlightId) ? '#fef08a' : app.is_replaced ? '#f9fafb' : app.has_merged ? '#fde68a' : undefined,
+                    opacity: app.is_replaced ? 0.5 : 1,
+                  }}>
+                    {COLUMNS.map(col => (
+                      <td key={col.key}>
+                        {col.key === 'checkbox' ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedApps.includes(app.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              setSelectedApps(prev =>
+                                prev.includes(app.id)
+                                  ? prev.filter(id => id !== app.id)
+                                  : [...prev, app.id]
+                              );
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : col.key === 'number' ? (
+                          <span style={{fontWeight: 600, color: '#64748b'}}>
+                            #{app.id}
+                            {app.has_merged && (
+                              <span title="Содержит слияние" style={{
+                                marginLeft: 4, fontSize: 10, padding: '1px 4px', borderRadius: 3,
+                                background: '#fef9c3', color: '#854d0e', fontWeight: 600, verticalAlign: 'middle'
+                              }}>
+                                { '\u{1F517}' }
+                              </span>
+                            )}
+                          </span>
+                        ) : col.key === 'group' ? (
+                          app.group_name ? (
                             <span
-                              className={'badge ' + (
+                              onClick={(e) => { e.stopPropagation(); setGroupDetailId(app.group_id); }}
+                              style={{
+                                background: '#ede9fe', color: '#7c3aed', padding: '2px 6px', borderRadius: 4,
+                                fontSize: 11, fontWeight: 600, cursor: 'pointer'
+                              }}
+                              title="Открыть группу"
+                            >
+                              {app.group_name}
+                            </span>
+                          ) : (
+                            <span style={{color: '#cbd5e1', fontSize: 11}}>—</span>
+                          )
+                        ) : col.key === 'status' ? (
+                            (user?.role === 'admin' || user?.role === 'operator') ? (
+                              <div style={{ position: 'relative' }}>
+                                <span
+                                  className={'badge ' + (
+                                    app.status === 'cut' ? 'bg-done' :
+                                    app.status === 'in_progress' || app.status === 'partially_cut' ? 'bg-work' : 'bg-approved'
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setStatusDropdown(statusDropdown === app.id ? null : app.id);
+                                  }}
+                                  style={{ cursor: 'pointer' }}
+                                >
+                                  {app.status === 'cut' ? 'Вырезано' :
+                                   app.status === 'in_progress' ? 'В резке' :
+                                   app.status === 'partially_cut' ? 'Частично вырезано' : 'В очереди'} ▾
+                                </span>
+                                {statusDropdown === app.id && (
+                                  <div
+                                    style={{
+                                      position: 'absolute', top: '100%', left: 0, zIndex: 9999,
+                                      background: '#fff', border: '1px solid var(--border)', borderRadius: 6,
+                                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 160, marginTop: 4,
+                                    }}
+                                  >
+                                    {[
+                                      { key: 'approved', label: 'В очереди', bg: '#f0fdf4', color: '#15803d' },
+                                      { key: 'in_progress', label: 'В резке', bg: '#dbeafe', color: '#1d4ed8' },
+                                      { key: 'partially_cut', label: 'Частично вырезано', bg: '#fef3c7', color: '#92400e' },
+                                      { key: 'cut', label: 'Вырезано', bg: '#dcfce7', color: '#166534' },
+                                    ].map(s => (
+                                      <div
+                                        key={s.key}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          client.patch('/api/v1/applications/' + app.id + '/status?status=' + s.key)
+                                            .then(() => { setStatusDropdown(null); fetchOrders(search || undefined); });
+                                        }}
+                                        style={{
+                                          padding: '6px 10px', fontSize: 12, cursor: 'pointer',
+                                          background: app.status === s.key ? s.bg : '#fff',
+                                          color: app.status === s.key ? s.color : '#334155',
+                                          fontWeight: app.status === s.key ? 600 : 400,
+                                        }}
+                                      >
+                                        {s.label}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className={'badge ' + (
                                 app.status === 'cut' ? 'bg-done' :
                                 app.status === 'in_progress' || app.status === 'partially_cut' ? 'bg-work' : 'bg-approved'
-                              )}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setStatusDropdown(statusDropdown === app.id ? null : app.id);
-                              }}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              {app.status === 'cut' ? 'Вырезано' :
-                               app.status === 'in_progress' ? 'В резке' :
-                               app.status === 'partially_cut' ? 'Частично вырезано' : 'В очереди'} ▾
-                            </span>
-                            {statusDropdown === app.id && (
-                              <div
+                              )}>
+                                {app.status === 'cut' ? 'Вырезано' :
+                                 app.status === 'in_progress' ? 'В резке' :
+                                 app.status === 'partially_cut' ? 'Частично вырезано' : 'В очереди'}
+                              </span>
+                            )
+                          ) : col.key === 'supply_material' ? (
+                            <div style={{ position: 'relative' }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const openId = 'supply-dropdown-' + app.id;
+                                  const el = document.getElementById(openId);
+                                  if (el) {
+                                    if (el.style.display === 'block') {
+                                      el.style.display = 'none';
+                                    } else {
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      el.style.display = 'block';
+                                      el.style.position = 'fixed';
+                                      el.style.top = (rect.bottom + 4) + 'px';
+                                      el.style.left = rect.left + 'px';
+                                    }
+                                  }
+                                }}
                                 style={{
-                                  position: 'absolute', top: '100%', left: 0, zIndex: 9999,
+                                  cursor: 'pointer', padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 600, border: '1px solid var(--border)',
+                                  background: app.supply_material === true ? '#d1fae5' : app.supply_material === false ? '#fee2e2' : '#f1f5f9',
+                                  color: app.supply_material === true ? '#047857' : app.supply_material === false ? '#b91c1c' : '#94a3b8',
+                                }}
+                              >
+                                {app.supply_material === true ? 'Да' : app.supply_material === false ? 'Нет' : '—'} ▾
+                              </button>
+                              <div
+                                id={'supply-dropdown-' + app.id}
+                                style={{
+                                  display: 'none', position: 'fixed', zIndex: 9999,
                                   background: '#fff', border: '1px solid var(--border)', borderRadius: 6,
-                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 160, marginTop: 4,
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 80,
                                 }}
                               >
                                 {[
-                                  { key: 'approved', label: 'В очереди', bg: '#f0fdf4', color: '#15803d' },
-                                  { key: 'in_progress', label: 'В резке', bg: '#dbeafe', color: '#1d4ed8' },
-                                  { key: 'partially_cut', label: 'Частично вырезано', bg: '#fef3c7', color: '#92400e' },
-                                  { key: 'cut', label: 'Вырезано', bg: '#dcfce7', color: '#166534' },
-                                ].map(s => (
+                                  { val: true, label: 'Да', bg: '#d1fae5', color: '#047857' },
+                                  { val: false, label: 'Нет', bg: '#fee2e2', color: '#b91c1c' },
+                                  { val: null, label: '—', bg: '#f1f5f9', color: '#94a3b8' },
+                                ].map(opt => (
                                   <div
-                                    key={s.key}
+                                    key={opt.label}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      client.patch('/api/v1/applications/' + app.id + '/status?status=' + s.key)
-                                        .then(() => { setStatusDropdown(null); fetchOrders(search || undefined); });
+                                      const val = opt.val === true ? 'true' : opt.val === false ? 'false' : '';
+                                      client.patch('/api/v1/applications/' + app.id + '/supply_material?value=' + val)
+                                        .then(() => fetchOrders(search || undefined));
+                                      document.getElementById('supply-dropdown-' + app.id).style.display = 'none';
                                     }}
                                     style={{
                                       padding: '6px 10px', fontSize: 12, cursor: 'pointer',
-                                      background: app.status === s.key ? s.bg : '#fff',
-                                      color: app.status === s.key ? s.color : '#334155',
-                                      fontWeight: app.status === s.key ? 600 : 400,
+                                      background: app.supply_material === opt.val ? opt.bg : '#fff',
+                                      color: app.supply_material === opt.val ? opt.color : '#334155',
+                                      fontWeight: app.supply_material === opt.val ? 600 : 400,
                                     }}
                                   >
-                                    {s.label}
+                                    {opt.label}
                                   </div>
                                 ))}
                               </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className={'badge ' + (
-                            app.status === 'cut' ? 'bg-done' :
-                            app.status === 'in_progress' || app.status === 'partially_cut' ? 'bg-work' : 'bg-approved'
-                          )}>
-                            {app.status === 'cut' ? 'Вырезано' :
-                             app.status === 'in_progress' ? 'В резке' :
-                             app.status === 'partially_cut' ? 'Частично вырезано' : 'В очереди'}
-                          </span>
-                        )
-                      ) : col.key === 'supply_material' ? (
-                        <div style={{ position: 'relative' }}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const openId = 'supply-dropdown-' + app.id;
-                              const el = document.getElementById(openId);
-                              if (el) {
-                                if (el.style.display === 'block') {
-                                  el.style.display = 'none';
-                                } else {
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  el.style.display = 'block';
-                                  el.style.position = 'fixed';
-                                  el.style.top = (rect.bottom + 4) + 'px';
-                                  el.style.left = rect.left + 'px';
-                                }
-                              }
-                            }}
-                            style={{
-                              cursor: 'pointer', padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 600, border: '1px solid var(--border)',
-                              background: app.supply_material === true ? '#d1fae5' : app.supply_material === false ? '#fee2e2' : '#f1f5f9',
-                              color: app.supply_material === true ? '#047857' : app.supply_material === false ? '#b91c1c' : '#94a3b8',
-                            }}
-                          >
-                            {app.supply_material === true ? 'Да' : app.supply_material === false ? 'Нет' : '—'} ▾
-                          </button>
-                          <div
-                            id={'supply-dropdown-' + app.id}
-                            style={{
-                              display: 'none', position: 'fixed', zIndex: 9999,
-                              background: '#fff', border: '1px solid var(--border)', borderRadius: 6,
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 80,
-                            }}
-                          >
-                            {[
-                              { val: true, label: 'Да', bg: '#d1fae5', color: '#047857' },
-                              { val: false, label: 'Нет', bg: '#fee2e2', color: '#b91c1c' },
-                              { val: null, label: '—', bg: '#f1f5f9', color: '#94a3b8' },
-                            ].map(opt => (
-                              <div
-                                key={opt.label}
-                                onClick={(e) => {
+                            </div>
+                          ) : col.key === 'priority' ? (
+                            (user?.role === 'admin' || user?.role === 'director') ? (
+                              <select
+                                value={app.priority || 'medium'}
+                                onChange={(e) => {
                                   e.stopPropagation();
-                                  const val = opt.val === true ? 'true' : opt.val === false ? 'false' : '';
-                                  client.patch('/api/v1/applications/' + app.id + '/supply_material?value=' + val)
+                                  client.patch('/api/v1/applications/' + app.id + '/priority?priority=' + e.target.value)
                                     .then(() => fetchOrders(search || undefined));
-                                  document.getElementById('supply-dropdown-' + app.id).style.display = 'none';
                                 }}
+                                onClick={(e) => e.stopPropagation()}
                                 style={{
-                                  padding: '6px 10px', fontSize: 12, cursor: 'pointer',
-                                  background: app.supply_material === opt.val ? opt.bg : '#fff',
-                                  color: app.supply_material === opt.val ? opt.color : '#334155',
-                                  fontWeight: app.supply_material === opt.val ? 600 : 400,
+                                  border: 'none', background: 'transparent', cursor: 'pointer',
+                                  fontSize: 12, padding: '2px 4px', borderRadius: 4
                                 }}
                               >
-                                {opt.label}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : col.key === 'priority' ? (
-                        (user?.role === 'admin' || user?.role === 'director') ? (
-                          <select
-                            value={app.priority || 'medium'}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              client.patch('/api/v1/applications/' + app.id + '/priority?priority=' + e.target.value)
-                                .then(() => fetchOrders(search || undefined));
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                              border: 'none', background: 'transparent', cursor: 'pointer',
-                              fontSize: 12, padding: '2px 4px', borderRadius: 4
-                            }}
-                          >
-                            <option value="low">🟢 Низкий</option>
-                            <option value="medium">🔵 Средний</option>
-                            <option value="high">🟠 Высокий</option>
-                            <option value="urgent">🔴 Срочно</option>
-                          </select>
-                        ) : (
-                          <span>
-                            {({ low: '🟢 Низкий', medium: '🔵 Средний', high: '🟠 Высокий', urgent: '🔴 Срочно' })[app.priority] || '🔵 Средний'}
-                          </span>
-                        )
-                      ) : col.key === 'notes' ? (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setNotesModal(app); }}
-                          style={{
-                            background: app.comments ? '#eff6ff' : '#f8fafc',
-                            border: '1px solid ' + (app.comments ? '#bfdbfe' : 'var(--border)'),
-                            borderRadius: 4, padding: '3px 8px', fontSize: 12, cursor: 'pointer',
-                            color: app.comments ? '#1e40af' : '#94a3b8', maxWidth: 120,
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            display: 'block', textAlign: 'left'
-                          }}
-                          title={app.comments || 'Добавить заметку'}
-                        >
-                          {app.comments || '📝'}
-                        </button>
-                      ) : col.key === 'actions' ? (
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{ padding: '4px 8px', fontSize: 11 }}>✏️</button>
-                          <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{ padding: '4px 8px', fontSize: 11 }}>🗑️</button>
-                        </div>
-                      ) : (
-                        highlightText(getRowData(app)[col.key], search)
-                      )}
-                    </td>
-                  ))}
-                </tr>
-                {search && app.matched_parts && app.matched_parts.length > 0 && (
-                  <tr style={{ background: '#fefce8' }}>
-                    <td colSpan={COLUMNS.length} style={{ padding: '4px 10px', fontSize: 12 }}>
-                      🔍 Совпадения:{' '}
-                      {app.matched_parts.map((p, i) => (
-                        <span key={i}>
-                          {i > 0 && ', '}
-                          <span
-                            onClick={(e) => { e.stopPropagation(); setSelectedApp({ ...app, highlightPart: p }); }}
-                            style={{ background: '#fde047', padding: '1px 4px', borderRadius: 3, fontWeight: 500, cursor: 'pointer' }}
-                          >
-                            {p}
-                          </span>
-                        </span>
-                      ))}
-                    </td>
+                                <option value="low">🟢 Низкий</option>
+                                <option value="medium">🔵 Средний</option>
+                                <option value="high">🟠 Высокий</option>
+                                <option value="urgent">🔴 Срочно</option>
+                              </select>
+                            ) : (
+                              <span>
+                                {({ low: '🟢 Низкий', medium: '🔵 Средний', high: '🟠 Высокий', urgent: '🔴 Срочно' })[app.priority] || '🔵 Средний'}
+                              </span>
+                            )
+                          ) : col.key === 'notes' ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setNotesModal(app); }}
+                              style={{
+                                background: app.comments ? '#eff6ff' : '#f8fafc',
+                                border: '1px solid ' + (app.comments ? '#bfdbfe' : 'var(--border)'),
+                                borderRadius: 4, padding: '3px 8px', fontSize: 12, cursor: 'pointer',
+                                color: app.comments ? '#1e40af' : '#94a3b8', maxWidth: 120,
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                display: 'block', textAlign: 'left'
+                              }}
+                              title={app.comments || 'Добавить заметку'}
+                            >
+                              {app.comments || '📝'}
+                            </button>
+                          ) : col.key === 'actions' ? (
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{ padding: '4px 8px', fontSize: 11 }}>✏️</button>
+                              <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{ padding: '4px 8px', fontSize: 11 }}>🗑️</button>
+                            </div>
+                          ) : (
+                            highlightText(getRowData(app)[col.key], search)
+                          )}
+                      </td>
+                    ))}
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
-            {activeApps.length === 0 && (
-              <tr>
-                <td colSpan={COLUMNS.length} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>
-                  Нет активных заказов
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  {search && app.matched_parts && app.matched_parts.length > 0 && (
+                    <tr style={{ background: '#fefce8' }}>
+                      <td colSpan={COLUMNS.length} style={{ padding: '4px 10px', fontSize: 12 }}>
+                        🔍 Совпадения:{' '}
+                        {app.matched_parts.map((p, i) => (
+                          <span key={i}>
+                            {i > 0 && ', '}
+                            <span
+                              onClick={(e) => { e.stopPropagation(); setSelectedApp({ ...app, highlightPart: p }); }}
+                              style={{ background: '#fde047', padding: '1px 4px', borderRadius: 3, fontWeight: 500, cursor: 'pointer' }}
+                            >
+                              {p}
+                            </span>
+                          </span>
+                        ))}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+              {activeApps.length === 0 && (
+                <tr>
+                  <td colSpan={COLUMNS.length} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>
+                    Нет активных заказов
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {totalPages > 1 && (
         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center' }}>
@@ -730,11 +755,19 @@ export default function OrdersList() {
       )}
 
       {selectedApp && (
-        <ApplicationDetail
-          app={selectedApp}
-          onClose={() => setSelectedApp(null)}
-          onUpdate={() => fetchOrders(search || undefined)}
-        />
+        isMobile ? (
+          <MobileOrderDetail
+            app={selectedApp}
+            onClose={() => setSelectedApp(null)}
+            onUpdate={() => fetchOrders(search || undefined)}
+          />
+        ) : (
+          <ApplicationDetail
+            app={selectedApp}
+            onClose={() => setSelectedApp(null)}
+            onUpdate={() => fetchOrders(search || undefined)}
+          />
+        )
       )}
 
       {showNewOrder && (
