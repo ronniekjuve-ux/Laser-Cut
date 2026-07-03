@@ -30,6 +30,7 @@ const NAV_ITEMS = [
   { to: '/users', label: 'Пользователи', icon: '👥', roles: ['admin'] },
   { to: '/changelog', label: 'История изменений', icon: '📝', roles: ['admin'] },
   { to: '/audit', label: 'Аудит', icon: '📊', roles: ['admin', 'director', 'accountant'] },
+  { to: '/audit-mobile', label: 'Аудит', icon: '📊', roles: ['operator'] },
   { to: '/feedback', label: 'Отзывы', icon: '💬', roles: ['admin', 'director', 'accountant', 'operator', 'customer'] },
 ];
 
@@ -113,6 +114,7 @@ export default function Layout() {
     if (p === '/schedule') return 'График смен';
     if (p === '/users') return 'Пользователи';
     if (p === '/audit') return 'Аудит';
+    if (p === '/audit-mobile') return 'Аудит';
     if (p === '/changelog') return 'История изменений';
     if (p === '/feedback') return 'Жалобы и предложения';
     if (p.startsWith('/applications/')) return 'Детали заявки';

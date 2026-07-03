@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import useIsMobile from '../hooks/useIsMobile';
+import useIsMobile, { getForceMobile, setForceMobile } from '../hooks/useIsMobile';
 import UsersList from './Users/UsersList';
 import ChangeLog from './ChangeLog/ChangeLog';
 import Feedback from './Feedback';
@@ -16,6 +16,7 @@ export default function MorePage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const [forceMobile, setForceMobileState] = useState(getForceMobile());
   const visibleTabs = TABS.filter(t => t.roles.includes(user?.role));
   const [activeTab, setActiveTab] = useState(visibleTabs[0]?.key || 'feedback');
 
@@ -24,8 +25,33 @@ export default function MorePage() {
     navigate('/login');
   };
 
-  if (!isMobile) {
-    return <Feedback />;
+  const toggleForceMobile = () => {
+    const newVal = !forceMobile;
+    setForceMobileState(newVal);
+    setForceMobile(newVal);
+    window.location.reload();
+  };
+
+  if (!isMobile && !forceMobile) {
+    return (
+      <div>
+        <Feedback />
+        <div style={{ marginTop: 20, padding: 12 }}>
+          <button onClick={toggleForceMobile} style={{
+            width: '100%', padding: '10px 0', borderRadius: 8, border: '1px solid var(--border)',
+            background: '#f1f5f9', color: '#334155', fontSize: 14, fontWeight: 500, cursor: 'pointer', marginBottom: 8,
+          }}>
+            📱 Переключить на мобильную версию
+          </button>
+          <button onClick={handleLogout} style={{
+            width: '100%', padding: '10px 0', borderRadius: 8, border: '1px solid #fee2e2',
+            background: '#fee2e2', color: '#991b1b', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          }}>
+            Выйти из приложения
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -52,13 +78,16 @@ export default function MorePage() {
       {activeTab === 'feedback' && <Feedback />}
 
       <div style={{ marginTop: 20, padding: 12 }}>
-        <button
-          onClick={handleLogout}
-          style={{
-            width: '100%', padding: '10px 0', borderRadius: 8, border: '1px solid #fee2e2',
-            background: '#fee2e2', color: '#991b1b', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-          }}
-        >
+        <button onClick={toggleForceMobile} style={{
+          width: '100%', padding: '10px 0', borderRadius: 8, border: '1px solid var(--border)',
+          background: '#f1f5f9', color: '#334155', fontSize: 14, fontWeight: 500, cursor: 'pointer', marginBottom: 8,
+        }}>
+          🖥️ Переключить на компьютерную версию
+        </button>
+        <button onClick={handleLogout} style={{
+          width: '100%', padding: '10px 0', borderRadius: 8, border: '1px solid #fee2e2',
+          background: '#fee2e2', color: '#991b1b', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+        }}>
           Выйти из приложения
         </button>
       </div>

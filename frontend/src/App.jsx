@@ -9,15 +9,17 @@ import Deficit from './pages/Deficit';
 import Schedule from './pages/Schedule';
 import UsersList from './pages/Users/UsersList';
 import AuditLog from './pages/Audit/AuditProduction';
+import AuditMobile from './pages/AuditMobile';
 import ChangeLog from './pages/ChangeLog/ChangeLog';
 import WarehousePage from './pages/WarehousePage';
 import OrdersList from './pages/Orders/OrdersList';
 import CompletedOrdersList from './pages/Orders/CompletedOrdersList';
 import Feedback from './pages/Feedback';
 import MorePage from './pages/MorePage';
+import useIsMobile from './hooks/useIsMobile';
 
 function MobileIndex() {
-  const isMobile = window.innerWidth <= 768;
+  const isMobile = useIsMobile();
   return isMobile ? <OrdersList initialTab="orders" /> : <ApplicationsList />;
 }
 
@@ -61,6 +63,11 @@ export default function App() {
             <Route path="audit" element={
               <ProtectedRoute roles={['admin', 'director', 'accountant']}>
                 <AuditLog />
+              </ProtectedRoute>
+            } />
+            <Route path="audit-mobile" element={
+              <ProtectedRoute roles={['operator']}>
+                <AuditMobile />
               </ProtectedRoute>
             } />
             <Route path="orders" element={

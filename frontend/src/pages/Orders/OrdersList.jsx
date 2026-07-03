@@ -370,8 +370,7 @@ export default function OrdersList({ initialTab }) {
         </div>
       )}
 
-      {isMobile && (
-        <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 12 }}>
           {/* Tab bar */}
           <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--border)', marginBottom: 10 }}>
             {[
@@ -449,7 +448,6 @@ export default function OrdersList({ initialTab }) {
             ))}
           </div>
         </div>
-      )}
 
       {isMobile ? (
         <div className="order-cards">
