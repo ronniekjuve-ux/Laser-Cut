@@ -3,7 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import { useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
+import useIsMobile from '../hooks/useIsMobile';
 import InstallPWA from './InstallPWA';
+import BottomNav from './BottomNav';
 import UpdateBanner from './UpdateBanner';
 import CacheManager from './CacheManager';
 import { getShiftForDate, loadOverrides } from '../utils/shifts';
@@ -35,6 +37,7 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobile();
   const [clock, setClock] = useState('');
   const [activeOps, setActiveOps] = useState('');
   const [notifications, setNotifications] = useState([]);
@@ -190,6 +193,7 @@ export default function Layout() {
           <Outlet />
         </div>
         <InstallPWA />
+        {isMobile && <BottomNav user={user} />}
       </div>
     </div>
   );
