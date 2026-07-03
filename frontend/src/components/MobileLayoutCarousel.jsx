@@ -3,33 +3,46 @@ import { useState, useRef, useCallback } from 'react';
 export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, onActiveIndexChange }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const touchStartX = useRef(0);
-  const touchDeltaX = useRef(0);
+  const touchStartY = useRef(0);
+  const touchMoved = useRef(false);
   const containerRef = useRef(null);
 
   const handleTouchStart = useCallback((e) => {
     touchStartX.current = e.touches[0].clientX;
-    touchDeltaX.current = 0;
+    touchStartY.current = e.touches[0].clientY;
+    touchMoved.current = false;
   }, []);
 
   const handleTouchMove = useCallback((e) => {
-    touchDeltaX.current = e.touches[0].clientX - touchStartX.current;
+    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
+    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+    if (dx > 10 || dy > 10) touchMoved.current = true;
+    if (dx > dy) {
+      e.preventDefault();
+    }
   }, []);
 
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = useCallback((e) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
     const threshold = 50;
-    if (touchDeltaX.current < -threshold && activeIndex < layouts.length - 1) {
+
+    if (!touchMoved.current || Math.abs(dx) < 10) {
+      onLayoutClick(activeIndex);
+      return;
+    }
+
+    if (dx < -threshold && activeIndex < layouts.length - 1) {
       setActiveIndex(prev => {
         onActiveIndexChange?.(prev + 1);
         return prev + 1;
       });
-    } else if (touchDeltaX.current > threshold && activeIndex > 0) {
+    } else if (dx > threshold && activeIndex > 0) {
       setActiveIndex(prev => {
         onActiveIndexChange?.(prev - 1);
         return prev - 1;
       });
     }
-    touchDeltaX.current = 0;
-  }, [activeIndex, layouts.length, onActiveIndexChange]);
+  }, [activeIndex, layouts.length, onActiveIndexChange, onLayoutClick]);
 
   if (!layouts || layouts.length === 0) {
     return (
@@ -54,6 +67,7 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, on
           src={layout.layout_image}
           alt={`Раскладка ${appId}.${layout.layout_code}`}
           loading="lazy"
+          draggable={false}
         />
       </div>
       {layouts.length > 1 && (

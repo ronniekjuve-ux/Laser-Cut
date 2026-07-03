@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import useIsMobile from '../../hooks/useIsMobile';
+import useIsMobile, { getForceMobile } from '../../hooks/useIsMobile';
 import ApplicationDetail from '../Applications/ApplicationDetail';
 import MobileOrderCard from '../../components/MobileOrderCard';
 import NewOrderModal from '../Applications/NewOrderModal';
@@ -99,7 +99,8 @@ export default function OrdersList({ initialTab }) {
   const [filterValues, setFilterValues] = useState({});
   const filterRef = useRef(null);
   const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState(initialTab || (isMobile ? 'orders' : 'applications'));
+  const isRealMobile = isMobile && window.innerWidth <= 768;
+  const [activeTab, setActiveTab] = useState(initialTab || (isRealMobile ? 'orders' : 'applications'));
   const [machineFilter, setMachineFilter] = useState(null);
 
   const fetchOrders = useCallback(async (searchQuery, pageNum = page) => {
@@ -370,7 +371,7 @@ export default function OrdersList({ initialTab }) {
         </div>
       )}
 
-      <div style={{ marginBottom: 12 }}>
+      {isRealMobile && (<div style={{ marginBottom: 12 }}>
           {/* Tab bar */}
           <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--border)', marginBottom: 10 }}>
             {[
@@ -448,6 +449,7 @@ export default function OrdersList({ initialTab }) {
             ))}
           </div>
         </div>
+      )}
 
       {isMobile ? (
         <div className="order-cards">
@@ -838,7 +840,7 @@ export default function OrdersList({ initialTab }) {
         />
       )}
 
-      {selectedApp && !isMobile && (
+      {selectedApp && !isRealMobile && (
         <ApplicationDetail
           app={selectedApp}
           onClose={() => setSelectedApp(null)}
