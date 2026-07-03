@@ -16,6 +16,11 @@ import CompletedOrdersList from './pages/Orders/CompletedOrdersList';
 import Feedback from './pages/Feedback';
 import MorePage from './pages/MorePage';
 
+function MobileIndex() {
+  const isMobile = window.innerWidth <= 768;
+  return isMobile ? <OrdersList initialTab="orders" /> : <ApplicationsList />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -30,7 +35,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<ApplicationsList />} />
+            <Route index element={<MobileIndex />} />
             <Route path="applications/:id" element={<ApplicationDetail />} />
             <Route path="deficit" element={<Deficit />} />
             <Route path="warehouse" element={

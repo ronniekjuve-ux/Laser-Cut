@@ -70,7 +70,7 @@ const COLUMNS = [
   { key: 'actions', label: '', sortable: false, filterable: false },
 ];
 
-export default function OrdersList() {
+export default function OrdersList({ initialTab }) {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const highlightId = searchParams.get('highlight');
@@ -98,7 +98,7 @@ export default function OrdersList() {
   const [editModal, setEditModal] = useState(null);
   const filterRef = useRef(null);
   const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState('applications');
+  const [activeTab, setActiveTab] = useState(initialTab || (isMobile ? 'orders' : 'applications'));
   const [machineFilter, setMachineFilter] = useState(null);
 
   const fetchOrders = useCallback(async (searchQuery, pageNum = page) => {
@@ -393,7 +393,7 @@ export default function OrdersList() {
 
           {/* Machine toggle */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            {[null, 'станок 1', 'станок 2'].map(machine => (
+            {[null, 'CNF', 'FNF'].map(machine => (
               <div
                 key={machine || 'all'}
                 onClick={() => setMachineFilter(machine)}
@@ -404,7 +404,7 @@ export default function OrdersList() {
                   border: '1px solid ' + (machineFilter === machine ? 'var(--primary)' : 'var(--border)'),
                 }}
               >
-                {machine || 'Все'}
+                {machine === 'CNF' ? 'станок 1' : machine === 'FNF' ? 'станок 2' : 'Все'}
               </div>
             ))}
           </div>
@@ -420,7 +420,13 @@ export default function OrdersList() {
               <div
                 key={chip.key}
                 className="filter-chip"
-                onClick={() => {
+                onClick={(e) => {
+                  if (filters[chip.key]) {
+                    clearFilter(chip.key);
+                    return;
+                  }
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setFilterPos({ top: rect.bottom + 4, left: rect.left });
                   if (openFilter === chip.key) {
                     setOpenFilter(null);
                   } else {

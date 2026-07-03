@@ -6,7 +6,7 @@ const NAV_GROUPS = [
     id: 'orders',
     label: 'Заказы',
     icon: '📋',
-    to: '/orders',
+    to: '/',
     roles: ['admin', 'director', 'accountant', 'operator', 'customer'],
   },
   {

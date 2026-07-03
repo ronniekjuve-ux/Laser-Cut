@@ -100,6 +100,9 @@ export default function MobileOrderCard({ app }) {
           appId={app.id}
           layoutId={previewLayout.id}
           onClose={() => setPreviewLayout(null)}
+          onStatusChange={() => {
+            // Refresh card status by re-fetching isn't needed — parent re-renders
+          }}
         />
       )}
     </>
