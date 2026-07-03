@@ -276,7 +276,7 @@ tr:hover{background:#eff6ff}
   th, td { padding: 6px 8px; }
 
   .order-cards { display: flex; flex-direction: column; gap: 12px; }
-  .order-card { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; border: 10px solid transparent; }
+  .order-card { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; border: 7px solid transparent; }
   .order-card:active { transform: scale(0.98); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
   .order-card-image { width: 100%; object-fit: contain; background: #f8fafc; display: block; }
   .order-card-body { padding: 12px; }

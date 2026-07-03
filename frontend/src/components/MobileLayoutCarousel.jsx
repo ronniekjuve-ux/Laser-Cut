@@ -5,6 +5,7 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, on
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const hasMoved = useRef(false);
+  const touchHandledClick = useRef(false);
 
   const handleTouchStart = useCallback((e) => {
     touchStartX.current = e.touches[0].clientX;
@@ -23,6 +24,8 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, on
     const dx = e.changedTouches[0].clientX - touchStartX.current;
 
     if (!hasMoved.current) {
+      touchHandledClick.current = true;
+      setTimeout(() => { touchHandledClick.current = false; }, 300);
       onLayoutClick(activeIndex);
       return;
     }
@@ -42,6 +45,11 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, on
     }
   }, [activeIndex, layouts.length, onActiveIndexChange, onLayoutClick]);
 
+  const handleClick = useCallback(() => {
+    if (touchHandledClick.current) return;
+    onLayoutClick(activeIndex);
+  }, [activeIndex, onLayoutClick]);
+
   if (!layouts || layouts.length === 0) {
     return <div className="order-card-no-image">Нет изображения</div>;
   }
@@ -55,6 +63,7 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, on
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onClick={handleClick}
       >
         <img
           className="carousel-image"
@@ -62,7 +71,6 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, on
           alt={`Раскладка ${appId}.${layout.layout_code}`}
           loading="lazy"
           draggable={false}
-          onClick={() => onLayoutClick(activeIndex)}
         />
       </div>
       {layouts.length > 1 && (
