@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import MobileLayoutCarousel from './MobileLayoutCarousel';
 import LayoutPreviewModal from './LayoutPreviewModal';
 
@@ -31,33 +31,10 @@ export default function MobileOrderCard({ app }) {
     }
   }, [allLayouts]);
 
-  const touchStartY = useRef(0);
-  const touchMoved = useRef(false);
-
-  const handleTouchStart = useCallback((e) => {
-    touchStartY.current = e.touches[0].clientY;
-    touchMoved.current = false;
-  }, []);
-
-  const handleTouchMove = useCallback((e) => {
-    if (Math.abs(e.touches[0].clientY - touchStartY.current) > 10) {
-      touchMoved.current = true;
-    }
-  }, []);
-
-  const handleTouchEnd = useCallback(() => {
-    if (!touchMoved.current) {
-      openPreview();
-    }
-  }, [openPreview]);
-
   return (
     <>
       <div
         className={`order-card priority-${priority}`}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
         onClick={openPreview}
       >
         <MobileLayoutCarousel
