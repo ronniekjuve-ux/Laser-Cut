@@ -464,6 +464,15 @@ async def list_applications(
         first_sheet_size = f"{first_layout.sheet_w}x{first_layout.sheet_h}" if first_layout else None
         first_layout_image = first_layout.layout_image if first_layout else None
 
+        # All active layouts for carousel
+        all_active_layouts_data = []
+        for al in active_layouts:
+            all_active_layouts_data.append({
+                "id": al.id,
+                "layout_code": al.layout_code,
+                "layout_image": al.layout_image,
+            })
+
         enriched.append({
             "id": app.id,
             "order_name": app.order_name,
@@ -483,6 +492,7 @@ async def list_applications(
             "layout_image": first_layout_image,
             "sheet_size": first_sheet_size,
             "sheet_count": total_sheets,
+            "layouts": all_active_layouts_data,
             "cut_at": app.cut_at.isoformat() if app.cut_at else None,
             "cut_by_id": app.cut_by,
             "matched_parts": matched_parts,
