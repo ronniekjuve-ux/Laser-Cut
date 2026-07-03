@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import client from '../../api/client';
+import useIsMobile from '../../hooks/useIsMobile';
 import ApplicationDetail from '../Applications/ApplicationDetail';
 import MobileOrderCard from '../../components/MobileOrderCard';
 import MobileOrderDetail from '../../components/MobileOrderDetail';
@@ -11,14 +12,7 @@ export default function CompletedOrdersList() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 768px)');
-    const handler = (e) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
+  const isMobile = useIsMobile();
 
   const fetchCompleted = useCallback(async (pageNum = page) => {
     try {
