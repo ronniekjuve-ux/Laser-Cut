@@ -471,6 +471,8 @@ async def list_applications(
                 "id": al.id,
                 "layout_code": al.layout_code,
                 "layout_image": al.layout_image,
+                "sheet_size": f"{al.sheet_w}x{al.sheet_h}",
+                "sheet_count": al.sheet_count or 1,
             })
 
         enriched.append({
@@ -512,11 +514,42 @@ async def list_applications(
                 e["cut_by"] = None
             del e["cut_by_id"]
 
+    # Unique filter values across ALL matching apps (not just current page)
+    filter_values = {}
+    try:
+        base_for_filters = query.with_only_columns(Application.id)
+        ids_result = await db.execute(base_for_filters)
+        all_ids = [r[0] for r in ids_result.all()]
+        if all_ids:
+            # Get customers
+            cust_result = await db.execute(
+                select(Customer.name).join(Application, Application.customer_id == Customer.id).where(Application.id.in_(all_ids)).distinct()
+            )
+            filter_values["customer"] = sorted([r[0] for r in cust_result.all() if r[0]])
+            # Get materials
+            mat_result = await db.execute(
+                select(Application.steel_grade).where(Application.id.in_(all_ids), Application.steel_grade.isnot(None)).distinct()
+            )
+            filter_values["material"] = sorted([r[0] for r in mat_result.all() if r[0]])
+            # Get thicknesses
+            th_result = await db.execute(
+                select(Application.thickness).where(Application.id.in_(all_ids), Application.thickness.isnot(None)).distinct()
+            )
+            filter_values["thickness"] = sorted([str(r[0]) for r in th_result.all() if r[0]])
+            # Get priorities
+            pr_result = await db.execute(
+                select(Application.priority).where(Application.id.in_(all_ids), Application.priority.isnot(None)).distinct()
+            )
+            filter_values["priority"] = sorted([r[0] for r in pr_result.all() if r[0]])
+    except Exception:
+        pass
+
     return {
         "items": enriched,
         "total": total,
         "page": page,
-        "pages": (total + limit - 1) // limit if total > 0 else 0
+        "pages": (total + limit - 1) // limit if total > 0 else 0,
+        "filter_values": filter_values,
     }
 
     return response

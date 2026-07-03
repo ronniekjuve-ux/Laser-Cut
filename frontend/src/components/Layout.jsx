@@ -143,7 +143,7 @@ export default function Layout() {
       <div className="main">
         <div className="header">
           <div className="header-left">
-            <h3>{pageTitle}</h3>
+            {!isMobile && <h3>{pageTitle}</h3>}
             <div className="active-ops">👷 На смене: {activeOps}</div>
           </div>
           <div className="header-right">

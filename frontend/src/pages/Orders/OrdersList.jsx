@@ -96,6 +96,7 @@ export default function OrdersList({ initialTab }) {
   const [selectedApps, setSelectedApps] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [editModal, setEditModal] = useState(null);
+  const [filterValues, setFilterValues] = useState({});
   const filterRef = useRef(null);
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState(initialTab || (isMobile ? 'orders' : 'applications'));
@@ -119,6 +120,7 @@ export default function OrdersList({ initialTab }) {
         setApplications(res.data.items);
         setTotal(res.data.total);
         setTotalPages(res.data.pages);
+        if (res.data.filter_values) setFilterValues(res.data.filter_values);
       } else {
         setApplications(Array.isArray(res.data) ? res.data : []);
       }
@@ -181,6 +183,7 @@ export default function OrdersList({ initialTab }) {
   };
 
   const getFilterValues = (colKey) => {
+    if (filterValues[colKey]) return filterValues[colKey];
     const vals = new Set();
     applications.forEach(app => {
       const rd = getRowData(app);

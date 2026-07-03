@@ -26,7 +26,11 @@ export default function MobileOrderCard({ app }) {
 
   const allLayouts = layouts.length > 0
     ? layouts
-    : (app.layout_image ? [{ id: 0, layout_code: '001', layout_image: app.layout_image }] : []);
+    : (app.layout_image ? [{ id: 0, layout_code: '001', layout_image: app.layout_image, sheet_size: app.sheet_size, sheet_count: app.sheet_count }] : []);
+
+  const currentLayout = allLayouts[activeLayoutIndex] || {};
+  const totalSheetCount = allLayouts.reduce((sum, l) => sum + (l.sheet_count || 0), 0);
+  const currentSheetCount = currentLayout.sheet_count || 0;
 
   const handleLayoutClick = (layoutIndex) => {
     setActiveLayoutIndex(layoutIndex);
@@ -55,8 +59,10 @@ export default function MobileOrderCard({ app }) {
           <div className="order-card-meta">
             <span>{material}</span>
             <span>{app.thickness ? `${app.thickness} мм` : ''}</span>
-            {app.sheet_size && <span>{app.sheet_size}</span>}
-            {app.sheet_count > 0 && <span>{app.sheet_count} лист.</span>}
+            {currentLayout.sheet_size && <span>{currentLayout.sheet_size}</span>}
+            {currentSheetCount > 0 && (
+              <span>{currentSheetCount}{totalSheetCount > currentSheetCount ? `/${totalSheetCount}` : ''} лист.</span>
+            )}
           </div>
           <div className="order-card-footer">
             <span
