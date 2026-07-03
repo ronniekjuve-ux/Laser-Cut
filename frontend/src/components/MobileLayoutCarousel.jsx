@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 
-export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick }) {
+export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, onActiveIndexChange }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const touchStartX = useRef(0);
   const touchDeltaX = useRef(0);
@@ -18,12 +18,18 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick }) 
   const handleTouchEnd = useCallback(() => {
     const threshold = 50;
     if (touchDeltaX.current < -threshold && activeIndex < layouts.length - 1) {
-      setActiveIndex(prev => prev + 1);
+      setActiveIndex(prev => {
+        onActiveIndexChange?.(prev + 1);
+        return prev + 1;
+      });
     } else if (touchDeltaX.current > threshold && activeIndex > 0) {
-      setActiveIndex(prev => prev - 1);
+      setActiveIndex(prev => {
+        onActiveIndexChange?.(prev - 1);
+        return prev - 1;
+      });
     }
     touchDeltaX.current = 0;
-  }, [activeIndex, layouts.length]);
+  }, [activeIndex, layouts.length, onActiveIndexChange]);
 
   if (!layouts || layouts.length === 0) {
     return (

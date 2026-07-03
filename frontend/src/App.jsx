@@ -10,10 +10,11 @@ import Schedule from './pages/Schedule';
 import UsersList from './pages/Users/UsersList';
 import AuditLog from './pages/Audit/AuditProduction';
 import ChangeLog from './pages/ChangeLog/ChangeLog';
-import Warehouse from './pages/Warehouse/Warehouse';
+import WarehousePage from './pages/WarehousePage';
 import OrdersList from './pages/Orders/OrdersList';
 import CompletedOrdersList from './pages/Orders/CompletedOrdersList';
 import Feedback from './pages/Feedback';
+import MorePage from './pages/MorePage';
 
 export default function App() {
   return (
@@ -34,7 +35,7 @@ export default function App() {
             <Route path="deficit" element={<Deficit />} />
             <Route path="warehouse" element={
               <ProtectedRoute roles={['admin', 'director', 'accountant', 'operator', 'customer']}>
-                <Warehouse />
+                <WarehousePage />
               </ProtectedRoute>
             } />
             <Route path="schedule" element={
@@ -70,6 +71,11 @@ export default function App() {
             <Route path="feedback" element={
               <ProtectedRoute roles={['admin', 'director', 'accountant', 'operator', 'customer']}>
                 <Feedback />
+              </ProtectedRoute>
+            } />
+            <Route path="more" element={
+              <ProtectedRoute>
+                <MorePage />
               </ProtectedRoute>
             } />
           </Route>

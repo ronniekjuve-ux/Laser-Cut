@@ -59,7 +59,6 @@ export default function CompletedOrdersList() {
             <div key={app.id} style={{ position: 'relative' }}>
               <MobileOrderCard
                 app={app}
-                onClick={(a) => setSelectedApp(a)}
               />
               <button
                 className="btn"

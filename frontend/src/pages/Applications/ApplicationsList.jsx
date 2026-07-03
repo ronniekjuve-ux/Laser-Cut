@@ -4,7 +4,6 @@ import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import useIsMobile from '../../hooks/useIsMobile';
 import MobileOrderCard from '../../components/MobileOrderCard';
-import MobileOrderDetail from '../../components/MobileOrderDetail';
 import ApplicationDetail from './ApplicationDetail';
 import NewOrderModal from './NewOrderModal';
 import CostCalculator from './CostCalculator';
@@ -411,7 +410,6 @@ export default function ApplicationsList() {
             <MobileOrderCard
               key={app.id}
               app={app}
-              onClick={(a) => setSelectedApp(a)}
             />
           ))}
           {activeApps.length === 0 && (
@@ -697,13 +695,6 @@ export default function ApplicationsList() {
         </div>
       )}
 
-      {selectedApp && isMobile && (
-        <MobileOrderDetail
-          app={selectedApp}
-          onClose={() => setSelectedApp(null)}
-          onUpdate={() => fetchApplications(search || undefined)}
-        />
-      )}
       {selectedApp && !isMobile && (
         <ApplicationDetail
           app={selectedApp}

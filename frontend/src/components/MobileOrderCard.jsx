@@ -16,31 +16,41 @@ const STATUS_BAR = {
   cut: '#10b981',
 };
 
-export default function MobileOrderCard({ app, onClick }) {
+export default function MobileOrderCard({ app }) {
   const [previewLayout, setPreviewLayout] = useState(null);
+  const [activeLayoutIndex, setActiveLayoutIndex] = useState(0);
   const status = STATUS_CONFIG[app.status] || STATUS_CONFIG.approved;
   const material = app.steel_grade || app.material || '-';
   const priority = app.priority || 'medium';
   const layouts = app.layouts || [];
 
+  const allLayouts = layouts.length > 0
+    ? layouts
+    : (app.layout_image ? [{ id: 0, layout_code: '001', layout_image: app.layout_image }] : []);
+
   const handleLayoutClick = (layoutIndex) => {
-    if (layouts.length > 0) {
-      setPreviewLayout(layouts[layoutIndex]);
+    setActiveLayoutIndex(layoutIndex);
+    if (allLayouts.length > 0) {
+      setPreviewLayout(allLayouts[layoutIndex]);
+    }
+  };
+
+  const handleCardBodyClick = () => {
+    if (allLayouts.length > 0) {
+      setPreviewLayout(allLayouts[activeLayoutIndex]);
     }
   };
 
   return (
     <>
-      <div
-        className={`order-card priority-${priority}`}
-        onClick={() => onClick(app)}
-      >
+      <div className={`order-card priority-${priority}`}>
         <MobileLayoutCarousel
-          layouts={layouts.length > 0 ? layouts : (app.layout_image ? [{ id: 0, layout_code: '001', layout_image: app.layout_image }] : [])}
+          layouts={allLayouts}
           appId={app.id}
           onLayoutClick={handleLayoutClick}
+          onActiveIndexChange={setActiveLayoutIndex}
         />
-        <div className="order-card-body">
+        <div className="order-card-body" onClick={handleCardBodyClick}>
           <div className="order-card-customer">{app.customer || '-'}</div>
           <div className="order-card-meta">
             <span>{material}</span>

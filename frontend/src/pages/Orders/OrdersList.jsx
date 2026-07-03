@@ -5,7 +5,6 @@ import { useAuth } from '../../context/AuthContext';
 import useIsMobile from '../../hooks/useIsMobile';
 import ApplicationDetail from '../Applications/ApplicationDetail';
 import MobileOrderCard from '../../components/MobileOrderCard';
-import MobileOrderDetail from '../../components/MobileOrderDetail';
 import NewOrderModal from '../Applications/NewOrderModal';
 import MergeModal from '../Applications/MergeModal';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -147,7 +146,7 @@ export default function OrdersList() {
 
   useEffect(() => {
     const handleClick = (e) => {
-      if (filterRef.current && !filterRef.current.contains(e.target) && !e.target.closest('.filter-icon')) {
+      if (filterRef.current && !filterRef.current.contains(e.target) && !e.target.closest('.filter-icon') && !e.target.closest('.filter-chip')) {
         setOpenFilter(null);
       }
       if (!e.target.closest('[id^="supply-dropdown-"]') && !e.target.closest('button')) {
@@ -420,6 +419,7 @@ export default function OrdersList() {
             ].map(chip => (
               <div
                 key={chip.key}
+                className="filter-chip"
                 onClick={() => {
                   if (openFilter === chip.key) {
                     setOpenFilter(null);
@@ -448,7 +448,6 @@ export default function OrdersList() {
             <MobileOrderCard
               key={app.id}
               app={app}
-              onClick={(a) => setSelectedApp(a)}
             />
           ))}
           {activeApps.length === 0 && (
@@ -832,20 +831,12 @@ export default function OrdersList() {
         />
       )}
 
-      {selectedApp && (
-        isMobile ? (
-          <MobileOrderDetail
-            app={selectedApp}
-            onClose={() => setSelectedApp(null)}
-            onUpdate={() => fetchOrders(search || undefined)}
-          />
-        ) : (
-          <ApplicationDetail
-            app={selectedApp}
-            onClose={() => setSelectedApp(null)}
-            onUpdate={() => fetchOrders(search || undefined)}
-          />
-        )
+      {selectedApp && !isMobile && (
+        <ApplicationDetail
+          app={selectedApp}
+          onClose={() => setSelectedApp(null)}
+          onUpdate={() => fetchOrders(search || undefined)}
+        />
       )}
 
       {showNewOrder && (
