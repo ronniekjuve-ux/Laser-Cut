@@ -99,10 +99,14 @@ export default function OrdersList() {
   const [editModal, setEditModal] = useState(null);
   const filterRef = useRef(null);
   const isMobile = useIsMobile();
+  const [activeTab, setActiveTab] = useState('applications');
+  const [machineFilter, setMachineFilter] = useState(null);
 
   const fetchOrders = useCallback(async (searchQuery, pageNum = page) => {
     try {
-      const params = { page: pageNum, limit: 15, tab: 'orders' };
+      const tabParam = activeTab === 'applications' ? 'applications' : 'orders';
+      const params = { page: pageNum, limit: 15, tab: tabParam };
+      if (activeTab === 'completed') params.status = 'cut';
       if (searchQuery) params.search = searchQuery;
       if (filters.customer) params.customer_name = filters.customer[0];
       if (filters.machine) params.machine = filters.machine[0];
@@ -110,6 +114,7 @@ export default function OrdersList() {
       if (filters.thickness) params.thickness = filters.thickness[0];
       if (filters.supply_material) params.supply_material = filters.supply_material[0] === 'Да' ? 'true' : 'false';
       if (filters.priority) params.priority = filters.priority[0];
+      if (machineFilter) params.machine = machineFilter;
       const res = await client.get('/api/v1/applications/', { params });
       if (res.data.items) {
         setApplications(res.data.items);
@@ -123,9 +128,14 @@ export default function OrdersList() {
     } finally {
       setLoading(false);
     }
-  }, [page, filters]);
+  }, [page, filters, activeTab, machineFilter]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  useEffect(() => {
+    setPage(1);
+    fetchOrders(search || undefined, 1);
+  }, [activeTab, machineFilter]);
 
   useEffect(() => {
     setPage(1);
@@ -355,6 +365,80 @@ export default function OrdersList() {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {isMobile && (
+        <div style={{ marginBottom: 12 }}>
+          {/* Tab bar */}
+          <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--border)', marginBottom: 10 }}>
+            {[
+              { key: 'applications', label: 'Заявки' },
+              { key: 'orders', label: 'Заказы' },
+              { key: 'completed', label: 'Выполненные' },
+            ].map(tab => (
+              <div
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  flex: 1, textAlign: 'center', padding: '8px 0', fontSize: 13, fontWeight: 500,
+                  cursor: 'pointer', borderBottom: activeTab === tab.key ? '2px solid var(--primary)' : '2px solid transparent',
+                  color: activeTab === tab.key ? 'var(--primary)' : '#64748b',
+                  marginBottom: -2,
+                }}
+              >
+                {tab.label}
+              </div>
+            ))}
+          </div>
+
+          {/* Machine toggle */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            {[null, 'станок 1', 'станок 2'].map(machine => (
+              <div
+                key={machine || 'all'}
+                onClick={() => setMachineFilter(machine)}
+                style={{
+                  padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                  background: machineFilter === machine ? 'var(--primary)' : '#f1f5f9',
+                  color: machineFilter === machine ? '#fff' : '#64748b',
+                  border: '1px solid ' + (machineFilter === machine ? 'var(--primary)' : 'var(--border)'),
+                }}
+              >
+                {machine || 'Все'}
+              </div>
+            ))}
+          </div>
+
+          {/* Filter chips */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[
+              { key: 'customer', label: 'Заказчик' },
+              { key: 'material', label: 'Материал' },
+              { key: 'thickness', label: 'Толщина' },
+              { key: 'priority', label: 'Срочность' },
+            ].map(chip => (
+              <div
+                key={chip.key}
+                onClick={() => {
+                  if (openFilter === chip.key) {
+                    setOpenFilter(null);
+                  } else {
+                    setOpenFilter(chip.key);
+                    setFilterSearch('');
+                  }
+                }}
+                style={{
+                  padding: '5px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+                  background: filters[chip.key] ? '#dbeafe' : '#f1f5f9',
+                  color: filters[chip.key] ? '#1d4ed8' : '#64748b',
+                  border: '1px solid ' + (filters[chip.key] ? '#93c5fd' : 'var(--border)'),
+                }}
+              >
+                {chip.label} {filters[chip.key] ? '✕' : '▾'}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
