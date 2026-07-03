@@ -473,6 +473,7 @@ async def list_applications(
                 "layout_image": al.layout_image,
                 "sheet_size": f"{al.sheet_w}x{al.sheet_h}",
                 "sheet_count": al.sheet_count or 1,
+                "completed_runs": json.loads(al.completed_runs) if al.completed_runs else [],
             })
 
         enriched.append({

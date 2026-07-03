@@ -219,7 +219,7 @@ export default function LayoutPreviewModal({ appId, layoutId, onClose, onStatusC
 
       {/* Part image zoom */}
       {showPartImage && (
-        <div className="modal-overlay active" style={{ zIndex: 1100 }} onClick={() => setShowPartImage(null)}>
+        <div className="modal-overlay active" style={{ zIndex: 1100 }} onClick={(e) => { e.stopPropagation(); setShowPartImage(null); }}>
           <div className="modal-content" style={{ width: '95%', maxWidth: 400 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3 style={{ fontSize: 14 }}>{showPartImage.name}</h3>

@@ -256,7 +256,7 @@ export default function OrdersList({ initialTab }) {
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
-  const activeApps = filtered.filter(app => app.status !== 'cut');
+  const activeApps = activeTab === 'completed' ? filtered : filtered.filter(app => app.status !== 'cut');
 
   const toggleFilterItem = (colKey, val) => {
     setFilters(prev => {

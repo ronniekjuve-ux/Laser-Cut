@@ -9,13 +9,6 @@ const STATUS_CONFIG = {
   cut: { label: 'Вырезано', bg: '#d1fae5', color: '#047857' },
 };
 
-const STATUS_BAR = {
-  approved: '#3b82f6',
-  in_progress: '#f59e0b',
-  partially_cut: '#f97316',
-  cut: '#10b981',
-};
-
 export default function MobileOrderCard({ app }) {
   const [previewLayout, setPreviewLayout] = useState(null);
   const [activeLayoutIndex, setActiveLayoutIndex] = useState(0);
@@ -73,6 +66,24 @@ export default function MobileOrderCard({ app }) {
             >
               {status.label}
             </span>
+            {allLayouts.length > 1 && (() => {
+              const totalSheets = allLayouts.reduce((sum, l) => sum + (l.sheet_count || 1), 0);
+              const cutSheets = allLayouts.reduce((sum, l) => {
+                const runs = Array.isArray(l.completed_runs) ? l.completed_runs : [];
+                return sum + runs.filter(Boolean).length;
+              }, 0);
+              if (cutSheets > 0 && cutSheets < totalSheets) {
+                return (
+                  <span style={{
+                    padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                    background: '#fef3c7', color: '#92400e',
+                  }}>
+                    {cutSheets}/{totalSheets} лист
+                  </span>
+                );
+              }
+              return null;
+            })()}
             {app.group_name && (
               <span
                 style={{
@@ -98,19 +109,7 @@ export default function MobileOrderCard({ app }) {
             </span>
           </div>
         </div>
-        <div style={{ height: 3, background: STATUS_BAR[app.status] || '#3b82f6', borderRadius: '0 0 10px 10px' }} />
       </div>
-
-      {previewLayout && (
-        <LayoutPreviewModal
-          appId={app.id}
-          layoutId={previewLayout.id}
-          onClose={() => setPreviewLayout(null)}
-          onStatusChange={() => {
-            // Refresh card status by re-fetching isn't needed — parent re-renders
-          }}
-        />
-      )}
     </>
   );
 }

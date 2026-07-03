@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
-import useIsMobile from '../hooks/useIsMobile';
+import useIsMobile, { getForceMobile } from '../hooks/useIsMobile';
 import InstallPWA from './InstallPWA';
 import BottomNav from './BottomNav';
 import UpdateBanner from './UpdateBanner';
@@ -39,6 +39,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
+  const forceMobile = getForceMobile();
   const [clock, setClock] = useState('');
   const [activeOps, setActiveOps] = useState('');
   const [notifications, setNotifications] = useState([]);
@@ -122,7 +123,7 @@ export default function Layout() {
   })();
 
   return (
-    <div className="app-container">
+    <div className={'app-container' + (forceMobile ? ' force-mobile' : '')}>
       <div className="sidebar">
         <div className="sidebar-brand">LaserCut</div>
         {NAV_ITEMS.filter(item => !item.roles || item.roles.includes(user?.role)).map(item => (
