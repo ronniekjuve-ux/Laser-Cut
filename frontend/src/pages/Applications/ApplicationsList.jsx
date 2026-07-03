@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import useIsMobile from '../../hooks/useIsMobile';
+import MobileOrderCard from '../../components/MobileOrderCard';
+import MobileOrderDetail from '../../components/MobileOrderDetail';
 import ApplicationDetail from './ApplicationDetail';
 import NewOrderModal from './NewOrderModal';
 import CostCalculator from './CostCalculator';
@@ -159,6 +162,7 @@ export default function ApplicationsList() {
   const [total, setTotal] = useState(0);
   const filterRef = useRef(null);
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   // Подсветка заявки из уведомления
   useEffect(() => {
@@ -401,6 +405,20 @@ export default function ApplicationsList() {
         </div>
       )}
 
+      {isMobile ? (
+        <div className="order-cards">
+          {activeApps.map(app => (
+            <MobileOrderCard
+              key={app.id}
+              app={app}
+              onClick={(a) => setSelectedApp(a)}
+            />
+          ))}
+          {activeApps.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Нет заявок</div>
+          )}
+        </div>
+      ) : (
       <div className="table-container">
         <table>
           <thead>
@@ -646,6 +664,7 @@ export default function ApplicationsList() {
           </tbody>
         </table>
       </div>
+      )}
 
       {totalPages > 1 && (
         <div style={{display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center'}}>
@@ -678,7 +697,14 @@ export default function ApplicationsList() {
         </div>
       )}
 
-      {selectedApp && (
+      {selectedApp && isMobile && (
+        <MobileOrderDetail
+          app={selectedApp}
+          onClose={() => setSelectedApp(null)}
+          onUpdate={() => fetchApplications(search || undefined)}
+        />
+      )}
+      {selectedApp && !isMobile && (
         <ApplicationDetail
           app={selectedApp}
           onClose={() => setSelectedApp(null)}
