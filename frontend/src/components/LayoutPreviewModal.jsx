@@ -6,19 +6,21 @@ export default function LayoutPreviewModal({ appId, layoutId, onClose }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchLayout = async () => {
       try {
-        const res = await client.get('/api/v1/applications/' + appId);
+        const res = await client.get('/api/v1/applications/' + appId, { signal: controller.signal });
         const layouts = res.data.layouts || [];
         const found = layouts.find(l => l.id === layoutId);
         setLayout(found || null);
       } catch (err) {
-        console.error('Failed to load layout', err);
+        if (err.name !== 'AbortError') console.error('Failed to load layout', err);
       } finally {
         setLoading(false);
       }
     };
     fetchLayout();
+    return () => controller.abort();
   }, [appId, layoutId]);
 
   if (loading) {
