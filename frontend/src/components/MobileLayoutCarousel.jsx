@@ -4,50 +4,46 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, on
   const [activeIndex, setActiveIndex] = useState(0);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
-  const touchMoved = useRef(false);
-  const containerRef = useRef(null);
+  const hasMoved = useRef(false);
 
   const handleTouchStart = useCallback((e) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
-    touchMoved.current = false;
+    hasMoved.current = false;
   }, []);
 
   const handleTouchMove = useCallback((e) => {
     const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
     const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
-    if (dx > 10 || dy > 10) touchMoved.current = true;
-    if (dx > dy) {
-      e.preventDefault();
-    }
+    if (dx > 10 || dy > 10) hasMoved.current = true;
+    if (dx > dy) e.preventDefault();
   }, []);
 
   const handleTouchEnd = useCallback((e) => {
     const dx = e.changedTouches[0].clientX - touchStartX.current;
-    const threshold = 50;
 
-    if (!touchMoved.current || Math.abs(dx) < 10) {
+    if (!hasMoved.current) {
       onLayoutClick(activeIndex);
       return;
     }
 
-    if (dx < -threshold && activeIndex < layouts.length - 1) {
-      setActiveIndex(prev => {
-        onActiveIndexChange?.(prev + 1);
-        return prev + 1;
-      });
-    } else if (dx > threshold && activeIndex > 0) {
-      setActiveIndex(prev => {
-        onActiveIndexChange?.(prev - 1);
-        return prev - 1;
-      });
+    if (Math.abs(dx) > 50) {
+      if (dx < -50 && activeIndex < layouts.length - 1) {
+        setActiveIndex(prev => {
+          onActiveIndexChange?.(prev + 1);
+          return prev + 1;
+        });
+      } else if (dx > 50 && activeIndex > 0) {
+        setActiveIndex(prev => {
+          onActiveIndexChange?.(prev - 1);
+          return prev - 1;
+        });
+      }
     }
   }, [activeIndex, layouts.length, onActiveIndexChange, onLayoutClick]);
 
   if (!layouts || layouts.length === 0) {
-    return (
-      <div className="order-card-no-image">Нет изображения</div>
-    );
+    return <div className="order-card-no-image">Нет изображения</div>;
   }
 
   const layout = layouts[activeIndex];
@@ -55,12 +51,10 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, on
   return (
     <div className="carousel-container">
       <div
-        ref={containerRef}
         className="carousel-viewport"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onClick={() => onLayoutClick(activeIndex)}
       >
         <img
           className="carousel-image"
@@ -68,15 +62,13 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, on
           alt={`Раскладка ${appId}.${layout.layout_code}`}
           loading="lazy"
           draggable={false}
+          onClick={() => onLayoutClick(activeIndex)}
         />
       </div>
       {layouts.length > 1 && (
         <div className="carousel-dots">
           {layouts.map((_, i) => (
-            <span
-              key={i}
-              className={'carousel-dot' + (i === activeIndex ? ' active' : '')}
-            />
+            <span key={i} className={'carousel-dot' + (i === activeIndex ? ' active' : '')} />
           ))}
         </div>
       )}

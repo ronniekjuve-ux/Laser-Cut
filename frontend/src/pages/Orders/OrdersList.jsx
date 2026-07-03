@@ -99,8 +99,7 @@ export default function OrdersList({ initialTab }) {
   const [filterValues, setFilterValues] = useState({});
   const filterRef = useRef(null);
   const isMobile = useIsMobile();
-  const isRealMobile = isMobile && window.innerWidth <= 768;
-  const [activeTab, setActiveTab] = useState(initialTab || (isRealMobile ? 'orders' : 'applications'));
+  const [activeTab, setActiveTab] = useState(initialTab || 'orders');
   const [machineFilter, setMachineFilter] = useState(null);
 
   const fetchOrders = useCallback(async (searchQuery, pageNum = page) => {

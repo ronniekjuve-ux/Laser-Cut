@@ -276,7 +276,7 @@ tr:hover{background:#eff6ff}
   th, td { padding: 6px 8px; }
 
   .order-cards { display: flex; flex-direction: column; gap: 12px; }
-  .order-card { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; border: 2px solid transparent; }
+  .order-card { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; border: 10px solid transparent; }
   .order-card:active { transform: scale(0.98); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
   .order-card-image { width: 100%; object-fit: contain; background: #f8fafc; display: block; }
   .order-card-body { padding: 12px; }
@@ -288,7 +288,7 @@ tr:hover{background:#eff6ff}
 
   /* Carousel */
   .carousel-container { position: relative; width: 100%; }
-  .carousel-viewport { width: 100%; overflow: hidden; touch-action: pan-y; }
+  .carousel-viewport { width: 100%; overflow: hidden; }
   .carousel-image { width: 100%; max-height: 250px; object-fit: contain; display: block; }
   .carousel-dots { display: flex; justify-content: center; gap: 5px; padding: 6px 0; }
   .carousel-dot { width: 6px; height: 6px; border-radius: 50%; background: #cbd5e1; transition: background 0.2s; }
