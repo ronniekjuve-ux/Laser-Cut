@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import MobileLayoutCarousel from './MobileLayoutCarousel';
 import LayoutPreviewModal from './LayoutPreviewModal';
 
@@ -25,29 +25,47 @@ export default function MobileOrderCard({ app }) {
   const totalSheetCount = allLayouts.reduce((sum, l) => sum + (l.sheet_count || 0), 0);
   const currentSheetCount = currentLayout.sheet_count || 0;
 
-  const handleLayoutClick = (layoutIndex) => {
-    setActiveLayoutIndex(layoutIndex);
+  const openPreview = useCallback(() => {
     if (allLayouts.length > 0) {
-      setPreviewLayout(allLayouts[layoutIndex]);
+      setPreviewLayout(allLayouts[0]);
     }
-  };
+  }, [allLayouts]);
 
-  const handleCardBodyClick = () => {
-    if (allLayouts.length > 0) {
-      setPreviewLayout(allLayouts[activeLayoutIndex]);
+  const touchStartY = useRef(0);
+  const touchMoved = useRef(false);
+
+  const handleTouchStart = useCallback((e) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchMoved.current = false;
+  }, []);
+
+  const handleTouchMove = useCallback((e) => {
+    if (Math.abs(e.touches[0].clientY - touchStartY.current) > 10) {
+      touchMoved.current = true;
     }
-  };
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!touchMoved.current) {
+      openPreview();
+    }
+  }, [openPreview]);
 
   return (
     <>
-      <div className={`order-card priority-${priority}`}>
+      <div
+        className={`order-card priority-${priority}`}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={openPreview}
+      >
         <MobileLayoutCarousel
           layouts={allLayouts}
           appId={app.id}
-          onLayoutClick={handleLayoutClick}
           onActiveIndexChange={setActiveLayoutIndex}
         />
-        <div className="order-card-body" onClick={handleCardBodyClick}>
+        <div className="order-card-body">
           <div className="order-card-customer">{app.customer || '-'}</div>
           <div className="order-card-meta">
             <span>{material}</span>
@@ -110,6 +128,14 @@ export default function MobileOrderCard({ app }) {
           </div>
         </div>
       </div>
+
+      {previewLayout && (
+        <LayoutPreviewModal
+          appId={app.id}
+          layoutId={previewLayout.id}
+          onClose={() => setPreviewLayout(null)}
+        />
+      )}
     </>
   );
 }

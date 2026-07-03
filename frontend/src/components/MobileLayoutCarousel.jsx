@@ -1,11 +1,10 @@
 import { useState, useRef, useCallback } from 'react';
 
-export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, onActiveIndexChange }) {
+export default function MobileLayoutCarousel({ layouts, appId, onActiveIndexChange }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const hasMoved = useRef(false);
-  const touchHandledClick = useRef(false);
 
   const handleTouchStart = useCallback((e) => {
     touchStartX.current = e.touches[0].clientX;
@@ -21,34 +20,23 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, on
   }, []);
 
   const handleTouchEnd = useCallback((e) => {
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-
-    if (!hasMoved.current) {
-      touchHandledClick.current = true;
-      setTimeout(() => { touchHandledClick.current = false; }, 300);
-      onLayoutClick(activeIndex);
-      return;
-    }
-
-    if (Math.abs(dx) > 50) {
-      if (dx < -50 && activeIndex < layouts.length - 1) {
-        setActiveIndex(prev => {
-          onActiveIndexChange?.(prev + 1);
-          return prev + 1;
-        });
-      } else if (dx > 50 && activeIndex > 0) {
-        setActiveIndex(prev => {
-          onActiveIndexChange?.(prev - 1);
-          return prev - 1;
-        });
+    if (hasMoved.current) {
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      if (Math.abs(dx) > 50) {
+        if (dx < -50 && activeIndex < layouts.length - 1) {
+          setActiveIndex(prev => {
+            onActiveIndexChange?.(prev + 1);
+            return prev + 1;
+          });
+        } else if (dx > 50 && activeIndex > 0) {
+          setActiveIndex(prev => {
+            onActiveIndexChange?.(prev - 1);
+            return prev - 1;
+          });
+        }
       }
     }
-  }, [activeIndex, layouts.length, onActiveIndexChange, onLayoutClick]);
-
-  const handleClick = useCallback(() => {
-    if (touchHandledClick.current) return;
-    onLayoutClick(activeIndex);
-  }, [activeIndex, onLayoutClick]);
+  }, [activeIndex, layouts.length, onActiveIndexChange]);
 
   if (!layouts || layouts.length === 0) {
     return <div className="order-card-no-image">Нет изображения</div>;
@@ -63,7 +51,6 @@ export default function MobileLayoutCarousel({ layouts, appId, onLayoutClick, on
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onClick={handleClick}
       >
         <img
           className="carousel-image"
