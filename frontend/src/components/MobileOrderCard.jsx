@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import MobileLayoutCarousel from './MobileLayoutCarousel';
 import LayoutPreviewModal from './LayoutPreviewModal';
-import client from '../api/client';
 
 const STATUS_CONFIG = {
   approved: { label: 'В очереди', bg: '#dbeafe', color: '#1d4ed8' },
@@ -13,11 +12,10 @@ const STATUS_CONFIG = {
 export default function MobileOrderCard({ app }) {
   const [previewLayout, setPreviewLayout] = useState(null);
   const [activeLayoutIndex, setActiveLayoutIndex] = useState(0);
-  const [localLayouts, setLocalLayouts] = useState(null);
   const status = STATUS_CONFIG[app.status] || STATUS_CONFIG.approved;
   const material = app.steel_grade || app.material || '-';
   const priority = app.priority || 'medium';
-  const layouts = localLayouts || app.layouts || [];
+  const layouts = app.layouts || [];
 
   const allLayouts = layouts.length > 0
     ? layouts
@@ -27,24 +25,18 @@ export default function MobileOrderCard({ app }) {
   const totalSheetCount = allLayouts.reduce((sum, l) => sum + (l.sheet_count || 0), 0);
   const currentSheetCount = currentLayout.sheet_count || 0;
 
+  // Total progress across ALL layouts (independent of carousel position)
+  const totalSheetsAll = allLayouts.reduce((sum, l) => sum + (l.sheet_count || 1), 0);
+  const cutSheetsAll = allLayouts.reduce((sum, l) => {
+    const runs = Array.isArray(l.completed_runs) ? l.completed_runs : [];
+    return sum + runs.filter(Boolean).length;
+  }, 0);
+
   const openPreview = useCallback(() => {
     if (allLayouts.length > 0) {
       setPreviewLayout(allLayouts[activeLayoutIndex]);
     }
   }, [allLayouts, activeLayoutIndex]);
-
-  const toggleRun = useCallback(async (e, layoutId, runIndex) => {
-    e.stopPropagation();
-    try {
-      const res = await client.patch('/api/v1/applications/layouts/' + layoutId + '/toggle-run?run_index=' + runIndex);
-      setLocalLayouts(prev => {
-        const current = prev || app.layouts || [];
-        return current.map(l => l.id === layoutId ? { ...l, completed_runs: res.data.completed_runs } : l);
-      });
-    } catch {
-      alert('Ошибка');
-    }
-  }, [app.layouts]);
 
   return (
     <>
@@ -67,6 +59,11 @@ export default function MobileOrderCard({ app }) {
               <span>{currentSheetCount}{totalSheetCount > currentSheetCount ? `/${totalSheetCount}` : ''} лист.</span>
             )}
           </div>
+          {totalSheetsAll > 0 && (
+            <div style={{ fontSize: 12, color: cutSheetsAll === totalSheetsAll ? '#047857' : '#64748b', marginTop: 4, fontWeight: 500 }}>
+              Всего вырезано: <span style={{ fontWeight: 700, color: cutSheetsAll === totalSheetsAll ? '#047857' : '#0f172a' }}>{cutSheetsAll}/{totalSheetsAll}</span>
+            </div>
+          )}
           <div className="order-card-footer">
             <span
               style={{
@@ -76,43 +73,6 @@ export default function MobileOrderCard({ app }) {
             >
               {status.label}
             </span>
-            {allLayouts.length === 1 && allLayouts[0].sheet_count >= 1 && (() => {
-              const layout = allLayouts[0];
-              const runs = Array.isArray(layout.completed_runs) ? layout.completed_runs : [];
-              const done = runs[0] || false;
-              return (
-                <div
-                  onClick={(e) => toggleRun(e, layout.id, 0)}
-                  style={{
-                    width: 24, height: 24, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
-                    background: done ? '#22c55e' : '#e2e8f0',
-                    color: done ? '#fff' : '#64748b',
-                    border: done ? '2px solid #16a34a' : '2px solid transparent',
-                  }}
-                >
-                  {done ? '✓' : '1'}
-                </div>
-              );
-            })()}
-            {allLayouts.length > 1 && (() => {
-              const totalSheets = allLayouts.reduce((sum, l) => sum + (l.sheet_count || 1), 0);
-              const cutSheets = allLayouts.reduce((sum, l) => {
-                const runs = Array.isArray(l.completed_runs) ? l.completed_runs : [];
-                return sum + runs.filter(Boolean).length;
-              }, 0);
-              if (cutSheets > 0 && cutSheets < totalSheets) {
-                return (
-                  <span style={{
-                    padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                    background: '#fef3c7', color: '#92400e',
-                  }}>
-                    {cutSheets}/{totalSheets} лист
-                  </span>
-                );
-              }
-              return null;
-            })()}
             {app.group_name && (
               <span
                 style={{
