@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import ItemNotesChat from '../components/ItemNotesChat';
 
 export default function Deficit() {
   const { user } = useAuth();
@@ -10,6 +11,7 @@ export default function Deficit() {
   const [form, setForm] = useState({ material: '', thickness: '', size: '', qty: '', customer: '', note: '' });
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [notesChat, setNotesChat] = useState(null);
 
   const fetchDeficit = useCallback(async () => {
     try {
@@ -192,6 +194,9 @@ export default function Deficit() {
                       <button className="btn" onClick={() => startEdit(item)} style={{padding: '3px 8px', fontSize: 11}} title="Редактировать">
                         ✏️
                       </button>
+                      <button className="btn" onClick={() => setNotesChat(item)} style={{padding: '3px 8px', fontSize: 11}} title="Примечания">
+                        💬
+                      </button>
                     </td>
                   </>
                 )}
@@ -200,6 +205,14 @@ export default function Deficit() {
           </tbody>
         </table>
       </div>
+
+      {notesChat && (
+        <ItemNotesChat
+          itemType="deficit"
+          itemId={notesChat.id}
+          onClose={() => setNotesChat(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import client from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
+import ItemNotesChat from '../../components/ItemNotesChat';
 
 export default function Warehouse() {
   const [items, setItems] = useState([]);
@@ -10,6 +11,7 @@ export default function Warehouse() {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [notesChat, setNotesChat] = useState(null);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -177,6 +179,7 @@ export default function Warehouse() {
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button className="btn" onClick={() => startEdit(item)} style={{ padding: '3px 8px', fontSize: 11 }} title="Редактировать">✏️</button>
+                        <button className="btn" onClick={() => setNotesChat(item)} style={{ padding: '3px 8px', fontSize: 11 }} title="Примечания">💬</button>
                         <button className="btn" onClick={() => handleDelete(item.id)} style={{ padding: '3px 8px', fontSize: 11 }} title="Удалить">🗑️</button>
                       </div>
                     </td>
@@ -194,6 +197,14 @@ export default function Warehouse() {
           message="Запись склада будет удалена безвозвратно."
           onConfirm={confirmDeleteAction}
           onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+
+      {notesChat && (
+        <ItemNotesChat
+          itemType="warehouse"
+          itemId={notesChat.id}
+          onClose={() => setNotesChat(null)}
         />
       )}
     </div>
