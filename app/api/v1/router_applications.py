@@ -1597,6 +1597,40 @@ async def update_application_status(
         app.cut_at = None
         app.cut_by = None
 
+    # Sync completed_runs with status change
+    if old_status != status:
+        layouts_result = await db.execute(
+            select(ApplicationLayout).where(ApplicationLayout.application_id == app_id)
+        )
+        all_layouts = layouts_result.scalars().all()
+
+        for layout in all_layouts:
+            runs = []
+            if layout.completed_runs:
+                try:
+                    runs = json.loads(layout.completed_runs)
+                except Exception:
+                    runs = []
+            while len(runs) < layout.sheet_count:
+                runs.append(False)
+
+            if status == "cut":
+                runs = [True] * layout.sheet_count
+            elif status == "approved":
+                runs = [False] * layout.sheet_count
+            elif status == "partially_cut":
+                last_done = -1
+                for i in range(len(runs) - 1, -1, -1):
+                    if runs[i]:
+                        last_done = i
+                        break
+                if last_done >= 0:
+                    runs[last_done] = False
+                else:
+                    runs[0] = True
+
+            layout.completed_runs = json.dumps(runs[:layout.sheet_count])
+
     # Уведомление для заказчика и админов
     if old_status != status:
         status_labels = {

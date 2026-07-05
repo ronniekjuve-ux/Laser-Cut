@@ -22,10 +22,16 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
   const updateStatus = async (newStatus) => {
     try {
       await client.patch('/api/v1/applications/' + app.id + '/status?status=' + newStatus);
-      setFullApp(prev => ({
-        ...prev,
-        application: { ...prev.application, status: newStatus }
-      }));
+      // Re-fetch to get updated completed_runs from backend
+      try {
+        const res = await client.get('/api/v1/applications/' + app.id);
+        setFullApp(res.data);
+      } catch {
+        setFullApp(prev => ({
+          ...prev,
+          application: { ...prev.application, status: newStatus }
+        }));
+      }
       if (onUpdate) onUpdate();
     } catch (err) {
       alert('Ошибка смены статуса');
@@ -360,7 +366,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                                 )}
                               </span>
                             </div>
-                            {!isReplaced && layout.sheet_count > 1 && (
+                            {!isReplaced && layout.sheet_count >= 1 && (
                               <div style={{marginTop: 8}}>
                                 <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 4}}>
                                   <span>Вырезано: {layoutDone} из {layoutTotal} листов</span>
@@ -523,7 +529,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                     </div>
                   </div>
 
-                  {layout.sheet_count > 1 && (
+                  {layout.sheet_count >= 1 && (
                     <div style={{marginTop: 16, padding: '12px 16px', background: '#f8fafc', borderRadius: 8, border: '1px solid var(--border)'}}>
                       {(() => {
                         const runs = Array.isArray(layout.completed_runs) ? layout.completed_runs : [];

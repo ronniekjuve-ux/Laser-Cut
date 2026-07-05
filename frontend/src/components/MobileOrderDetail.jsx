@@ -57,8 +57,14 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
   const changeStatus = async (newStatus) => {
     try {
       await client.patch('/api/v1/applications/' + app.id + '/status?status=' + newStatus);
-      setFullApp(prev => prev ? { ...prev, application: { ...prev.application, status: newStatus } } : prev);
       setStatusDropdown(false);
+      // Re-fetch to get updated completed_runs from backend
+      try {
+        const res = await client.get('/api/v1/applications/' + app.id);
+        setFullApp(res.data);
+      } catch {
+        setFullApp(prev => prev ? { ...prev, application: { ...prev.application, status: newStatus } } : prev);
+      }
       if (onUpdate) onUpdate();
     } catch {
       alert('Ошибка смены статуса');
@@ -122,7 +128,7 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
               <div><span style={{ fontWeight: 600 }}>Листов:</span> {layoutTotal}</div>
             </div>
 
-            {layoutTotal > 1 && (
+            {layoutTotal >= 1 && (
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>Вырезано: {doneCount} из {layoutTotal}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -357,7 +363,7 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
                           {doneCount}/{layoutTotal}
                         </span>
                       </div>
-                      {layout.sheet_count > 1 && (
+                      {layout.sheet_count >= 1 && (
                         <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                           {Array.from({ length: layoutTotal }, (_, i) => {
                             const done = runs[i] || false;

@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import MobileLayoutCarousel from './MobileLayoutCarousel';
 import LayoutPreviewModal from './LayoutPreviewModal';
+import client from '../api/client';
 
 const STATUS_CONFIG = {
   approved: { label: 'В очереди', bg: '#dbeafe', color: '#1d4ed8' },
@@ -12,10 +13,11 @@ const STATUS_CONFIG = {
 export default function MobileOrderCard({ app }) {
   const [previewLayout, setPreviewLayout] = useState(null);
   const [activeLayoutIndex, setActiveLayoutIndex] = useState(0);
+  const [localLayouts, setLocalLayouts] = useState(null);
   const status = STATUS_CONFIG[app.status] || STATUS_CONFIG.approved;
   const material = app.steel_grade || app.material || '-';
   const priority = app.priority || 'medium';
-  const layouts = app.layouts || [];
+  const layouts = localLayouts || app.layouts || [];
 
   const allLayouts = layouts.length > 0
     ? layouts
@@ -30,6 +32,19 @@ export default function MobileOrderCard({ app }) {
       setPreviewLayout(allLayouts[activeLayoutIndex]);
     }
   }, [allLayouts, activeLayoutIndex]);
+
+  const toggleRun = useCallback(async (e, layoutId, runIndex) => {
+    e.stopPropagation();
+    try {
+      const res = await client.patch('/api/v1/applications/layouts/' + layoutId + '/toggle-run?run_index=' + runIndex);
+      setLocalLayouts(prev => {
+        const current = prev || app.layouts || [];
+        return current.map(l => l.id === layoutId ? { ...l, completed_runs: res.data.completed_runs } : l);
+      });
+    } catch {
+      alert('Ошибка');
+    }
+  }, [app.layouts]);
 
   return (
     <>
@@ -61,6 +76,25 @@ export default function MobileOrderCard({ app }) {
             >
               {status.label}
             </span>
+            {allLayouts.length === 1 && allLayouts[0].sheet_count >= 1 && (() => {
+              const layout = allLayouts[0];
+              const runs = Array.isArray(layout.completed_runs) ? layout.completed_runs : [];
+              const done = runs[0] || false;
+              return (
+                <div
+                  onClick={(e) => toggleRun(e, layout.id, 0)}
+                  style={{
+                    width: 24, height: 24, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                    background: done ? '#22c55e' : '#e2e8f0',
+                    color: done ? '#fff' : '#64748b',
+                    border: done ? '2px solid #16a34a' : '2px solid transparent',
+                  }}
+                >
+                  {done ? '✓' : '1'}
+                </div>
+              );
+            })()}
             {allLayouts.length > 1 && (() => {
               const totalSheets = allLayouts.reduce((sum, l) => sum + (l.sheet_count || 1), 0);
               const cutSheets = allLayouts.reduce((sum, l) => {
