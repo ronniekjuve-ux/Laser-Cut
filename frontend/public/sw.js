@@ -1,4 +1,5 @@
-const CACHE_NAME = 'lasercut-v1';
+const CACHE_VERSION = Date.now();
+const CACHE_NAME = `lasercut-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -28,16 +29,37 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', event => {
+  // Never cache API calls, auth, websocket, or admin pages
   if (event.request.url.includes('/api/') ||
       event.request.url.includes('/auth/') ||
-      event.request.url.includes('/ws/')) {
+      event.request.url.includes('/ws/') ||
+      event.request.url.includes('/admin/')) {
     return;
   }
 
+  // Network-first for HTML pages (index.html, etc.)
+  if (event.request.mode === 'navigate' ||
+      event.request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then(cache => {
+          cache.put(event.request, responseClone);
+        });
+        return response;
+      }).catch(() => {
+        return caches.match(event.request);
+      })
+    );
+    return;
+  }
+
+  // Cache-first for static assets (JS, CSS, images)
   if (event.request.method === 'GET') {
     event.respondWith(
       caches.match(event.request).then(response => {
-        return response || fetch(event.request).then(fetchResponse => {
+        if (response) return response;
+        return fetch(event.request).then(fetchResponse => {
           if (fetchResponse && fetchResponse.status === 200) {
             const responseClone = fetchResponse.clone();
             caches.open(CACHE_NAME).then(cache => {

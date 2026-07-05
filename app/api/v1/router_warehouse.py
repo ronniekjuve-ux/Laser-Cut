@@ -4,7 +4,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from app.db.base import get_db
-from app.db.models import WarehouseItem
+from app.db.models import WarehouseItem, ItemNote, DeficitRequest
 from app.models.user import User, UserRole
 from app.core.deps import require_role
 
@@ -101,38 +101,91 @@ async def create_warehouse_item(
     except Exception:
         pass
 
-    return {"status": "success", "id": item.id}
+    return {"status": "success"}
 
 
-@router.patch("/{item_id}")
-async def update_warehouse_item(
+# === Item Notes (chat-like) ===
+
+@router.get("/notes/{item_type}/{item_id}")
+async def get_item_notes(
+        item_type: str,
+        item_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
+):
+    if item_type not in ('warehouse', 'deficit'):
+        raise HTTPException(status_code=400, detail="Invalid item type")
+
+    result = await db.execute(
+        select(ItemNote)
+        .where(ItemNote.item_type == item_type, ItemNote.item_id == item_id)
+        .order_by(desc(ItemNote.created_at))
+    )
+    notes = result.scalars().all()
+    return [
+        {
+            "id": n.id,
+            "user_id": n.user_id,
+            "username": n.username,
+            "text": n.text,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+        }
+        for n in notes
+    ]
+
+
+@router.post("/notes/{item_type}/{item_id}")
+async def add_item_note(
+        item_type: str,
         item_id: int,
         body: dict,
         db: AsyncSession = Depends(get_db),
         user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
 ):
-    result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == item_id))
-    item = result.scalar_one_or_none()
-    if not item:
-        raise HTTPException(status_code=404, detail="Запись не найдена")
+    if item_type not in ('warehouse', 'deficit'):
+        raise HTTPException(status_code=400, detail="Invalid item type")
 
-    for field in ("metal", "grade", "size", "owner", "note"):
-        if field in body:
-            setattr(item, field, body[field])
-    if "sheet_count" in body:
-        item.sheet_count = int(body["sheet_count"]) if body["sheet_count"] else 0
+    text = body.get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
 
+    note = ItemNote(
+        item_type=item_type,
+        item_id=item_id,
+        user_id=user.id,
+        username=user.username,
+        text=text,
+    )
+    db.add(note)
     await db.commit()
+    await db.refresh(note)
 
-    try:
-        from app.main import manager
-        await manager.broadcast({
-            "type": "notification",
-            "message": f"Склад: обновлена запись #{item_id}"
-        })
-    except Exception:
-        pass
+    return {
+        "id": note.id,
+        "user_id": note.user_id,
+        "username": note.username,
+        "text": note.text,
+        "created_at": note.created_at.isoformat() if note.created_at else None,
+    }
 
+
+@router.delete("/notes/{item_type}/{item_id}/{note_id}")
+async def delete_item_note(
+        item_type: str,
+        item_id: int,
+        note_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN))
+):
+    result = await db.execute(
+        select(ItemNote).where(ItemNote.id == note_id, ItemNote.item_type == item_type, ItemNote.item_id == item_id)
+    )
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    await db.delete(note)
+    await db.commit()
     return {"status": "success"}
 
 

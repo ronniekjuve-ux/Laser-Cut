@@ -42,18 +42,7 @@ export function getShiftForDate(date, overrides = {}) {
   return { ...getShiftInfo(date), isOverride: false };
 }
 
-export function loadOverrides() {
-  try {
-    return JSON.parse(localStorage.getItem('shift_overrides') || '{}');
-  } catch {
-    return {};
-  }
-}
-
-export function saveOverrides(overrides) {
-  localStorage.setItem('shift_overrides', JSON.stringify(overrides));
-}
-
+// Server-only overrides - no localStorage
 export async function loadOverridesFromServer(month) {
   try {
     const client = (await import('../api/client')).default;

@@ -373,3 +373,16 @@ class Feedback(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
+
+
+class ItemNote(Base):
+    __tablename__ = "item_notes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_type: Mapped[str] = mapped_column(String(20))  # 'warehouse' or 'deficit'
+    item_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    username: Mapped[str] = mapped_column(String(50))
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])

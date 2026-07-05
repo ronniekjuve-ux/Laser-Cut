@@ -3,8 +3,6 @@ import {
   ALL_OPERATORS,
   dateToKey,
   getShiftForDate,
-  loadOverrides,
-  saveOverrides,
   getOperatorDaysInMonth,
   computeMonthShifts,
   loadOverridesFromServer,
@@ -72,21 +70,22 @@ export default function Schedule() {
   const [month, setMonth] = useState(now.getMonth());
   const [year, setYear] = useState(now.getFullYear());
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [overrides, setOverrides] = useState(() => loadOverrides());
+  const [overrides, setOverrides] = useState({});
   const [editingOverride, setEditingOverride] = useState(null);
   const [overrideForm, setOverrideForm] = useState({ st1: '', st2: '', night: '' });
   const [selectedOps, setSelectedOps] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const mm = String(month + 1).padStart(2, '0');
+    setLoading(true);
     loadOverridesFromServer(`${year}-${mm}`).then(serverOverrides => {
-      const merged = { ...loadOverrides(), ...serverOverrides };
-      setOverrides(merged);
-      saveOverrides(merged);
+      setOverrides(serverOverrides || {});
+      setLoading(false);
+    }).catch(() => {
+      setLoading(false);
     });
   }, [year, month]);
-
-  useEffect(() => { saveOverrides(overrides); }, [overrides]);
 
   const syncToAudit = async (y, m, ov) => {
     try {
@@ -215,6 +214,11 @@ export default function Schedule() {
 
   return (
     <div>
+      {loading && (
+        <div style={{ textAlign: 'center', padding: 10, fontSize: 13, color: '#64748b', background: '#f8fafc', borderRadius: 6, marginBottom: 10 }}>
+          Загрузка графика с сервера...
+        </div>
+      )}
       <div className="toolbar">
         <button className="btn" onClick={prevMonth}>← Предыдущий</button>
         <button className="btn" onClick={goToNow}>Текущий месяц</button>

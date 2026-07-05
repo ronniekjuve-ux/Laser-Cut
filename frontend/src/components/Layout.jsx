@@ -8,11 +8,10 @@ import InstallPWA from './InstallPWA';
 import BottomNav from './BottomNav';
 import UpdateBanner from './UpdateBanner';
 import CacheManager from './CacheManager';
-import { getShiftForDate, loadOverrides } from '../utils/shifts';
+import { getShiftForDate, loadOverridesFromServer } from '../utils/shifts';
 
-function getActiveOps() {
+function getActiveOps(overrides) {
   const h = new Date().getHours();
-  const overrides = loadOverrides();
   const { pair, isVovaOn } = getShiftForDate(new Date(), overrides);
   if (h >= 8 && h < 20) {
     return pair[0] + ' (St1) | ' + pair[1] + ' (St2)';
@@ -55,13 +54,22 @@ export default function Layout() {
   useWebSocket(handleWsMessage);
 
   useEffect(() => {
-    const update = () => {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yy = now.getFullYear();
+
+    const update = (overrides = {}) => {
       setClock(new Date().toLocaleString('ru-RU'));
-      setActiveOps(getActiveOps());
+      setActiveOps(getActiveOps(overrides));
     };
-    update();
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
+
+    loadOverridesFromServer(`${yy}-${mm}`).then(overrides => {
+      update(overrides);
+      const id = setInterval(() => update(overrides), 1000);
+      return () => clearInterval(id);
+    }).catch(() => {
+      update();
+    });
   }, []);
 
   useEffect(() => {
