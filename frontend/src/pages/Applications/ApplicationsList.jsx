@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import useIsMobile from '../../hooks/useIsMobile';
+import useIsMobile, { getForceMobile } from '../../hooks/useIsMobile';
 import MobileOrderCard from '../../components/MobileOrderCard';
 import ApplicationDetail from './ApplicationDetail';
 import NewOrderModal from './NewOrderModal';
@@ -162,6 +162,7 @@ export default function ApplicationsList() {
   const filterRef = useRef(null);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const isRealMobile = isMobile && window.innerWidth <= 768;
 
   // Подсветка заявки из уведомления
   useEffect(() => {
@@ -404,12 +405,13 @@ export default function ApplicationsList() {
         </div>
       )}
 
-      {isMobile ? (
+      {isRealMobile ? (
         <div className="order-cards">
           {activeApps.map(app => (
             <MobileOrderCard
               key={app.id}
               app={app}
+              showProgress={false}
             />
           ))}
           {activeApps.length === 0 && (
@@ -695,7 +697,7 @@ export default function ApplicationsList() {
         </div>
       )}
 
-      {selectedApp && !isMobile && (
+      {selectedApp && !isRealMobile && (
         <ApplicationDetail
           app={selectedApp}
           onClose={() => setSelectedApp(null)}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
@@ -9,24 +9,33 @@ const STATUS_OPTIONS = [
   { key: 'cut', label: 'Вырезано', bg: '#d1fae5', color: '#047857' },
 ];
 
-export default function LayoutPreviewModal({ appId, layoutId, onClose, onStatusChange }) {
+export default function LayoutPreviewModal({ appId, layoutId, allLayoutIds, onClose, onStatusChange }) {
   const { user } = useAuth();
   const [layout, setLayout] = useState(null);
+  const [allLayouts, setAllLayouts] = useState([]);
+  const [currentIdx, setCurrentIdx] = useState(0);
   const [appData, setAppData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showPartImage, setShowPartImage] = useState(null);
   const [statusDropdown, setStatusDropdown] = useState(false);
   const canChangeStatus = user?.role === 'admin' || user?.role === 'operator';
 
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+
   useEffect(() => {
     const controller = new AbortController();
     const fetchData = async () => {
       try {
         const res = await client.get('/api/v1/applications/' + appId, { signal: controller.signal });
-        const layouts = res.data.layouts || [];
-        const found = layouts.find(l => l.id === layoutId);
-        setLayout(found || null);
+        const layouts = (res.data.layouts || []).sort((a, b) =>
+          (a.layout_code || '').localeCompare(b.layout_code || '', undefined, { numeric: true })
+        );
+        setAllLayouts(layouts);
         setAppData(res.data.application || null);
+        const idx = layouts.findIndex(l => l.id === layoutId);
+        setCurrentIdx(idx >= 0 ? idx : 0);
+        setLayout(idx >= 0 ? layouts[idx] : layouts[0] || null);
       } catch (err) {
         if (err.name !== 'AbortError') console.error('Failed to load layout', err);
       } finally {
@@ -37,17 +46,44 @@ export default function LayoutPreviewModal({ appId, layoutId, onClose, onStatusC
     return () => controller.abort();
   }, [appId, layoutId]);
 
+  const goToLayout = useCallback((idx) => {
+    if (idx >= 0 && idx < allLayouts.length) {
+      setCurrentIdx(idx);
+      setLayout(allLayouts[idx]);
+    }
+  }, [allLayouts]);
+
+  const handleTouchStart = useCallback((e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  }, []);
+
+  const handleTouchEnd = useCallback((e) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
+    if (Math.abs(dx) > 50 && dy < 50) {
+      if (dx < -50 && currentIdx < allLayouts.length - 1) {
+        goToLayout(currentIdx + 1);
+      } else if (dx > 50 && currentIdx > 0) {
+        goToLayout(currentIdx - 1);
+      }
+    }
+  }, [currentIdx, allLayouts.length, goToLayout]);
+
   const changeStatus = async (newStatus) => {
     try {
       await client.patch('/api/v1/applications/' + appId + '/status?status=' + newStatus);
       setStatusDropdown(false);
-      // Re-fetch to get updated completed_runs from backend
       try {
         const res = await client.get('/api/v1/applications/' + appId);
         const data = res.data;
         setAppData(data.application || data);
-        const foundLayout = (data.layouts || []).find(l => l.id === layoutId);
-        if (foundLayout) setLayout(foundLayout);
+        const sorted = (data.layouts || []).sort((a, b) =>
+          (a.layout_code || '').localeCompare(b.layout_code || '', undefined, { numeric: true })
+        );
+        setAllLayouts(sorted);
+        const found = sorted.find(l => l.id === layoutId);
+        if (found) setLayout(found);
       } catch {
         setAppData(prev => prev ? { ...prev, status: newStatus } : prev);
       }
@@ -62,6 +98,8 @@ export default function LayoutPreviewModal({ appId, layoutId, onClose, onStatusC
     try {
       const res = await client.patch('/api/v1/applications/layouts/' + layout.id + '/toggle-run?run_index=' + runIndex);
       setLayout(prev => prev ? { ...prev, completed_runs: res.data.completed_runs } : prev);
+      // Update in allLayouts too
+      setAllLayouts(prev => prev.map(l => l.id === layout.id ? { ...l, completed_runs: res.data.completed_runs } : l));
     } catch {
       alert('Ошибка');
     }
@@ -94,6 +132,7 @@ export default function LayoutPreviewModal({ appId, layoutId, onClose, onStatusC
   const doneCount = runs.filter(Boolean).length;
   const layoutTotal = layout.sheet_count || 1;
   const statusConf = STATUS_OPTIONS.find(s => s.key === appData?.status) || STATUS_OPTIONS[0];
+  const hasMultiple = allLayouts.length > 1;
 
   return (
     <div className="modal-overlay active" onClick={onClose}>
@@ -101,10 +140,54 @@ export default function LayoutPreviewModal({ appId, layoutId, onClose, onStatusC
         <div className="modal-header">
           <h3 style={{ fontSize: 14 }}>
             {appId}.{layout.layout_code || '?'}
+            {hasMultiple && (
+              <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>
+                {currentIdx + 1}/{allLayouts.length}
+              </span>
+            )}
           </h3>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
-        <div className="modal-body" style={{ padding: '0 12px 12px' }}>
+        <div
+          className="modal-body"
+          style={{ padding: '0 12px 12px' }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Navigation arrows for multiple layouts */}
+          {hasMultiple && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <button
+                className="btn"
+                onClick={() => goToLayout(currentIdx - 1)}
+                disabled={currentIdx === 0}
+                style={{ fontSize: 12, padding: '4px 10px', opacity: currentIdx === 0 ? 0.3 : 1 }}
+              >
+                ← Пред
+              </button>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {allLayouts.map((_, i) => (
+                  <div
+                    key={i}
+                    onClick={() => goToLayout(i)}
+                    style={{
+                      width: 8, height: 8, borderRadius: '50%', cursor: 'pointer',
+                      background: i === currentIdx ? '#2563eb' : '#cbd5e1',
+                    }}
+                  />
+                ))}
+              </div>
+              <button
+                className="btn"
+                onClick={() => goToLayout(currentIdx + 1)}
+                disabled={currentIdx === allLayouts.length - 1}
+                style={{ fontSize: 12, padding: '4px 10px', opacity: currentIdx === allLayouts.length - 1 ? 0.3 : 1 }}
+              >
+                След →
+              </button>
+            </div>
+          )}
+
           {layout.layout_image && (
             <img
               src={layout.layout_image}

@@ -90,7 +90,7 @@ export default function CacheManager() {
 
       {open && (
         <div style={{
-          position: 'absolute', top: 35, right: 0, background: '#fff',
+          position: 'absolute', top: 35, left: 0, right: 'auto', background: '#fff',
           border: '1px solid #e2e8f0', borderRadius: 8,
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           width: 240, zIndex: 1001, overflow: 'hidden'
