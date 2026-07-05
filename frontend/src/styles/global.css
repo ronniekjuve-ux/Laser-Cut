@@ -290,6 +290,7 @@ tr:hover{background:#eff6ff}
   .carousel-container { position: relative; width: 100%; }
   .carousel-viewport { width: 100%; overflow: hidden; }
   .carousel-image { width: 100%; max-height: 250px; object-fit: contain; display: block; }
+  @media (orientation: landscape) { .carousel-image { max-height: 50vh; } }
   .carousel-dots { display: flex; justify-content: center; gap: 5px; padding: 6px 0; }
   .carousel-dot { width: 6px; height: 6px; border-radius: 50%; background: #cbd5e1; transition: background 0.2s; }
   .carousel-dot.active { background: #2563eb; }

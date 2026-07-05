@@ -27,9 +27,9 @@ export default function MobileOrderCard({ app }) {
 
   const openPreview = useCallback(() => {
     if (allLayouts.length > 0) {
-      setPreviewLayout(allLayouts[0]);
+      setPreviewLayout(allLayouts[activeLayoutIndex]);
     }
-  }, [allLayouts]);
+  }, [allLayouts, activeLayoutIndex]);
 
   return (
     <>

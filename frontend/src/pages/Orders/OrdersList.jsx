@@ -373,11 +373,14 @@ export default function OrdersList({ initialTab }) {
       {isMobile && (<div style={{ marginBottom: 12 }}>
           {/* Tab bar */}
           <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--border)', marginBottom: 10 }}>
-            {[
+            {(user?.role === 'operator' ? [
+              { key: 'orders', label: 'Заказы' },
+              { key: 'completed', label: 'Выполненные' },
+            ] : [
               { key: 'applications', label: 'Заявки' },
               { key: 'orders', label: 'Заказы' },
               { key: 'completed', label: 'Выполненные' },
-            ].map(tab => (
+            ]).map(tab => (
               <div
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
