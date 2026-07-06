@@ -315,17 +315,17 @@ export default function OrdersList({ initialTab }) {
   return (
     <div>
       <div className="toolbar">
-        {user?.role === 'admin' && (
+        {(user?.role === 'admin' || user?.role === 'director') && (
           <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
             + Новый заказ
           </button>
         )}
-        {user?.role === 'admin' && (
+        {(user?.role === 'admin' || user?.role === 'director') && (
           <button className="btn" onClick={() => setShowMerge(true)} style={{ background: '#fef9c3', color: '#854d0e', border: '1px solid #fde047' }}>
             🔗 Слияние
           </button>
         )}
-        {user?.role === 'admin' && selectedApps.length >= 2 && (
+        {(user?.role === 'admin' || user?.role === 'director') && selectedApps.length >= 2 && (
           <button className="btn" onClick={() => setShowCreateGroup(true)} style={{ background: '#ede9fe', color: '#7c3aed', border: '1px solid #c4b5fd' }}>
             📁 Создать группу ({selectedApps.length})
           </button>

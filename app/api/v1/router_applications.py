@@ -66,7 +66,7 @@ async def upload_application(
         supply_material: str = Form(""),
         status: str = Form("pending"),
         db: AsyncSession = Depends(get_db),
-        user: User = Depends(require_role(UserRole.ADMIN))
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
 ):
     if not file.filename.lower().endswith('.doc'):
         raise HTTPException(status_code=400, detail="Только .doc файлы")
@@ -161,7 +161,7 @@ async def upload_layout(
         app_id: int,
         file: UploadFile = File(...),
         db: AsyncSession = Depends(get_db),
-        user: User = Depends(require_role(UserRole.ADMIN))
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
 ):
     result = await db.execute(select(Application).where(Application.id == app_id))
     app = result.scalar_one_or_none()
