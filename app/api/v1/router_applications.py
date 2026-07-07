@@ -272,9 +272,7 @@ async def upload_layout(
                 pass
 
         for pi, part_data in enumerate(merged_parts):
-            part_weight = None
-            if thickness > 0 and part_data.dx > 0 and part_data.dy > 0:
-                part_weight = round(part_data.dx * part_data.dy * thickness * 7.85 / 1000000, 4)
+            part_weight = part_data.weight
 
             part_key = normalize_name(part_data.name)
             part_image = detail_image_map.get(part_key)
@@ -301,16 +299,6 @@ async def upload_layout(
             app.total_weight = layout_data.sheet_weight
 
         await db.commit()
-
-        # Пересчёт весов деталей с учётом обновлённой толщины
-        if app.thickness and app.thickness > 0:
-            parts_res = await db.execute(
-                select(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == layout.id)
-            )
-            for part in parts_res.scalars().all():
-                if part.dx > 0 and part.dy > 0:
-                    part.weight = round(part.dx * part.dy * app.thickness * 7.85 / 1_000_000, 4)
-            await db.commit()
 
         return {
             "status": "success",
@@ -1034,9 +1022,7 @@ async def merge_layouts(
 
     thickness = new_app.thickness or 0.0
     for part_data in new_layout_data.parts:
-        part_weight = None
-        if thickness > 0 and part_data.dx > 0 and part_data.dy > 0:
-            part_weight = round(part_data.dx * part_data.dy * thickness * 7.85 / 1000000, 4)
+        part_weight = part_data.weight
         part_key = normalize_name(part_data.name)
         part_image = merged_detail_images.get(part_key)
         db.add(ApplicationLayoutPart(
