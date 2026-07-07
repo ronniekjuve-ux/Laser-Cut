@@ -85,11 +85,6 @@ async def upload_application(
             data.order_name = order_name
 
         app = None
-        if status == "pending":
-            result = await db.execute(
-                select(Application).where(Application.order_name == data.order_name)
-            )
-            app = result.scalar_one_or_none()
 
         detail_images = extract_images(file_path, str(IMAGE_DIR), prefix="applications", filter_dft=True)
 

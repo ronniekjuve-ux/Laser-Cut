@@ -386,8 +386,15 @@ def parse_application_text(text: str) -> ApplicationData:
             try:
                 name_raw = cells[1]
                 if '.dft' in name_raw.lower() or 'шт' in name_raw.lower():
-                    weight_str = cells[5]
-                    qty_str = cells[6]
+                    # Пустая ячейка "Вид" фильтруется → сдвиг индексов.
+                    # 8 ячеек (с пустой "Вид"): weight=5, qty=6
+                    # 7 ячеек (пустая "Вид" отфильтрована): weight=4, qty=5
+                    if len(cells) == 7:
+                        weight_str = cells[4]
+                        qty_str = cells[5]
+                    else:
+                        weight_str = cells[5]
+                        qty_str = cells[6]
 
                     data.parts.append(AppPart(
                         name_raw=name_raw,
@@ -703,7 +710,6 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft:
                     if dft_pos <= 0:
                         continue
                     before = stripped[max(0, dft_pos - 200):dft_pos]
-                    # Join lines that form the filename (stop at blank lines or table separators)
                     lines = before.split('\n')
                     name_lines = []
                     for line in reversed(lines):
