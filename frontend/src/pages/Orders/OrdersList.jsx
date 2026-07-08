@@ -75,7 +75,7 @@ export default function OrdersList({ initialTab }) {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const highlightId = searchParams.get('highlight');
-  const [applications, setApplications] = useState([]);
+  const [allOrders, setAllOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sortCol, setSortCol] = useState('priority');
@@ -89,8 +89,6 @@ export default function OrdersList({ initialTab }) {
   const [notesModal, setNotesModal] = useState(null);
   const [filterSearch, setFilterSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
   const [statusDropdown, setStatusDropdown] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [groupDetailId, setGroupDetailId] = useState(null);
@@ -103,13 +101,13 @@ export default function OrdersList({ initialTab }) {
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState(initialTab || 'orders');
   const [machineFilter, setMachineFilter] = useState(null);
+  const PAGE_SIZE = 15;
 
-  const fetchOrders = useCallback(async (searchQuery, pageNum = page) => {
+  const fetchOrders = useCallback(async (searchQuery) => {
     try {
       const tabParam = activeTab === 'applications' ? 'applications' : 'orders';
-      const params = { page: pageNum, limit: 15, tab: tabParam };
+      const params = { tab: tabParam, limit: 1000 };
       if (activeTab === 'completed') params.status = 'cut';
-      if (searchQuery) params.search = searchQuery;
       if (filters.customer) params.customer_name = filters.customer[0];
       if (filters.machine) params.machine = filters.machine[0];
       if (filters.material) params.material = filters.material[0];
@@ -119,31 +117,29 @@ export default function OrdersList({ initialTab }) {
       if (machineFilter) params.machine = machineFilter;
       const res = await client.get('/api/v1/applications/', { params });
       if (res.data.items) {
-        setApplications(res.data.items);
-        setTotal(res.data.total);
-        setTotalPages(res.data.pages);
+        setAllOrders(res.data.items);
         if (res.data.filter_values) setFilterValues(res.data.filter_values);
       } else {
-        setApplications(Array.isArray(res.data) ? res.data : []);
+        setAllOrders(Array.isArray(res.data) ? res.data : []);
       }
     } catch (err) {
       console.error('Failed to load orders', err);
     } finally {
       setLoading(false);
     }
-  }, [page, filters, activeTab, machineFilter]);
+  }, [filters, activeTab, machineFilter]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   useEffect(() => {
     setPage(1);
-    fetchOrders(search || undefined, 1);
+    fetchOrders();
   }, [activeTab, machineFilter]);
 
   useEffect(() => {
     setPage(1);
     const timer = setTimeout(() => {
-      fetchOrders(search || undefined, 1);
+      fetchOrders();
     }, 300);
     return () => clearTimeout(timer);
   }, [search, filters]);
@@ -187,7 +183,7 @@ export default function OrdersList({ initialTab }) {
   const getFilterValues = (colKey) => {
     if (filterValues[colKey]) return filterValues[colKey];
     const vals = new Set();
-    applications.forEach(app => {
+    allOrders.forEach(app => {
       const rd = getRowData(app);
       if (rd[colKey]) vals.add(String(rd[colKey]).trim());
     });
@@ -219,7 +215,19 @@ export default function OrdersList({ initialTab }) {
     );
   };
 
-  const filtered = applications.sort((a, b) => {
+  const filtered = allOrders.filter(app => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    const rd = getRowData(app);
+    return (
+      String(rd.customer).toLowerCase().includes(q) ||
+      String(rd.number).includes(q) ||
+      String(app.order_name || '').toLowerCase().includes(q) ||
+      String(rd.material).toLowerCase().includes(q) ||
+      String(rd.notes).toLowerCase().includes(q) ||
+      String(rd.group).toLowerCase().includes(q)
+    );
+  }).sort((a, b) => {
     const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
     const getPriorityVal = (app) => {
       const p = getRowData(app).priority;
@@ -259,6 +267,9 @@ export default function OrdersList({ initialTab }) {
   });
 
   const activeApps = activeTab === 'completed' ? filtered : filtered.filter(app => app.status !== 'cut');
+
+  const totalPages = Math.ceil(activeApps.length / PAGE_SIZE);
+  const pageItems = activeApps.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const toggleFilterItem = (colKey, val) => {
     setFilters(prev => {
@@ -306,7 +317,7 @@ export default function OrdersList({ initialTab }) {
     e.stopPropagation();
     try {
       await client.patch('/api/v1/applications/' + appId + '/status?status=approved');
-      fetchOrders(search || undefined);
+      fetchOrders();
     } catch (err) {
       alert('Ошибка');
     }
@@ -340,7 +351,7 @@ export default function OrdersList({ initialTab }) {
           className="search-input"
         />
         <span style={{ marginLeft: 'auto', fontSize: 13, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center' }}>
-          Всего: {total} заказов | Стр. {page} из {totalPages || 1}
+          Всего: {activeApps.length} заказов | Стр. {page} из {totalPages || 1}
           <button className="btn" onClick={async () => {
             const token = localStorage.getItem('token');
             const res = await fetch('/api/v1/applications/export?tab=orders', {
@@ -457,13 +468,13 @@ export default function OrdersList({ initialTab }) {
 
       {isMobile ? (
         <div className="order-cards">
-          {activeApps.map(app => (
+          {pageItems.map(app => (
             <MobileOrderCard
               key={app.id}
               app={app}
             />
           ))}
-          {activeApps.length === 0 && (
+          {pageItems.length === 0 && (
             <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Нет активных заказов</div>
           )}
         </div>
@@ -505,7 +516,7 @@ export default function OrdersList({ initialTab }) {
               </tr>
             </thead>
             <tbody>
-              {activeApps.map(app => (
+              {pageItems.map(app => (
                 <React.Fragment key={app.id}>
                   <tr onClick={() => setSelectedApp(app)} style={{
                     cursor: 'pointer',
@@ -592,7 +603,7 @@ export default function OrdersList({ initialTab }) {
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           client.patch('/api/v1/applications/' + app.id + '/status?status=' + s.key)
-                                            .then(() => { setStatusDropdown(null); fetchOrders(search || undefined); });
+                                            .then(() => { setStatusDropdown(null); fetchOrders(); });
                                         }}
                                         style={{
                                           padding: '6px 10px', fontSize: 12, cursor: 'pointer',
@@ -663,7 +674,7 @@ export default function OrdersList({ initialTab }) {
                                       e.stopPropagation();
                                       const val = opt.val === true ? 'true' : opt.val === false ? 'false' : '';
                                       client.patch('/api/v1/applications/' + app.id + '/supply_material?value=' + val)
-                                        .then(() => fetchOrders(search || undefined));
+                                        .then(() => fetchOrders());
                                       document.getElementById('supply-dropdown-' + app.id).style.display = 'none';
                                     }}
                                     style={{
@@ -685,7 +696,7 @@ export default function OrdersList({ initialTab }) {
                                 onChange={(e) => {
                                   e.stopPropagation();
                                   client.patch('/api/v1/applications/' + app.id + '/priority?priority=' + e.target.value)
-                                    .then(() => fetchOrders(search || undefined));
+                                    .then(() => fetchOrders());
                                 }}
                                 onClick={(e) => e.stopPropagation()}
                                 style={{
@@ -764,10 +775,10 @@ export default function OrdersList({ initialTab }) {
 
       {totalPages > 1 && (
         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center' }}>
-          <button className="btn" onClick={() => { setPage(1); fetchOrders(search, 1); }} disabled={page <= 1} style={{ fontSize: 12 }}>
+          <button className="btn" onClick={() => setPage(1)} disabled={page <= 1} style={{ fontSize: 12 }}>
             «
           </button>
-          <button className="btn" onClick={() => { const p = page - 1; setPage(p); fetchOrders(search, p); }} disabled={page <= 1} style={{ fontSize: 12 }}>
+          <button className="btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={{ fontSize: 12 }}>
             ‹
           </button>
           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
@@ -780,17 +791,17 @@ export default function OrdersList({ initialTab }) {
               <button
                 key={p}
                 className={'btn' + (p === page ? ' btn-primary' : '')}
-                onClick={() => { setPage(p); fetchOrders(search, p); }}
+                onClick={() => setPage(p)}
                 style={{ fontSize: 12 }}
               >
                 {p}
               </button>
             );
           })}
-          <button className="btn" onClick={() => { const p = page + 1; setPage(p); fetchOrders(search, p); }} disabled={page >= totalPages} style={{ fontSize: 12 }}>
+          <button className="btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} style={{ fontSize: 12 }}>
             ›
           </button>
-          <button className="btn" onClick={() => { setPage(totalPages); fetchOrders(search, totalPages); }} disabled={page >= totalPages} style={{ fontSize: 12 }}>
+          <button className="btn" onClick={() => setPage(totalPages)} disabled={page >= totalPages} style={{ fontSize: 12 }}>
             »
           </button>
         </div>
@@ -841,7 +852,7 @@ export default function OrdersList({ initialTab }) {
         <NotesModal
           app={notesModal}
           onClose={() => setNotesModal(null)}
-          onSaved={() => { setNotesModal(null); fetchOrders(search || undefined); }}
+          onSaved={() => { setNotesModal(null); fetchOrders(); }}
         />
       )}
 
@@ -849,7 +860,7 @@ export default function OrdersList({ initialTab }) {
         <ApplicationDetail
           app={selectedApp}
           onClose={() => setSelectedApp(null)}
-          onUpdate={() => fetchOrders(search || undefined)}
+          onUpdate={() => fetchOrders()}
         />
       )}
 
@@ -881,7 +892,7 @@ export default function OrdersList({ initialTab }) {
         <GroupDetail
           groupId={groupDetailId}
           onClose={() => setGroupDetailId(null)}
-          onRefresh={() => fetchOrders(search || undefined)}
+          onRefresh={() => fetchOrders()}
         />
       )}
 
@@ -891,7 +902,7 @@ export default function OrdersList({ initialTab }) {
           onClose={() => setShowCreateGroup(false)}
           onCreated={(groupId) => {
             setSelectedApps([]);
-            fetchOrders(search || undefined);
+            fetchOrders();
           }}
         />
       )}
@@ -900,7 +911,7 @@ export default function OrdersList({ initialTab }) {
         <EditModal
           app={editModal}
           onClose={() => setEditModal(null)}
-          onSaved={() => { setEditModal(null); fetchOrders(search || undefined); }}
+          onSaved={() => { setEditModal(null); fetchOrders(); }}
         />
       )}
 
@@ -908,7 +919,7 @@ export default function OrdersList({ initialTab }) {
         <ReuploadModal
           app={reuploadModal}
           onClose={() => setReuploadModal(null)}
-          onSaved={() => { setReuploadModal(null); fetchOrders(search || undefined); }}
+          onSaved={() => { setReuploadModal(null); fetchOrders(); }}
         />
       )}
     </div>
