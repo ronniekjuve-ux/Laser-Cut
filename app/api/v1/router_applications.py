@@ -609,7 +609,7 @@ async def list_applications(
     if tab == "applications":
         query = query.where(Application.status.in_(["pending", "rejected"]))
     elif tab == "orders":
-        query = query.where(Application.status.in_(["approved", "in_progress", "partially_cut", "cut"]))
+        query = query.where(Application.status.notin_(["pending", "rejected"]))
 
     # Server-side column filters
     if customer_name:

@@ -107,7 +107,6 @@ export default function OrdersList({ initialTab }) {
     try {
       const tabParam = activeTab === 'applications' ? 'applications' : 'orders';
       const params = { tab: tabParam, limit: 1000 };
-      if (activeTab === 'completed') params.status = 'cut';
       if (filters.customer) params.customer_name = filters.customer[0];
       if (filters.machine) params.machine = filters.machine[0];
       if (filters.material) params.material = filters.material[0];
