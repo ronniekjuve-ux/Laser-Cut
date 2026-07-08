@@ -318,10 +318,10 @@ function ApplicationsTab() {
                             <tr key={li} style={{background:'#f8fafc', fontSize:12}}>
                               <td></td>
                               <td></td>
-                              <td></td>
                               <td colSpan={3} style={{color:'#475569'}}>
                                 Раскладка {l.layout_code}
                               </td>
+                              <td></td>
                               <td></td>
                               <td></td>
                               <td style={{color:'#475569'}}>{l.sheet_w}x{l.sheet_h}</td>
