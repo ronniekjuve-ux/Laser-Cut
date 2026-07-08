@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import client from '../../api/client';
-import useIsMobile from '../../hooks/useIsMobile';
+import useIsMobile, { getForceMobile } from '../../hooks/useIsMobile';
 import ApplicationDetail from '../Applications/ApplicationDetail';
 import MobileOrderCard from '../../components/MobileOrderCard';
 import MobileOrderDetail from '../../components/MobileOrderDetail';
@@ -13,6 +13,7 @@ export default function CompletedOrdersList() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const isMobile = useIsMobile();
+  const isRealMobile = isMobile && window.innerWidth <= 768;
 
   const fetchCompleted = useCallback(async (pageNum = page) => {
     try {
@@ -53,7 +54,7 @@ export default function CompletedOrdersList() {
         Выполнено: {total} заказов
       </div>
 
-      {isMobile ? (
+      {isRealMobile ? (
         <div className="order-cards">
           {applications.map(app => (
             <div key={app.id} style={{ position: 'relative' }}>
@@ -161,7 +162,7 @@ export default function CompletedOrdersList() {
       )}
 
       {selectedApp && (
-        isMobile ? (
+        isRealMobile ? (
           <MobileOrderDetail
             app={selectedApp}
             onClose={() => setSelectedApp(null)}

@@ -12,6 +12,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import GroupDetail from '../../components/GroupDetail';
 import CreateGroupModal from '../../components/CreateGroupModal';
 import EditModal from './EditModal';
+import ReuploadModal from './ReuploadModal';
 
 function NotesModal({ app, onClose, onSaved }) {
   const [text, setText] = useState(app.comments || '');
@@ -156,6 +157,7 @@ export default function ApplicationsList() {
   const [selectedApps, setSelectedApps] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [editModal, setEditModal] = useState(null);
+  const [reuploadModal, setReuploadModal] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -625,6 +627,7 @@ export default function ApplicationsList() {
                     ) : col.key === 'actions' ? (
                       <div style={{display: 'flex', gap: 4}}>
                         <button className="btn" onClick={(e) => { e.stopPropagation(); setCalcModal(app); }} title="Калькулятор" style={{padding: '4px 8px', fontSize: 11}}>🧮</button>
+                        <button className="btn" onClick={(e) => { e.stopPropagation(); setReuploadModal(app); }} title="Перезагрузить файлы" style={{padding: '4px 8px', fontSize: 11}}>📤</button>
                         <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{padding: '4px 8px', fontSize: 11}}>✏️</button>
                         <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{padding: '4px 8px', fontSize: 11}}>🗑️</button>
                       </div>
@@ -808,6 +811,14 @@ export default function ApplicationsList() {
           app={editModal}
           onClose={() => setEditModal(null)}
           onSaved={() => { setEditModal(null); fetchApplications(search || undefined); }}
+        />
+      )}
+
+      {reuploadModal && (
+        <ReuploadModal
+          app={reuploadModal}
+          onClose={() => setReuploadModal(null)}
+          onSaved={() => { setReuploadModal(null); fetchApplications(search || undefined); }}
         />
       )}
     </div>

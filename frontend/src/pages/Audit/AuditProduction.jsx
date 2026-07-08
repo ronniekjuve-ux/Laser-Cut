@@ -25,6 +25,7 @@ function formatNum(n, decimals = 0) {
 }
 
 const EXPORT_COLUMNS = [
+  { key: 'id', label: '№' },
   { key: 'customer', label: 'Заказчик' },
   { key: 'order_name', label: 'Заявка' },
   { key: 'created_at', label: 'Дата' },
@@ -147,6 +148,7 @@ function ApplicationsTab() {
 
   const getCellValue = (item, key) => {
     switch (key) {
+      case 'id': return item.id || '';
       case 'customer': return item.customer || '';
       case 'order_name': return item.order_name || '';
       case 'created_at': return formatDate(item.created_at);
@@ -271,6 +273,7 @@ function ApplicationsTab() {
                     <thead>
                       <tr>
                         <th></th>
+                        <th>№</th>
                         <th>Заказчик</th>
                         <th>Заявка</th>
                         <th>Дата</th>
@@ -290,6 +293,7 @@ function ApplicationsTab() {
                         <React.Fragment key={item.id}>
                           <tr onClick={() => toggleApp(item.id)} style={{cursor:'pointer'}}>
                             <td style={{width:30, textAlign:'center'}}>{expandedApps.has(item.id) ? '\u25BC' : '\u25B6'}</td>
+                            <td style={{fontFamily:'monospace', fontSize:12}}>{item.id}</td>
                             <td>{item.customer}</td>
                             <td><b>{item.order_name}</b></td>
                             <td style={{fontFamily:'monospace', fontSize:12}}>{formatDate(item.created_at)}</td>
@@ -314,6 +318,7 @@ function ApplicationsTab() {
                             <tr key={li} style={{background:'#f8fafc', fontSize:12}}>
                               <td></td>
                               <td></td>
+                              <td></td>
                               <td colSpan={3} style={{color:'#475569'}}>
                                 Раскладка {l.layout_code}
                               </td>
@@ -328,7 +333,7 @@ function ApplicationsTab() {
                           ))}
                           {expandedApps.has(item.id) && (
                             <tr style={{background:'#f0f9ff'}}>
-                              <td colSpan={13} style={{padding:'8px 12px'}}>
+                              <td colSpan={14} style={{padding:'8px 12px'}}>
                                 <button className="btn" onClick={(e) => { e.stopPropagation(); setCalcModal(item); }}
                                   style={{fontSize:12}}>
                                   🧮 Калькулятор

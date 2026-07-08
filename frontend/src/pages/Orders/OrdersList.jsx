@@ -11,6 +11,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import GroupDetail from '../../components/GroupDetail';
 import CreateGroupModal from '../../components/CreateGroupModal';
 import EditModal from '../Applications/EditModal';
+import ReuploadModal from '../Applications/ReuploadModal';
 
 function NotesModal({ app, onClose, onSaved }) {
   const [text, setText] = useState(app.comments || '');
@@ -96,6 +97,7 @@ export default function OrdersList({ initialTab }) {
   const [selectedApps, setSelectedApps] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [editModal, setEditModal] = useState(null);
+  const [reuploadModal, setReuploadModal] = useState(null);
   const [filterValues, setFilterValues] = useState({});
   const filterRef = useRef(null);
   const isMobile = useIsMobile();
@@ -718,6 +720,7 @@ export default function OrdersList({ initialTab }) {
                             </button>
                           ) : col.key === 'actions' ? (
                             <div style={{ display: 'flex', gap: 4 }}>
+                              <button className="btn" onClick={(e) => { e.stopPropagation(); setReuploadModal(app); }} title="Перезагрузить файлы" style={{ padding: '4px 8px', fontSize: 11 }}>📤</button>
                               <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{ padding: '4px 8px', fontSize: 11 }}>✏️</button>
                               <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{ padding: '4px 8px', fontSize: 11 }}>🗑️</button>
                             </div>
@@ -898,6 +901,14 @@ export default function OrdersList({ initialTab }) {
           app={editModal}
           onClose={() => setEditModal(null)}
           onSaved={() => { setEditModal(null); fetchOrders(search || undefined); }}
+        />
+      )}
+
+      {reuploadModal && (
+        <ReuploadModal
+          app={reuploadModal}
+          onClose={() => setReuploadModal(null)}
+          onSaved={() => { setReuploadModal(null); fetchOrders(search || undefined); }}
         />
       )}
     </div>

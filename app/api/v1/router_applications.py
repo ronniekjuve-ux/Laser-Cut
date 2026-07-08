@@ -5,7 +5,7 @@ import re
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from typing import Optional, List
 from pathlib import Path
 from app.db.base import get_db
@@ -308,6 +308,242 @@ async def upload_layout(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Ошибка парсинга: {str(e)}")
+
+
+@router.post("/{app_id}/reupload")
+async def reupload_application(
+        app_id: int,
+        application_file: Optional[UploadFile] = File(None),
+        layout_files: Optional[List[UploadFile]] = File(None),
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
+):
+    result = await db.execute(
+        select(Application)
+        .where(Application.id == app_id)
+        .options(selectinload(Application.layouts).selectinload(ApplicationLayout.parts))
+    )
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    try:
+        # --- Step 1: Re-upload application .doc ---
+        if application_file and application_file.filename:
+            if not application_file.filename.lower().endswith('.doc'):
+                raise HTTPException(status_code=400, detail="Только .doc файлы")
+
+            # Delete old application .doc files (not layout files)
+            old_app_files = [
+                f for f in glob.glob(f"{UPLOAD_DIR}/{app.order_name}*")
+                if f.lower().endswith(('.doc', '.docx')) and '_layout_' not in f.lower()
+            ]
+            for f in old_app_files:
+                try:
+                    Path(f).unlink()
+                except Exception:
+                    pass
+
+            # Save new file
+            file_path = save_uploaded_file(application_file, app.order_name)
+
+            # Parse
+            text = extract_text(file_path)
+            data = parse_application_text(text)
+
+            if not data.order_name:
+                data.order_name = app.order_name
+
+            # Extract images
+            detail_images = extract_images(file_path, str(IMAGE_DIR), prefix="applications", filter_dft=True)
+            detail_image_map = {}
+            if detail_images:
+                for img_path, dft_name in detail_images:
+                    key = normalize_name(dft_name)
+                    if key:
+                        detail_image_map[key] = img_path
+            images_json = json.dumps(detail_image_map) if detail_image_map else None
+
+            # Update application record
+            app.material = data.material
+            app.thickness = data.thickness
+            app.total_weight = data.total_weight
+            app.total_parts_count = len(data.parts)
+            if detail_image_map:
+                app.detail_images = images_json
+
+            # Re-merge all layout parts with new application data
+            for layout in app.layouts:
+                await db.execute(
+                    delete(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == layout.id)
+                )
+
+                # Find layout .doc file and re-parse
+                layout_pattern = f"{UPLOAD_DIR}/{app.order_name}_layout_{layout.layout_code}*"
+                layout_files_found = glob.glob(layout_pattern)
+                if layout_files_found:
+                    layout_text = extract_text(layout_files_found[0])
+                    layout_data = parse_layout_text(layout_text, "")
+                    merged_parts = merge_data(data, layout_data)
+
+                    # Update layout metadata
+                    layout.sheet_w = layout_data.sheet_w
+                    layout.sheet_h = layout_data.sheet_h
+                    layout.sheet_weight = layout_data.sheet_weight
+                    layout.sheet_count = layout_data.sheet_count or 1
+                    layout.cut_time = layout_data.cut_time
+                    layout.move_time = layout_data.move_time
+                    layout.pierce_time = layout_data.pierce_time
+                    layout.cut_length = layout_data.cut_length
+                    layout.travel_length = layout_data.travel_length
+                    layout.pierces = layout_data.pierces
+                    layout.cnc_path = layout_data.cnc_path
+
+                    # Re-create parts
+                    for part_data in merged_parts:
+                        part_key = normalize_name(part_data.name)
+                        part_image = detail_image_map.get(part_key)
+                        part = ApplicationLayoutPart(
+                            layout_id=layout.id,
+                            name=part_data.name,
+                            dx=part_data.dx,
+                            dy=part_data.dy,
+                            quantity=part_data.qty_layout,
+                            weight=part_data.weight,
+                            image_path=part_image
+                        )
+                        db.add(part)
+
+            # Reset progress since data changed
+            for layout in app.layouts:
+                layout.completed_runs = None
+
+        # --- Step 2: Re-upload layout .doc files ---
+        if layout_files:
+            # Delete old layout files and records
+            old_layout_files = glob.glob(f"{UPLOAD_DIR}/{app.order_name}_layout_*")
+            for f in old_layout_files:
+                try:
+                    Path(f).unlink()
+                except Exception:
+                    pass
+
+            # Delete old layout images
+            for layout in app.layouts:
+                if layout.layout_image:
+                    img_path = Path(IMAGE_DIR) / layout.layout_image.lstrip('/')
+                    try:
+                        img_path.unlink()
+                    except Exception:
+                        pass
+
+            # Delete old layouts and parts
+            for layout in app.layouts:
+                await db.execute(
+                    delete(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == layout.id)
+                )
+            await db.execute(
+                delete(ApplicationLayout).where(ApplicationLayout.application_id == app_id)
+            )
+            await db.flush()
+
+            # Parse application data for merging
+            app_data = ApplicationData()
+            if app.detail_images:
+                # Re-parse app .doc for weight data
+                app_files = [
+                    f for f in glob.glob(f"{UPLOAD_DIR}/{app.order_name}*")
+                    if f.lower().endswith(('.doc', '.docx')) and '_layout_' not in f.lower()
+                ]
+                if app_files:
+                    app_text = extract_text(app_files[0])
+                    app_data = parse_application_text(app_text)
+
+            # Upload each new layout file
+            detail_image_map = {}
+            if app.detail_images:
+                try:
+                    parsed = json.loads(app.detail_images)
+                    if isinstance(parsed, dict):
+                        detail_image_map = parsed
+                except Exception:
+                    pass
+
+            for lf in layout_files:
+                if not lf.filename or not lf.filename.lower().endswith('.doc'):
+                    continue
+
+                filename = lf.filename.lower()
+                machine_type = "FNF" if "fnf" in filename else "CNF"
+                code_match = re.search(r'(\d{3})', lf.filename)
+                layout_code = code_match.group(1) if code_match else "001"
+
+                file_path = save_uploaded_file(lf, f"{app.order_name}_layout_{layout_code}")
+
+                layout_text = extract_text(file_path)
+                layout_data = parse_layout_text(layout_text, lf.filename)
+
+                # Extract layout image
+                layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+                layout_image_path = layout_images[0] if layout_images else None
+
+                # Merge
+                merged_parts = merge_data(app_data, layout_data)
+
+                # Create layout record
+                layout = ApplicationLayout(
+                    application_id=app_id,
+                    layout_code=layout_code,
+                    machine_type=machine_type,
+                    sheet_w=layout_data.sheet_w,
+                    sheet_h=layout_data.sheet_h,
+                    sheet_weight=layout_data.sheet_weight,
+                    sheet_count=layout_data.sheet_count or 1,
+                    cut_time=layout_data.cut_time,
+                    move_time=layout_data.move_time,
+                    pierce_time=layout_data.pierce_time,
+                    cut_length=layout_data.cut_length,
+                    travel_length=layout_data.travel_length,
+                    pierces=layout_data.pierces,
+                    cnc_path=layout_data.cnc_path,
+                    layout_image=layout_image_path
+                )
+                db.add(layout)
+                await db.flush()
+
+                # Create parts
+                for part_data in merged_parts:
+                    part_key = normalize_name(part_data.name)
+                    part_image = detail_image_map.get(part_key)
+                    part = ApplicationLayoutPart(
+                        layout_id=layout.id,
+                        name=part_data.name,
+                        dx=part_data.dx,
+                        dy=part_data.dy,
+                        quantity=part_data.qty_layout,
+                        weight=part_data.weight,
+                        image_path=part_image
+                    )
+                    db.add(part)
+
+            # Reset status
+            app.status = "approved"
+
+        await db.commit()
+
+        try:
+            from app.services.cache import invalidate
+            await invalidate("apps:")
+        except Exception:
+            pass
+
+        return {"status": "success", "message": "Файлы обновлены"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка перезагрузки: {str(e)}")
 
 
 @router.get("/")
