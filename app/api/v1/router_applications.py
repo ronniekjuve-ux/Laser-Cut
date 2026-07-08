@@ -551,7 +551,7 @@ async def list_applications(
         tab: Optional[str] = Query(None),
         search: Optional[str] = None,
         page: int = Query(1, ge=1),
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=2000),
         customer_name: Optional[str] = None,
         material: Optional[str] = None,
         thickness: Optional[str] = None,
@@ -822,7 +822,7 @@ async def export_applications_xlsx(
 @router.get("/changelog")
 async def list_changelog(
         page: int = Query(1, ge=1),
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=2000),
         db: AsyncSession = Depends(get_db),
         user: User = Depends(get_current_user)
 ):
