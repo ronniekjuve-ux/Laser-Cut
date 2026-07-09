@@ -457,6 +457,13 @@ async def reupload_application(
             if app_files:
                 app_text = extract_text(app_files[0])
                 app_data = parse_application_text(app_text)
+                # Update app record with parsed data
+                if app_data.thickness > 0:
+                    app.thickness = app_data.thickness
+                if app_data.total_weight:
+                    app.total_weight = app_data.total_weight
+                if app_data.material and app_data.material != "Steel":
+                    app.material = app_data.material
 
             # Upload each new layout file
             detail_image_map = {}

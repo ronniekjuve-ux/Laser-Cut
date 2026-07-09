@@ -289,6 +289,32 @@ def parse_application_text(text: str) -> ApplicationData:
         if th is not None:
             data.thickness = th
 
+    # Толщина из pipe-таблицы: ищем заголовок с "Толщ", берём индекс столбца
+    # Важно: split('|') БЕЗ фильтрации пустых, чтобы сохранить выравнивание
+    if data.thickness == 0.0:
+        lines_tmp = text.split('\n')
+        for li, ln in enumerate(lines_tmp):
+            if 'Толщ' in ln and ('Материал' in ln or 'Material' in ln):
+                # Индекс столбца "Толщ" в заголовке (считая пустые ячейки)
+                header_parts = [h.strip() for h in ln.split('|')]
+                th_col = None
+                for hi, h in enumerate(header_parts):
+                    if 'Толщ' in h:
+                        th_col = hi
+                        break
+                # Следующая строка — данные
+                if th_col is not None and li + 1 < len(lines_tmp):
+                    data_line = lines_tmp[li + 1]
+                    data_parts = [c.strip() for c in data_line.split('|')]
+                    if th_col < len(data_parts):
+                        try:
+                            th = _safe_float(data_parts[th_col])
+                            if th is not None and th > 0:
+                                data.thickness = th
+                                break
+                        except (ValueError, IndexError):
+                            pass
+
     # ========== Толщина из таблицы с | (LibreOffice/docx) ==========
     lines = text.split('\n')
 
@@ -306,19 +332,19 @@ def parse_application_text(text: str) -> ApplicationData:
             continue
 
         if in_material_table and header_found:
-            if line.startswith('|') and 'Steel' in line:
+            if line.startswith('|'):
                 cells = [c.strip() for c in line.split('|') if c.strip()]
                 # В "Данные материала": | Steel | 8 | ... |
-                # В "Доп. данные материала": | Steel | 8.00 | ... |
+                # Или: | Stainless | 50 | ... |
                 if len(cells) >= 2:
                     try:
                         thickness_val = cells[1].replace(',', '.').strip()
-                        if thickness_val and thickness_val not in ['.', ',']:
+                        if thickness_val and thickness_val not in ['.', ','] and thickness_val.replace('.', '').isdigit():
                             data.thickness = float(thickness_val)
-                            print(f"✅ Найдена толщина: {data.thickness}")
                     except (ValueError, IndexError):
                         pass
-                break
+                if data.thickness > 0:
+                    break
 
             # Если дошли до следующей таблицы — выходим
             if 'Детали в субраскладках' in line:
@@ -328,34 +354,42 @@ def parse_application_text(text: str) -> ApplicationData:
     # Ищем "Общий в ес ( KG )" в таблице
     for i, line in enumerate(lines):
         if 'Общий' in line and 'вес' in line and 'KG' in line:
-            # Следующая строка или эта же строка содержит значение
-            # Формат: |Общий в ес   ( KG ) |  или  |209.114|
+            # Строка-заголовок содержит "Общий вес (KG)" — находим индекс столбца
+            header_parts = [c.strip() for c in line.split('|')]
+            weight_col = None
+            for ci, cell in enumerate(header_parts):
+                if 'Общий' in cell and 'вес' in cell:
+                    weight_col = ci
+                    break
 
-            # Проверяем текущую строку
-            cells = [c.strip() for c in line.split('|') if c.strip()]
-            for cell in cells:
+            # Проверяем текущую строку (если значение в той же строке)
+            for cell in [c.strip() for c in line.split('|')]:
                 try:
                     val = float(cell.replace(',', '.'))
-                    if 100 < val < 1000:  # Правдоподобный вес
+                    if 10 < val < 100000:
                         data.total_weight = val
-                        print(f"✅ Найден вес: {data.total_weight}")
                         break
                 except ValueError:
                     pass
 
-            # Если не нашли в текущей, смотрим следующую строку
+            # Если не нашли — смотрим следующую строку (pipe-таблица без | в начале)
             if data.total_weight is None and i + 1 < len(lines):
                 next_line = lines[i + 1]
-                if next_line.startswith('|'):
-                    cells = [c.strip() for c in next_line.split('|') if c.strip()]
-                    if cells:
-                        try:
-                            val = float(cells[0].replace(',', '.'))
-                            if 100 < val < 1000:
-                                data.total_weight = val
-                                print(f"✅ Найден вес (след. строка): {data.total_weight}")
-                        except ValueError:
-                            pass
+                data_parts = [c.strip() for c in next_line.split('|')]
+                if weight_col is not None and weight_col < len(data_parts):
+                    try:
+                        val = float(data_parts[weight_col].replace(',', '.'))
+                        if 10 < val < 100000:
+                            data.total_weight = val
+                    except (ValueError, IndexError):
+                        pass
+                elif data_parts:
+                    try:
+                        val = float(data_parts[0].replace(',', '.'))
+                        if 10 < val < 100000:
+                            data.total_weight = val
+                    except ValueError:
+                        pass
             break
 
     # ========== Парсинг деталей ==========

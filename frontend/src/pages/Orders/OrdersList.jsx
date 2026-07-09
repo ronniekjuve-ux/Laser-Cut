@@ -165,7 +165,7 @@ export default function OrdersList({ initialTab }) {
     group: app.group_name || '',
     machine: app.machine || '',
     material: app.steel_grade || app.material || '',
-    thickness: app.thickness || '',
+    thickness: app.thickness != null ? app.thickness : '',
     supply_material: app.supply_material === true ? 'Да' : app.supply_material === false ? 'Нет' : '',
     priority: app.priority || 'medium',
     status: app.status || 'approved',

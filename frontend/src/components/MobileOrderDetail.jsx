@@ -234,8 +234,8 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
           <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
             <div><span style={{ fontWeight: 600 }}>Заказчик:</span> {data.customer || '-'}</div>
             <div><span style={{ fontWeight: 600 }}>Материал:</span> {data.material || data.steel_grade || '-'}</div>
-            <div><span style={{ fontWeight: 600 }}>Толщина:</span> {data.thickness ? data.thickness + ' мм' : '-'}</div>
-            {data.total_weight && <div><span style={{ fontWeight: 600 }}>Вес:</span> {data.total_weight} кг</div>}
+            <div><span style={{ fontWeight: 600 }}>Толщина:</span> {data.thickness != null && data.thickness !== '' ? data.thickness + ' мм' : '-'}</div>
+            {data.total_weight != null && data.total_weight !== '' && <div><span style={{ fontWeight: 600 }}>Вес:</span> {data.total_weight} кг</div>}
             <div><span style={{ fontWeight: 600 }}>Раскладок:</span> {layouts.length}</div>
           </div>
 
