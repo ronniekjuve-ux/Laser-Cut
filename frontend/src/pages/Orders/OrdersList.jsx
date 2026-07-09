@@ -265,7 +265,7 @@ export default function OrdersList({ initialTab }) {
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
-  const activeApps = activeTab === 'completed' ? filtered : filtered.filter(app => app.status !== 'cut');
+  const activeApps = activeTab === 'completed' ? filtered.filter(app => app.status === 'cut') : filtered.filter(app => app.status !== 'cut');
 
   const totalPages = Math.ceil(activeApps.length / PAGE_SIZE);
   const pageItems = activeApps.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);

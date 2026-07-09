@@ -449,15 +449,14 @@ async def reupload_application(
 
             # Parse application data for merging
             app_data = ApplicationData()
-            if app.detail_images:
-                # Re-parse app .doc for weight data
-                app_files = [
-                    f for f in glob.glob(f"{UPLOAD_DIR}/{app.order_name}*")
-                    if f.lower().endswith(('.doc', '.docx')) and '_layout_' not in f.lower()
-                ]
-                if app_files:
-                    app_text = extract_text(app_files[0])
-                    app_data = parse_application_text(app_text)
+            # Re-parse app .doc to get thickness and other data
+            app_files = [
+                f for f in glob.glob(f"{UPLOAD_DIR}/{app.order_name}*")
+                if f.lower().endswith(('.doc', '.docx')) and '_layout_' not in f.lower()
+            ]
+            if app_files:
+                app_text = extract_text(app_files[0])
+                app_data = parse_application_text(app_text)
 
             # Upload each new layout file
             detail_image_map = {}
