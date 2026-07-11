@@ -768,6 +768,17 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft:
     return saved
 
 
+def extract_layout_image(filepath: str, output_dir: str, prefix: str = "", dpi: int = 300) -> Optional[str]:
+    """Извлекает изображение раскладки (самое большое из HTML-экспорта).
+
+    Returns: URL изображения или None при ошибке.
+    """
+    images = extract_images(filepath, output_dir, prefix=prefix, filter_dft=False)
+    if images:
+        return images[0]
+    return None
+
+
 def merge_data(app_data: ApplicationData, layout_data: LayoutData) -> List[MergedPart]:
     """Объединяет данные из Заявки и Раскладки"""
     if not app_data.parts:
