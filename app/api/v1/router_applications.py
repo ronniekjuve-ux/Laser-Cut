@@ -22,6 +22,7 @@ from app.services.unified_parser import (
     merge_data,
     ApplicationData,
     extract_images,
+    extract_layout_image,
     normalize_name
 )
 
@@ -103,6 +104,8 @@ async def upload_application(
             app.thickness = data.thickness
             app.total_weight = data.total_weight
             app.total_parts_count = len(data.parts)
+            app.placed_parts_count = data.placed_parts_count
+            app.ordered_parts_count = data.ordered_parts_count
             app.comments = comments if comments else app.comments
             if supply_material == "true":
                 app.supply_material = True
@@ -122,6 +125,8 @@ async def upload_application(
                 thickness=data.thickness,
                 total_weight=data.total_weight,
                 total_parts_count=len(data.parts),
+                placed_parts_count=data.placed_parts_count,
+                ordered_parts_count=data.ordered_parts_count,
                 detail_images=images_json,
                 comments=comments if comments else None,
                 supply_material=True if supply_material == "true" else False if supply_material == "false" else None,
@@ -143,7 +148,14 @@ async def upload_application(
             "application_id": app.id,
             "order_name": app.order_name,
             "parts_found": len(data.parts),
-            "images_count": len(detail_images)
+            "images_count": len(detail_images),
+            "placed_parts": data.placed_parts_count,
+            "ordered_parts": data.ordered_parts_count,
+            "parts_warning": (
+                f"Размещено {data.placed_parts_count} деталей, заказано {data.ordered_parts_count} деталей. "
+                "Количество не совпадает!"
+            ) if (data.placed_parts_count is not None and data.ordered_parts_count is not None
+                   and data.placed_parts_count != data.ordered_parts_count) else None
         }
 
     except Exception as e:
@@ -175,9 +187,12 @@ async def upload_layout(
         text = extract_text(file_path)
         layout_data = parse_layout_text(text, file.filename)
 
-        # === Извлечение изображения раскладки ===
-        layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
-        layout_image_path = layout_images[0] if layout_images else None
+        # === Извлечение изображения раскладки (высокое качество DOC→PDF→PNG) ===
+        layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+        if not layout_image_path:
+            # Fallback на старый метод (HTML)
+            layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+            layout_image_path = layout_images[0] if layout_images else None
 
         # === Ищем файл заявки (для весов и чистых имен) ===
         print(f"\n🔍 Ищем файл заявки: {app.order_name}*.doc")
@@ -369,6 +384,8 @@ async def reupload_application(
             app.thickness = data.thickness
             app.total_weight = data.total_weight
             app.total_parts_count = len(data.parts)
+            app.placed_parts_count = data.placed_parts_count
+            app.ordered_parts_count = data.ordered_parts_count
             if detail_image_map:
                 app.detail_images = images_json
 
@@ -489,9 +506,12 @@ async def reupload_application(
                 layout_text = extract_text(file_path)
                 layout_data = parse_layout_text(layout_text, lf.filename)
 
-                # Extract layout image
-                layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
-                layout_image_path = layout_images[0] if layout_images else None
+                # Extract layout image (high quality DOC→PDF→PNG)
+                layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+                if not layout_image_path:
+                    # Fallback на старый метод (HTML)
+                    layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+                    layout_image_path = layout_images[0] if layout_images else None
 
                 # Merge
                 merged_parts = merge_data(app_data, layout_data)
@@ -543,7 +563,17 @@ async def reupload_application(
         except Exception:
             pass
 
-        return {"status": "success", "message": "Файлы обновлены"}
+        return {
+            "status": "success",
+            "message": "Файлы обновлены",
+            "placed_parts": data.placed_parts_count if data else None,
+            "ordered_parts": data.ordered_parts_count if data else None,
+            "parts_warning": (
+                f"Размещено {data.placed_parts_count} деталей, заказано {data.ordered_parts_count} деталей. "
+                "Количество не совпадает!"
+            ) if (data and data.placed_parts_count is not None and data.ordered_parts_count is not None
+                   and data.placed_parts_count != data.ordered_parts_count) else None
+        }
 
     except HTTPException:
         raise
@@ -1229,8 +1259,12 @@ async def merge_layouts(
     code_match = re.search(r"(\d{3})", file.filename)
     layout_code = code_match.group(1) if code_match else "001"
 
-    layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/merge_{new_app.id}_{layout_code}")
-    layout_image_path = layout_images[0] if layout_images else None
+    # Extract layout image (high quality DOC→PDF→PNG)
+    layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/merge_{new_app.id}_{layout_code}")
+    if not layout_image_path:
+        # Fallback на старый метод (HTML)
+        layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/merge_{new_app.id}_{layout_code}")
+        layout_image_path = layout_images[0] if layout_images else None
 
     layout = ApplicationLayout(
         application_id=new_app.id,
@@ -1575,6 +1609,8 @@ async def get_application_details(
             "steel_grade": app.steel_grade or app.material,
             "thickness": app.thickness,
             "total_parts": app.total_parts_count,
+            "placed_parts": app.placed_parts_count,
+            "ordered_parts": app.ordered_parts_count,
             "total_weight": app.total_weight,
             "comments": app.comments,
             "detail_images": app.detail_images,

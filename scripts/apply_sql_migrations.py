@@ -280,6 +280,15 @@ MIGRATIONS = [
 
     # 24. Drop UNIQUE constraint on order_name (allow duplicate names, unique ID only)
     "ALTER TABLE applications DROP CONSTRAINT IF EXISTS applications_order_name_key;",
+
+    # 25. Add st1_hours, st2_hours, night_hours to schedule_overrides
+    "ALTER TABLE schedule_overrides ADD COLUMN IF NOT EXISTS st1_hours DOUBLE PRECISION;",
+    "ALTER TABLE schedule_overrides ADD COLUMN IF NOT EXISTS st2_hours DOUBLE PRECISION;",
+    "ALTER TABLE schedule_overrides ADD COLUMN IF NOT EXISTS night_hours DOUBLE PRECISION;",
+
+    # 26. Add placed_parts_count, ordered_parts_count to applications
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS placed_parts_count INTEGER;",
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS ordered_parts_count INTEGER;",
 ]
 
 async def main():

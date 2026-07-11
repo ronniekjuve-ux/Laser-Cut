@@ -11,6 +11,12 @@ const versionPlugin = {
 
 export default defineConfig({
   plugins: [react(), versionPlugin],
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8000',
+      '/ws': { target: 'ws://localhost:8000', ws: true }
+    }
+  },
   build: {
     rollupOptions: {
       output: {

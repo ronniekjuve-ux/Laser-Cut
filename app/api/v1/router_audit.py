@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc, delete
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.db.base import get_db
 from app.db.models import (
@@ -40,11 +40,11 @@ async def list_operator_shifts(
         raise HTTPException(status_code=403, detail="Нет доступа")
 
     year, mon = map(int, month.split("-"))
-    start = datetime(year, mon, 1)
+    start = datetime(year, mon, 1, tzinfo=timezone.utc)
     if mon == 12:
-        end = datetime(year + 1, 1, 1)
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
     else:
-        end = datetime(year, mon + 1, 1)
+        end = datetime(year, mon + 1, 1, tzinfo=timezone.utc)
 
     result = await db.execute(
         select(OperatorShift, User.username)
@@ -159,11 +159,11 @@ async def sync_shifts(
         raise HTTPException(status_code=403, detail="Нет доступа")
 
     year, mon = map(int, data.month.split("-"))
-    start = datetime(year, mon, 1)
+    start = datetime(year, mon, 1, tzinfo=timezone.utc)
     if mon == 12:
-        end = datetime(year + 1, 1, 1)
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
     else:
-        end = datetime(year, mon + 1, 1)
+        end = datetime(year, mon + 1, 1, tzinfo=timezone.utc)
 
     await db.execute(
         delete(OperatorShift).where(
@@ -328,11 +328,11 @@ async def list_overrides(
         raise HTTPException(status_code=403, detail="Нет доступа")
 
     year, mon = map(int, month.split("-"))
-    start = datetime(year, mon, 1)
+    start = datetime(year, mon, 1, tzinfo=timezone.utc)
     if mon == 12:
-        end = datetime(year + 1, 1, 1)
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
     else:
-        end = datetime(year, mon + 1, 1)
+        end = datetime(year, mon + 1, 1, tzinfo=timezone.utc)
 
     result = await db.execute(
         select(ScheduleOverride).where(

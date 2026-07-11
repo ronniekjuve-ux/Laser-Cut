@@ -113,7 +113,11 @@ export default function ReuploadModal({ app, onClose, onSaved }) {
         }
       }
 
-      await client.post('/api/v1/applications/' + app.id + '/reupload', fd);
+      const res = await client.post('/api/v1/applications/' + app.id + '/reupload', fd);
+      if (res.data?.parts_warning) {
+        setProgress(res.data.parts_warning);
+        await new Promise(r => setTimeout(r, 3000));
+      }
       onSaved();
     } catch (err) {
       console.error('Reupload error:', err);

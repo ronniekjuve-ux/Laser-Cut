@@ -119,6 +119,11 @@ export default function NewOrderModal({ onClose, onCreated, status = 'pending' }
 
       const appId = res.data.application_id;
 
+      if (res.data.parts_warning) {
+        setProgress(res.data.parts_warning);
+        await new Promise(r => setTimeout(r, 3000));
+      }
+
       if (layoutFiles.length > 0) {
         for (let i = 0; i < layoutFiles.length; i++) {
           setProgress('\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0440\u0430\u0441\u043a\u043b\u0430\u0434\u043a\u0438 ' + (i + 1) + ' \u0438\u0437 ' + layoutFiles.length + '...');

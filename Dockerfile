@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     libreoffice-writer \
     libreoffice-core \
     fonts-liberation \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -115,6 +115,8 @@ class Application(Base):
     thickness: Mapped[float] = mapped_column(Float)
     total_weight: Mapped[float] = mapped_column(Float, nullable=True)
     total_parts_count: Mapped[int] = mapped_column(Integer, default=0)
+    placed_parts_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    ordered_parts_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     total_time: Mapped[str] = mapped_column(String(20), default="00:00:00")
     detail_images: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     comments: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

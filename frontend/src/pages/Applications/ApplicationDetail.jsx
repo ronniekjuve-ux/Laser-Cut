@@ -150,11 +150,18 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
     const cb = b.layout_code || '';
     return ca.localeCompare(cb, undefined, { numeric: true });
   }) : [];
-  const uniquePartTypes = layouts.reduce((sum, l) => sum + (l.parts_count || 0), 0);
-  const totalPartsQty = layouts.reduce((sum, l) => {
+  const uniquePartNames = new Set();
+  layouts.forEach(l => {
+    (l.parts || []).forEach(p => uniquePartNames.add(p.name));
+  });
+  const uniquePartTypes = uniquePartNames.size;
+  const totalPartsQty = data.ordered_parts || data.placed_parts || layouts.reduce((sum, l) => {
     const partsQty = (l.parts || []).reduce((ps, p) => ps + (p.quantity || 0), 0);
     return sum + partsQty;
   }, 0);
+  const placedParts = data.placed_parts;
+  const orderedParts = data.ordered_parts;
+  const partsMismatch = placedParts != null && orderedParts != null && placedParts !== orderedParts;
 
   return (
     <div className="modal-overlay active" onClick={activeLayout !== null ? () => setActiveLayout(null) : onClose}>
@@ -183,6 +190,11 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                     <div><span style={{fontWeight: 600}}>Раскладок:</span> {layouts.length}</div>
                     <div><span style={{fontWeight: 600}}>Видов деталей:</span> {uniquePartTypes}</div>
                     <div><span style={{fontWeight: 600}}>Всего деталей:</span> {totalPartsQty}</div>
+                    {partsMismatch && (
+                      <div style={{color: '#dc2626', fontWeight: 600, marginTop: 4}}>
+                        ⚠ Размещено {placedParts} из {orderedParts} заказанных деталей — количество не совпадает!
+                      </div>
+                    )}
                     <div><span style={{fontWeight: 600}}>Дата:</span> {data.created_at ? new Date(data.created_at).toLocaleDateString('ru-RU') : '-'}</div>
                     {data.comments && <div><span style={{fontWeight: 600}}>Комментарий:</span> {data.comments}</div>}
                   </div>
