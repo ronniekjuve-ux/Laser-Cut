@@ -2,34 +2,22 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`laser-cut.pro`) || Host(`www.laser-cut.pro`)"
-      - "traefik.http.routers.frontend.entrypoints=websecure"
-      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.frontend.middlewares=gzip"
-      - "traefik.http.middlewares.gzip.compress=true"
-      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+    environment:
+      - VITE_API_URL=https://laser-cut.pro/api
     depends_on:
       - backend
-    restart: unless-stopped
 
   backend:
     build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
-    volumes:
-      - images_data:/app/data/images
-      - uploads_data:/app/data/uploads
-    env_file:
-      - .env
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/laser_cut
       - FRONTEND_URL=https://laser-cut.pro
+    volumes:
+      - images_data:/app/data/images
+      - uploads_data:/app/data/uploads
     depends_on:
       - db
       - redis
-    restart: unless-stopped
 
   db:
     image: postgres:15-alpine
@@ -44,13 +32,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     volumes:
       - redis_data:/data
-    restart: unless-stopped
 
 volumes:
   postgres_data:
