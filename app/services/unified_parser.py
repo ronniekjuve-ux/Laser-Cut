@@ -52,6 +52,8 @@ class ApplicationData:
     thickness: float = 0.0
     total_weight: Optional[float] = None
     parts: List[AppPart] = field(default_factory=list)
+    placed_parts_count: Optional[int] = None
+    ordered_parts_count: Optional[int] = None
 
 
 @dataclass
@@ -475,6 +477,19 @@ def parse_application_text(text: str) -> ApplicationData:
 
     if not data.parts and parts_vertical:
         data.parts = parts_vertical
+
+    # ========== Размещено / Заказано деталей ==========
+    placed_match = re.search(r'Размещено\s+деталей.*?\|\s*(\d+)', text, re.I)
+    if not placed_match:
+        placed_match = re.search(r'Размещено\s+деталей.*?:\s*(\d+)', text, re.I)
+    if placed_match:
+        data.placed_parts_count = int(placed_match.group(1))
+
+    ordered_match = re.search(r'Заказано\s+деталей.*?\|\s*(\d+)', text, re.I)
+    if not ordered_match:
+        ordered_match = re.search(r'Заказано\s+деталей.*?:\s*(\d+)', text, re.I)
+    if ordered_match:
+        data.ordered_parts_count = int(ordered_match.group(1))
 
     return data
 
