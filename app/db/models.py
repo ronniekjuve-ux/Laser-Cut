@@ -2,7 +2,7 @@
 import enum
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, Text, Enum as SAEnum, func, UniqueConstraint
+from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, Text, JSON, Enum as SAEnum, func, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -127,12 +127,16 @@ class Application(Base):
     cut_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("order_groups.id"), nullable=True)
+    warehouse_item_id: Mapped[Optional[int]] = mapped_column(ForeignKey("warehouse_items.id"), nullable=True)
+    sheets_used: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    warehouse_deducted: Mapped[Optional[bool]] = mapped_column(default=False, nullable=True)
 
     customer: Mapped["Customer"] = relationship(back_populates="applications")
     updater: Mapped[Optional["User"]] = relationship(foreign_keys=[updated_by])
     cutter: Mapped[Optional["User"]] = relationship(foreign_keys=[cut_by])
     layouts: Mapped[List["ApplicationLayout"]] = relationship(back_populates="application", cascade="all, delete-orphan")
     group: Mapped[Optional["OrderGroup"]] = relationship(back_populates="applications")
+    warehouse_item: Mapped[Optional["WarehouseItem"]] = relationship(foreign_keys=[warehouse_item_id])
 
 
 class ApplicationLayout(Base):
@@ -156,6 +160,8 @@ class ApplicationLayout(Base):
     layout_image: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="active")
     merged_from: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    warehouse_item_id: Mapped[Optional[int]] = mapped_column(ForeignKey("warehouse_items.id"), nullable=True)
+    layout_sheets_used: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     application: Mapped["Application"] = relationship(back_populates="layouts")
     parts: Mapped[List["ApplicationLayoutPart"]] = relationship(back_populates="layout", cascade="all, delete-orphan")
@@ -353,12 +359,57 @@ class WarehouseItem(Base):
     metal: Mapped[str] = mapped_column(String(50))
     grade: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    thickness: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    sheet_w: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    sheet_h: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sheet_count: Mapped[int] = mapped_column(Integer, default=0)
+    weight: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    min_quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    article: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, unique=True)
+    item_type: Mapped[Optional[str]] = mapped_column(String(20), default="standard")
     owner: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_deducted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    creator: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by])
+    movements: Mapped[List["WarehouseMovement"]] = relationship(back_populates="warehouse_item")
+    remnants: Mapped[List["WarehouseRemnant"]] = relationship(back_populates="warehouse_item")
+
+
+class WarehouseMovement(Base):
+    __tablename__ = "warehouse_movement"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    warehouse_item_id: Mapped[int] = mapped_column(ForeignKey("warehouse_items.id"))
+    application_id: Mapped[Optional[int]] = mapped_column(ForeignKey("applications.id"), nullable=True)
+    quantity_change: Mapped[int] = mapped_column(Integer)
+    movement_type: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    warehouse_item: Mapped["WarehouseItem"] = relationship(back_populates="movements")
+    application: Mapped[Optional["Application"]] = relationship(foreign_keys=[application_id])
+    creator: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by])
+
+
+class WarehouseRemnant(Base):
+    __tablename__ = "warehouse_remnants"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    warehouse_item_id: Mapped[int] = mapped_column(ForeignKey("warehouse_items.id"))
+    article: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, unique=True)
+    original_w: Mapped[float] = mapped_column(Float)
+    original_h: Mapped[float] = mapped_column(Float)
+    vertices: Mapped[str] = mapped_column(JSON)
+    area: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    weight: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    is_available: Mapped[bool] = mapped_column(default=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    warehouse_item: Mapped["WarehouseItem"] = relationship(back_populates="remnants")
     creator: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by])
 
 

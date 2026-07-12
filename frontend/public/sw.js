@@ -54,7 +54,26 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Cache-first for static assets (JS, CSS, images)
+  // Network-first for JS and CSS (they have content hashes in filenames)
+  const url = new URL(event.request.url);
+  if (event.request.method === 'GET' && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'))) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        if (response && response.status === 200) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseClone);
+          });
+        }
+        return response;
+      }).catch(() => {
+        return caches.match(event.request);
+      })
+    );
+    return;
+  }
+
+  // Cache-first for other static assets (images, icons, fonts)
   if (event.request.method === 'GET') {
     event.respondWith(
       caches.match(event.request).then(response => {

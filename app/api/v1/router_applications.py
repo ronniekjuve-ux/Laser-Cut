@@ -12,7 +12,8 @@ from app.db.base import get_db
 from app.db.models import (
     Application, ApplicationLayout, ApplicationLayoutPart, Customer,
     User, UserRole, ApplicationStatus, ApplicationPriority,
-    DeficitRequest, Notification, ChangeLog, OrderGroup
+    DeficitRequest, Notification, ChangeLog, OrderGroup,
+    WarehouseItem, WarehouseMovement
 )
 from app.core.deps import get_current_user, require_role
 from app.services.unified_parser import (
@@ -757,6 +758,9 @@ async def list_applications(
             "created_at": app.created_at,
             "group_id": app.group_id,
             "group_name": app.group.name if app.group else None,
+            "warehouse_item_id": app.warehouse_item_id,
+            "sheets_used": app.sheets_used,
+            "warehouse_deducted": app.warehouse_deducted or False,
         })
 
     cut_user_ids = set(e["cut_by_id"] for e in enriched if e.get("cut_by_id"))
@@ -1616,7 +1620,10 @@ async def get_application_details(
             "detail_images": app.detail_images,
             "status": app.status or "pending",
             "supply_material": app.supply_material,
-            "created_at": app.created_at
+            "created_at": app.created_at,
+            "warehouse_item_id": app.warehouse_item_id,
+            "sheets_used": app.sheets_used,
+            "warehouse_deducted": app.warehouse_deducted or False,
         },
         "layouts": layouts_data,
         "summary": {
@@ -1852,9 +1859,68 @@ async def update_application_status(
         from datetime import datetime, timezone
         app.cut_at = datetime.now(timezone.utc)
         app.cut_by = user.id if user.role == UserRole.OPERATOR else None
+
+        # Автосписание со склада при завершении резки
+        if app.warehouse_item_id and not app.warehouse_deducted:
+            wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == app.warehouse_item_id))
+            wh_item = wh_result.scalar_one_or_none()
+            if wh_item:
+                # Рассчитываем реальное кол-во листов по раскладкам
+                layouts_result = await db.execute(
+                    select(ApplicationLayout).where(
+                        ApplicationLayout.application_id == app.id,
+                        ApplicationLayout.status == "active",
+                    )
+                )
+                active_layouts = layouts_result.scalars().all()
+
+                sheets_to_deduct = 0
+                if active_layouts and wh_item.sheet_w and wh_item.sheet_h:
+                    wh_area = wh_item.sheet_w * wh_item.sheet_h
+                    if wh_area > 0:
+                        import math
+                        total_layout_area = sum(
+                            (l.sheet_w or 0) * (l.sheet_h or 0) * (l.sheet_count or 1)
+                            for l in active_layouts
+                        )
+                        sheets_to_deduct = math.ceil(total_layout_area / wh_area)
+                elif app.sheets_used:
+                    sheets_to_deduct = app.sheets_used
+
+                if sheets_to_deduct > 0 and wh_item.sheet_count >= sheets_to_deduct:
+                    wh_item.sheet_count -= sheets_to_deduct
+                    wh_item.last_deducted_at = datetime.now(timezone.utc)
+                    db.add(WarehouseMovement(
+                        warehouse_item_id=wh_item.id,
+                        application_id=app.id,
+                        quantity_change=-sheets_to_deduct,
+                        movement_type="deduction",
+                        reason=f"Автосписание при завершении резки: заявка «{app.order_name}»",
+                        created_by=user.id,
+                    ))
+                    app.sheets_used = sheets_to_deduct
+                    app.warehouse_deducted = True
     elif status != "cut" and old_status == "cut":
         app.cut_at = None
         app.cut_by = None
+
+        # Автовозврат на склад при отмене статуса "cut"
+        if app.warehouse_item_id and app.sheets_used and app.warehouse_deducted:
+            wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == app.warehouse_item_id))
+            wh_item = wh_result.scalar_one_or_none()
+            if wh_item:
+                wh_item.sheet_count += app.sheets_used
+                db.add(WarehouseMovement(
+                    warehouse_item_id=wh_item.id,
+                    application_id=app.id,
+                    quantity_change=app.sheets_used,
+                    movement_type="return",
+                    reason=f"Автовозврат при отмене резки: заявка «{app.order_name}»",
+                    created_by=user.id,
+                ))
+                app.warehouse_deducted = False
+                app.sheets_used = None
+                app.warehouse_item_id = None
 
     # Sync completed_runs with status change
     if old_status != status:
@@ -2039,3 +2105,130 @@ async def create_deficit(
             pass
 
     return {"status": "success", "deficit_id": deficit.id}
+
+
+# === Warehouse binding ===
+
+@router.patch("/{app_id}/warehouse")
+async def bind_warehouse(
+        app_id: int,
+        body: dict,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
+):
+    result = await db.execute(select(Application).where(Application.id == app_id))
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    warehouse_item_id = body.get("warehouse_item_id")
+    sheets_used = body.get("sheets_used")
+    layout_id = body.get("layout_id")
+
+    if warehouse_item_id is None:
+        app.warehouse_item_id = None
+        app.sheets_used = None
+        # Clear layout bindings too
+        layouts_result = await db.execute(
+            select(ApplicationLayout).where(ApplicationLayout.application_id == app_id)
+        )
+        for layout in layouts_result.scalars().all():
+            layout.warehouse_item_id = None
+            layout.layout_sheets_used = None
+        await db.commit()
+        return {"status": "success"}
+
+    if not sheets_used or sheets_used <= 0:
+        raise HTTPException(status_code=400, detail="Укажите количество листов")
+
+    wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == warehouse_item_id))
+    wh_item = wh_result.scalar_one_or_none()
+    if not wh_item:
+        raise HTTPException(status_code=404, detail="Позиция на складе не найдена")
+
+    app.warehouse_item_id = warehouse_item_id
+    app.sheets_used = sheets_used
+
+    # Bind to specific layout if specified
+    if layout_id:
+        layout_result = await db.execute(
+            select(ApplicationLayout).where(
+                ApplicationLayout.id == layout_id,
+                ApplicationLayout.application_id == app_id
+            )
+        )
+        layout = layout_result.scalar_one_or_none()
+        if layout:
+            layout.warehouse_item_id = warehouse_item_id
+            layout.layout_sheets_used = sheets_used
+
+    await db.commit()
+    return {"status": "success"}
+
+
+@router.post("/{app_id}/cancel-deduct")
+async def cancel_deduct(
+        app_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
+):
+    result = await db.execute(select(Application).where(Application.id == app_id))
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    if not app.warehouse_deducted:
+        raise HTTPException(status_code=400, detail="Списание не было выполнено")
+
+    if app.warehouse_item_id and app.sheets_used:
+        from datetime import datetime, timezone
+        wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == app.warehouse_item_id))
+        wh_item = wh_result.scalar_one_or_none()
+        if wh_item:
+            wh_item.sheet_count += app.sheets_used
+            db.add(WarehouseMovement(
+                warehouse_item_id=wh_item.id,
+                application_id=app.id,
+                quantity_change=app.sheets_used,
+                movement_type="return",
+                reason=f"Ручной возврат: заявка «{app.order_name}»",
+                created_by=user.id,
+            ))
+
+    app.warehouse_deducted = False
+    app.sheets_used = None
+    app.warehouse_item_id = None
+    await db.commit()
+    return {"status": "success"}
+
+
+@router.get("/{app_id}/warehouse")
+async def get_app_warehouse(
+        app_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
+):
+    result = await db.execute(select(Application).where(Application.id == app_id))
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    wh_info = None
+    if app.warehouse_item_id:
+        wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == app.warehouse_item_id))
+        wh_item = wh_result.scalar_one_or_none()
+        if wh_item:
+            wh_info = {
+                "id": wh_item.id,
+                "metal": wh_item.metal,
+                "grade": wh_item.grade,
+                "size": wh_item.size or (f"{int(wh_item.sheet_w)}x{int(wh_item.sheet_h)}" if wh_item.sheet_w and wh_item.sheet_h else ""),
+                "sheet_count": wh_item.sheet_count,
+            }
+
+    return {
+        "warehouse_item_id": app.warehouse_item_id,
+        "sheets_used": app.sheets_used,
+        "warehouse_deducted": app.warehouse_deducted or False,
+        "warehouse_item": wh_info,
+    }

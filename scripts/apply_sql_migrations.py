@@ -289,6 +289,64 @@ MIGRATIONS = [
     # 26. Add placed_parts_count, ordered_parts_count to applications
     "ALTER TABLE applications ADD COLUMN IF NOT EXISTS placed_parts_count INTEGER;",
     "ALTER TABLE applications ADD COLUMN IF NOT EXISTS ordered_parts_count INTEGER;",
+
+    # 27. Add sheet_w, sheet_h, min_quantity, last_deducted_at to warehouse_items
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS sheet_w DOUBLE PRECISION;",
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS sheet_h DOUBLE PRECISION;",
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS min_quantity INTEGER;",
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS last_deducted_at TIMESTAMPTZ;",
+
+    # 28. Create warehouse_movement table
+    """CREATE TABLE IF NOT EXISTS warehouse_movement (
+        id SERIAL PRIMARY KEY,
+        warehouse_item_id INTEGER NOT NULL REFERENCES warehouse_items(id),
+        application_id INTEGER REFERENCES applications(id),
+        quantity_change INTEGER NOT NULL,
+        movement_type VARCHAR(20) NOT NULL,
+        reason TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );""",
+    "CREATE INDEX IF NOT EXISTS idx_warehouse_movement_item ON warehouse_movement(warehouse_item_id);",
+    "CREATE INDEX IF NOT EXISTS idx_warehouse_movement_app ON warehouse_movement(application_id);",
+
+    # 29. Add warehouse_item_id, sheets_used, warehouse_deducted to applications
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS warehouse_item_id INTEGER REFERENCES warehouse_items(id);",
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS sheets_used INTEGER;",
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS warehouse_deducted BOOLEAN DEFAULT FALSE;",
+
+    # 30. Add article, weight, item_type to warehouse_items
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS article VARCHAR(50);",
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS weight DOUBLE PRECISION;",
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS item_type VARCHAR(20) DEFAULT 'standard';",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_warehouse_items_article ON warehouse_items(article) WHERE article IS NOT NULL;",
+
+    # 31. Create warehouse_remnants table
+    """CREATE TABLE IF NOT EXISTS warehouse_remnants (
+        id SERIAL PRIMARY KEY,
+        warehouse_item_id INTEGER NOT NULL REFERENCES warehouse_items(id),
+        article VARCHAR(50) UNIQUE,
+        original_w DOUBLE PRECISION NOT NULL,
+        original_h DOUBLE PRECISION NOT NULL,
+        vertices JSON NOT NULL,
+        area DOUBLE PRECISION,
+        weight DOUBLE PRECISION,
+        is_available BOOLEAN DEFAULT TRUE,
+        note TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );""",
+    "CREATE INDEX IF NOT EXISTS idx_warehouse_remnants_item ON warehouse_remnants(warehouse_item_id);",
+
+    # 32. Add layout_id binding to application_layouts
+    "ALTER TABLE application_layouts ADD COLUMN IF NOT EXISTS warehouse_item_id INTEGER REFERENCES warehouse_items(id);",
+    "ALTER TABLE application_layouts ADD COLUMN IF NOT EXISTS sheets_used INTEGER;",
+
+    # 33. Add thickness to warehouse_items
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS thickness DOUBLE PRECISION;",
+
+    # 34. Add layout_sheets_used to application_layouts
+    "ALTER TABLE application_layouts ADD COLUMN IF NOT EXISTS layout_sheets_used INTEGER;",
 ]
 
 async def main():

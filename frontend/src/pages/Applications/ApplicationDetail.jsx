@@ -16,6 +16,10 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
   const [deficitSending, setDeficitSending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmUnmerge, setConfirmUnmerge] = useState(null);
+  const [warehouseItems, setWarehouseItems] = useState([]);
+  const [selectedWhItem, setSelectedWhItem] = useState('');
+  const [sheetsUsed, setSheetsUsed] = useState('');
+  const [confirmCancelDeduct, setConfirmCancelDeduct] = useState(false);
 
   const highlightPart = app.highlightPart || null;
 
@@ -135,6 +139,50 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
       alert('Ошибка: ' + (err.response?.data?.detail || err.message));
     }
   };
+
+  const fetchWarehouseItems = async () => {
+    try {
+      const res = await client.get('/api/v1/warehouse/');
+      setWarehouseItems(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error('Failed to load warehouse', err);
+    }
+  };
+
+  const bindWarehouse = async () => {
+    if (!selectedWhItem) return alert('Выберите позицию на складе');
+    const qty = parseInt(sheetsUsed);
+    if (!qty || qty <= 0) return alert('Укажите количество листов');
+    try {
+      await client.patch('/api/v1/applications/' + app.id + '/warehouse', {
+        warehouse_item_id: parseInt(selectedWhItem),
+        sheets_used: qty,
+      });
+      const res = await client.get('/api/v1/applications/' + app.id);
+      setFullApp(res.data);
+      setSelectedWhItem('');
+      setSheetsUsed('');
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const doCancelDeduct = async () => {
+    setConfirmCancelDeduct(false);
+    try {
+      await client.post('/api/v1/applications/' + app.id + '/cancel-deduct');
+      const res = await client.get('/api/v1/applications/' + app.id);
+      setFullApp(res.data);
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  useEffect(() => {
+    fetchWarehouseItems();
+  }, []);
 
   if (loading) return (
     <div className="modal-overlay active">
@@ -303,6 +351,88 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {(user?.role === 'admin' || user?.role === 'operator' || user?.role === 'director') && (
+                    <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
+                      <div style={{fontWeight: 600, marginBottom: 8}}>Склад</div>
+                      {data.warehouse_deducted ? (
+                        <div style={{padding: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6}}>
+                          <div style={{fontSize: 13, marginBottom: 6}}>
+                            <span style={{color: '#166534', fontWeight: 600}}>Списано {data.sheets_used} листов</span>
+                            {data.warehouse_item_id && (
+                              <span style={{color: '#64748b', marginLeft: 8}}>склад #{data.warehouse_item_id}</span>
+                            )}
+                          </div>
+                          {(user?.role === 'admin' || user?.role === 'director') && (
+                            <button
+                              className="btn"
+                              onClick={() => setConfirmCancelDeduct(true)}
+                              style={{fontSize: 12, padding: '4px 10px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fca5a5'}}
+                            >
+                              Отменить списание
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{padding: 10, background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 6}}>
+                          {!data.warehouse_item_id ? (
+                            <div>
+                              <div style={{fontSize: 12, color: '#64748b', marginBottom: 8}}>Привязать к складу (при резке будет списано)</div>
+                              <div style={{display: 'flex', gap: 6, alignItems: 'flex-end'}}>
+                                <div style={{flex: 1}}>
+                                  <label style={{fontSize: 11, color: '#64748b'}}>Позиция на складе</label>
+                                  <select
+                                    value={selectedWhItem}
+                                    onChange={e => setSelectedWhItem(e.target.value)}
+                                    style={{width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, boxSizing: 'border-box'}}
+                                  >
+                                    <option value="">Выбрать...</option>
+                                    {warehouseItems.filter(w => w.sheet_count > 0).map(w => (
+                                      <option key={w.id} value={w.id}>
+                                        {w.metal} {w.grade ? `/ ${w.grade}` : ''} — {w.sheet_w && w.sheet_h ? `${w.sheet_w}x${w.sheet_h}` : w.size} ({w.sheet_count} листов)
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div style={{width: 70}}>
+                                  <label style={{fontSize: 11, color: '#64748b'}}>Листов</label>
+                                  <input
+                                    type="number"
+                                    value={sheetsUsed}
+                                    onChange={e => setSheetsUsed(e.target.value)}
+                                    placeholder="кол-во"
+                                    min={1}
+                                    style={{width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, boxSizing: 'border-box'}}
+                                  />
+                                </div>
+                                <button
+                                  className="btn btn-primary"
+                                  onClick={bindWarehouse}
+                                  style={{padding: '4px 10px', fontSize: 12}}
+                                >
+                                  Привязать
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{fontSize: 13}}>
+                              Привязано к складу #{data.warehouse_item_id}
+                              {data.sheets_used && <span style={{marginLeft: 6, color: '#64748b'}}>({data.sheets_used} листов)</span>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {confirmCancelDeduct && (
+                    <ConfirmModal
+                      title="Отменить списание?"
+                      message={`${data.sheets_used} листов будут возвращены на склад.`}
+                      onConfirm={doCancelDeduct}
+                      onCancel={() => setConfirmCancelDeduct(false)}
+                    />
                   )}
 
                   {layouts.length > 0 && (
