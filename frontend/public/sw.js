@@ -1,4 +1,4 @@
-const CACHE_VERSION = Date.now();
+const CACHE_VERSION = '2026-07-14-v1';
 const CACHE_NAME = `lasercut-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/',
@@ -37,7 +37,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Network-first for HTML pages (index.html, etc.)
+  // Network-first for HTML pages
   if (event.request.mode === 'navigate' ||
       event.request.headers.get('accept')?.includes('text/html')) {
     event.respondWith(
@@ -54,7 +54,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Network-first for JS and CSS (they have content hashes in filenames)
+  // Always network-first for JS and CSS
   const url = new URL(event.request.url);
   if (event.request.method === 'GET' && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'))) {
     event.respondWith(

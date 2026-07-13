@@ -347,6 +347,15 @@ MIGRATIONS = [
 
     # 34. Add layout_sheets_used to application_layouts
     "ALTER TABLE application_layouts ADD COLUMN IF NOT EXISTS layout_sheets_used INTEGER;",
+
+    # 35. Add parent_article to warehouse_items (for cut piece lineage tracking)
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS parent_article VARCHAR(50);",
+
+    # 36. Add is_rectangular flag to warehouse_items
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS is_rectangular BOOLEAN DEFAULT TRUE;",
+
+    # 37. Add vertices JSON to warehouse_items (polygon shape for L-shaped pieces)
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS vertices JSON;",
 ]
 
 async def main():

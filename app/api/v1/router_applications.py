@@ -730,6 +730,7 @@ async def list_applications(
                 "sheet_size": f"{al.sheet_w}x{al.sheet_h}",
                 "sheet_count": al.sheet_count or 1,
                 "completed_runs": json.loads(al.completed_runs) if al.completed_runs else [],
+                "warehouse_item_id": al.warehouse_item_id,
             })
 
         enriched.append({
@@ -1590,6 +1591,7 @@ async def get_application_details(
             "pierces": layout.pierces,
             "cnc_path": layout.cnc_path,
             "layout_image": layout.layout_image,
+            "warehouse_item_id": layout.warehouse_item_id,
             "parts_count": len(parts),
             "parts": [
                 {
@@ -1789,6 +1791,8 @@ async def toggle_layout_run(
     while len(completed) < layout.sheet_count:
         completed.append(False)
 
+    was_checked = completed[run_index] if 0 <= run_index < len(completed) else False
+
     if 0 <= run_index < len(completed):
         if completed[run_index]:
             for j in range(run_index, len(completed)):
@@ -1797,6 +1801,38 @@ async def toggle_layout_run(
             completed[run_index] = True
 
     layout.completed_runs = json.dumps(completed)
+
+    # Per-layout warehouse deduction: deduct 1 sheet when marking as cut, return when unmarking
+    from datetime import datetime, timezone
+    if layout.warehouse_item_id:
+        wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == layout.warehouse_item_id))
+        wh_item = wh_result.scalar_one_or_none()
+        if wh_item:
+            if not was_checked and completed[run_index]:
+                # Marking sheet as cut — deduct from warehouse
+                if wh_item.sheet_count >= 1:
+                    wh_item.sheet_count -= 1
+                    wh_item.last_deducted_at = datetime.now(timezone.utc)
+                    db.add(WarehouseMovement(
+                        warehouse_item_id=wh_item.id,
+                        application_id=layout.application_id,
+                        quantity_change=-1,
+                        movement_type="deduction",
+                        reason=f"Списание при резке раскладки",
+                        created_by=user.id,
+                    ))
+            elif was_checked and not completed[run_index]:
+                # Unmarking — return sheet to warehouse
+                wh_item.sheet_count += 1
+                db.add(WarehouseMovement(
+                    warehouse_item_id=wh_item.id,
+                    application_id=layout.application_id,
+                    quantity_change=1,
+                    movement_type="return",
+                    reason=f"Возврат при отмене резки раскладки",
+                    created_by=user.id,
+                ))
+
     await db.flush()
 
     all_layouts_result = await db.execute(
@@ -2232,3 +2268,33 @@ async def get_app_warehouse(
         "warehouse_deducted": app.warehouse_deducted or False,
         "warehouse_item": wh_info,
     }
+
+
+@router.patch("/layouts/{layout_id}/warehouse")
+async def bind_layout_warehouse(
+        layout_id: int,
+        body: dict,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
+):
+    result = await db.execute(select(ApplicationLayout).where(ApplicationLayout.id == layout_id))
+    layout = result.scalar_one_or_none()
+    if not layout:
+        raise HTTPException(status_code=404, detail="Раскладка не найдена")
+
+    warehouse_item_id = body.get("warehouse_item_id")
+
+    if warehouse_item_id is None:
+        layout.warehouse_item_id = None
+        layout.layout_sheets_used = None
+        await db.commit()
+        return {"status": "success"}
+
+    wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == warehouse_item_id))
+    wh_item = wh_result.scalar_one_or_none()
+    if not wh_item:
+        raise HTTPException(status_code=404, detail="Позиция на складе не найдена")
+
+    layout.warehouse_item_id = warehouse_item_id
+    await db.commit()
+    return {"status": "success"}

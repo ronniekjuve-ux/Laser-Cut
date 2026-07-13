@@ -168,6 +168,37 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
     }
   };
 
+  const [layoutWhSelections, setLayoutWhSelections] = useState({});
+
+  const bindLayoutWarehouse = async (layoutId) => {
+    const whId = layoutWhSelections[layoutId];
+    if (!whId) return alert('Выберите позицию на складе');
+    try {
+      await client.patch('/api/v1/applications/layouts/' + layoutId + '/warehouse', {
+        warehouse_item_id: parseInt(whId),
+      });
+      const res = await client.get('/api/v1/applications/' + app.id);
+      setFullApp(res.data);
+      setLayoutWhSelections(prev => ({ ...prev, [layoutId]: '' }));
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const unbindLayoutWarehouse = async (layoutId) => {
+    try {
+      await client.patch('/api/v1/applications/layouts/' + layoutId + '/warehouse', {
+        warehouse_item_id: null,
+      });
+      const res = await client.get('/api/v1/applications/' + app.id);
+      setFullApp(res.data);
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
   const doCancelDeduct = async () => {
     setConfirmCancelDeduct(false);
     try {
@@ -353,85 +384,12 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                     </div>
                   )}
 
-                  {(user?.role === 'admin' || user?.role === 'operator' || user?.role === 'director') && (
-                    <div style={{marginBottom: 16, padding: '10px 0', borderTop: '1px solid var(--border)'}}>
-                      <div style={{fontWeight: 600, marginBottom: 8}}>Склад</div>
-                      {data.warehouse_deducted ? (
-                        <div style={{padding: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6}}>
-                          <div style={{fontSize: 13, marginBottom: 6}}>
-                            <span style={{color: '#166534', fontWeight: 600}}>Списано {data.sheets_used} листов</span>
-                            {data.warehouse_item_id && (
-                              <span style={{color: '#64748b', marginLeft: 8}}>склад #{data.warehouse_item_id}</span>
-                            )}
-                          </div>
-                          {(user?.role === 'admin' || user?.role === 'director') && (
-                            <button
-                              className="btn"
-                              onClick={() => setConfirmCancelDeduct(true)}
-                              style={{fontSize: 12, padding: '4px 10px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fca5a5'}}
-                            >
-                              Отменить списание
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{padding: 10, background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 6}}>
-                          {!data.warehouse_item_id ? (
-                            <div>
-                              <div style={{fontSize: 12, color: '#64748b', marginBottom: 8}}>Привязать к складу (при резке будет списано)</div>
-                              <div style={{display: 'flex', gap: 6, alignItems: 'flex-end'}}>
-                                <div style={{flex: 1}}>
-                                  <label style={{fontSize: 11, color: '#64748b'}}>Позиция на складе</label>
-                                  <select
-                                    value={selectedWhItem}
-                                    onChange={e => setSelectedWhItem(e.target.value)}
-                                    style={{width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, boxSizing: 'border-box'}}
-                                  >
-                                    <option value="">Выбрать...</option>
-                                    {warehouseItems.filter(w => w.sheet_count > 0).map(w => (
-                                      <option key={w.id} value={w.id}>
-                                        {w.metal} {w.grade ? `/ ${w.grade}` : ''} — {w.sheet_w && w.sheet_h ? `${w.sheet_w}x${w.sheet_h}` : w.size} ({w.sheet_count} листов)
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div style={{width: 70}}>
-                                  <label style={{fontSize: 11, color: '#64748b'}}>Листов</label>
-                                  <input
-                                    type="number"
-                                    value={sheetsUsed}
-                                    onChange={e => setSheetsUsed(e.target.value)}
-                                    placeholder="кол-во"
-                                    min={1}
-                                    style={{width: '100%', padding: 4, border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, boxSizing: 'border-box'}}
-                                  />
-                                </div>
-                                <button
-                                  className="btn btn-primary"
-                                  onClick={bindWarehouse}
-                                  style={{padding: '4px 10px', fontSize: 12}}
-                                >
-                                  Привязать
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{fontSize: 13}}>
-                              Привязано к складу #{data.warehouse_item_id}
-                              {data.sheets_used && <span style={{marginLeft: 6, color: '#64748b'}}>({data.sheets_used} листов)</span>}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {confirmCancelDeduct && (
+                  {confirmDelete && (
                     <ConfirmModal
-                      title="Отменить списание?"
-                      message={`${data.sheets_used} листов будут возвращены на склад.`}
-                      onConfirm={doCancelDeduct}
-                      onCancel={() => setConfirmCancelDeduct(false)}
+                      title="Удалить заявку?"
+                      message="Заявка и все раскладки будут удалены."
+                      onConfirm={confirmDeleteAction}
+                      onCancel={() => setConfirmDelete(false)}
                     />
                   )}
 
@@ -539,6 +497,42 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                                     );
                                   })}
                                 </div>
+                              </div>
+                            )}
+                            {(user?.role === 'admin' || user?.role === 'operator' || user?.role === 'director') && !isDisabled && (
+                              <div style={{marginTop: 8, padding: '6px 8px', background: '#f8fafc', borderRadius: 4, border: '1px solid var(--border)'}} onClick={e => e.stopPropagation()}>
+                                {layout.warehouse_item_id ? (
+                                  <div style={{display: 'flex', alignItems: 'center', gap: 6, fontSize: 12}}>
+                                    <span style={{color: '#166534', fontWeight: 600}}>Склад #{layout.warehouse_item_id}</span>
+                                    <button
+                                      onClick={() => unbindLayoutWarehouse(layout.id)}
+                                      style={{fontSize: 10, padding: '1px 6px', borderRadius: 3, border: '1px solid #fca5a5', background: '#fef2f2', color: '#991b1b', cursor: 'pointer'}}
+                                    >
+                                      отвязать
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
+                                    <select
+                                      value={layoutWhSelections[layout.id] || ''}
+                                      onChange={e => setLayoutWhSelections(prev => ({ ...prev, [layout.id]: e.target.value }))}
+                                      style={{flex: 1, padding: '2px 4px', fontSize: 11, border: '1px solid var(--border)', borderRadius: 3}}
+                                    >
+                                      <option value="">Склад...</option>
+                                      {warehouseItems.filter(w => w.sheet_count > 0).map(w => (
+                                        <option key={w.id} value={w.id}>
+                                          {w.metal} {w.grade ? `/ ${w.grade}` : ''} — {w.sheet_w && w.sheet_h ? `${w.sheet_w}x${w.sheet_h}` : w.size} ({w.sheet_count})
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      onClick={() => bindLayoutWarehouse(layout.id)}
+                                      style={{fontSize: 10, padding: '2px 6px', borderRadius: 3, border: '1px solid #93c5fd', background: '#dbeafe', color: '#1d4ed8', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap'}}
+                                    >
+                                      Привязать
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

@@ -10,8 +10,12 @@ import RemnantEditor from './RemnantEditor';
 function SheetPreview({ item, onClose }) {
   if (!item || !item.sheet_w || !item.sheet_h) return null;
   const W = item.sheet_w, H = item.sheet_h;
+  const vertices = item.vertices;
   const scale = Math.min(120 / W, 300 / H);
   const svgW = W * scale, svgH = H * scale;
+  const polyPoints = vertices && vertices.length >= 3
+    ? vertices.map(v => `${v[0] * scale},${v[1] * scale}`).join(' ')
+    : null;
   return (
     <div className="modal-overlay active" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, padding: 16 }}>
@@ -27,10 +31,22 @@ function SheetPreview({ item, onClose }) {
             {Array.from({ length: Math.floor(H / 500) + 1 }, (_, i) => (
               <line key={`h${i}`} x1={0} y1={i * 500 * scale} x2={svgW} y2={i * 500 * scale} stroke="#e5e7eb" strokeWidth="0.5" />
             ))}
-            <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="2" />
-            <text x={svgW / 2} y={svgH / 2 - 6} textAnchor="middle" fontSize="12" fill="#333" fontWeight="600">{W}x{H} мм</text>
-            <text x={svgW / 2} y={svgH / 2 + 12} textAnchor="middle" fontSize="10" fill="#64748b">{item.sheet_count} лист(ов)</text>
-            {item.weight && <text x={svgW / 2} y={svgH / 2 + 26} textAnchor="middle" fontSize="10" fill="#64748b">{item.weight} кг</text>}
+            {polyPoints ? (
+              <>
+                <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#e5e7eb" strokeWidth="1" />
+                <polygon points={polyPoints} fill="#dcfce7" fillOpacity="0.5" stroke="#333" strokeWidth="2" />
+                <text x={svgW / 2} y={svgH / 2 - 6} textAnchor="middle" fontSize="10" fill="#166534" fontWeight="600">{item.area ? `${(item.area / 1000000).toFixed(2)} м²` : `${(W * H / 1000000).toFixed(2)} м²`}</text>
+                <text x={svgW / 2} y={svgH / 2 + 8} textAnchor="middle" fontSize="10" fill="#64748b">{item.sheet_count} лист(ов)</text>
+                {item.weight && <text x={svgW / 2} y={svgH / 2 + 20} textAnchor="middle" fontSize="10" fill="#64748b">{item.weight} кг</text>}
+              </>
+            ) : (
+              <>
+                <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="2" />
+                <text x={svgW / 2} y={svgH / 2 - 6} textAnchor="middle" fontSize="12" fill="#333" fontWeight="600">{W}x{H} мм</text>
+                <text x={svgW / 2} y={svgH / 2 + 12} textAnchor="middle" fontSize="10" fill="#64748b">{item.sheet_count} лист(ов)</text>
+                {item.weight && <text x={svgW / 2} y={svgH / 2 + 26} textAnchor="middle" fontSize="10" fill="#64748b">{item.weight} кг</text>}
+              </>
+            )}
           </svg>
         </div>
         <div style={{ fontSize: 12, color: '#64748b' }}>
@@ -90,6 +106,7 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
         <table>
           <thead>
             <tr>
+              <TH col="article" label="Артикул" />
               <DD col="owner" label="Владелец" />
               <th>Материал</th>
               <DD col="thickness" label="Толщ." />
@@ -101,12 +118,13 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 12, color: '#64748b', fontSize: 13 }}>Пусто</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 12, color: '#64748b', fontSize: 13 }}>Пусто</td></tr>
             ) : filtered.map(item => (
               <tr key={item.id} style={editingId === item.id ? { background: '#f0f9ff' } : { cursor: 'pointer' }}
                 onClick={(e) => { if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return; if (editingId === item.id) return; if (item.sheet_w && item.sheet_h) onPreview(item); }}>
                 {editingId === item.id ? (
                   <>
+                    <td style={{ fontSize: 11, color: '#94a3b8' }}>{item.article || '-'}</td>
                     <td><input value={editForm.owner} onChange={e => setEditForm({...editForm, owner: e.target.value})} style={{ width: 100, padding: '2px 4px', fontSize: 12 }} /></td>
                     <td>
                       <div style={{ display: 'flex', gap: 2 }}>
@@ -122,6 +140,7 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
                   </>
                 ) : (
                   <>
+                    <td style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: item.parent_article ? '#6366f1' : '#333' }}>{item.article || '-'}</td>
                     <td>{item.owner || '-'}</td>
                     <td style={{ fontWeight: 600 }}>{item.metal}{item.grade ? ` ${item.grade}` : ''}</td>
                     <td>{item.thickness ? `${item.thickness}мм` : '-'}</td>
@@ -248,7 +267,7 @@ export default function Warehouse() {
       {deductItem && <WarehouseDeductModal item={deductItem} onClose={() => setDeductItem(null)} onSuccess={() => { setDeductItem(null); fetchItems(); }} />}
       {returnItem && <WarehouseReturnModal item={returnItem} onClose={() => setReturnItem(null)} onSuccess={() => { setReturnItem(null); fetchItems(); }} />}
       {movementsItem && <WarehouseMovementHistory item={movementsItem} onClose={() => setMovementsItem(null)} />}
-      {remnantEditorItem && <RemnantEditor item={remnantEditorItem} onClose={() => setRemnantEditorItem(null)} onSuccess={() => { setRemnantEditorItem(null); fetchItems(); }} />}
+      {remnantEditorItem && <RemnantEditor item={remnantEditorItem} onClose={() => setRemnantEditorItem(null)} onSuccess={() => fetchItems()} />}
       {previewItem && <SheetPreview item={previewItem} onClose={() => setPreviewItem(null)} />}
     </div>
   );

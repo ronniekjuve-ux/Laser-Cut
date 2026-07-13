@@ -207,9 +207,16 @@ export default function Deficit() {
                           {sCusts.length === 0 ? (
                             <div style={{ color: '#9ca3b8', fontSize: 10, fontStyle: 'italic' }}>Нет на складе</div>
                           ) : sCusts.map(([name, v]) => (
-                            <div key={name} style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0', fontSize: 11, borderBottom: '1px solid #dcfce7' }}>
-                              <span style={{ color: '#374151' }}>{name}</span>
-                              <span style={{ color: '#6b7280', whiteSpace: 'nowrap', fontSize: 10 }}>{v.sheets} л · {(v.area / 1000000).toFixed(1)}м²</span>
+                            <div key={name} style={{ padding: '2px 0', fontSize: 11, borderBottom: '1px solid #dcfce7' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: '#374151' }}>{name}</span>
+                                <span style={{ color: '#6b7280', whiteSpace: 'nowrap', fontSize: 10 }}>{v.sheets} л · {(v.area / 1000000).toFixed(1)}м²</span>
+                              </div>
+                              {v.articles && v.articles.length > 0 && (
+                                <div style={{ fontSize: 9, color: '#6366f1', fontFamily: 'monospace', marginTop: 1 }}>
+                                  {v.articles.join(', ')}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

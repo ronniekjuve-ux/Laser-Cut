@@ -34,12 +34,22 @@ def _item_to_dict(item: WarehouseItem) -> dict:
         "weight": item.weight,
         "min_quantity": item.min_quantity,
         "article": item.article,
+        "parent_article": item.parent_article,
+        "is_rectangular": item.is_rectangular if item.is_rectangular is not None else True,
+        "vertices": item.vertices if isinstance(item.vertices, list) else None,
         "item_type": item.item_type or "standard",
         "owner": item.owner,
         "note": item.note,
         "last_deducted_at": item.last_deducted_at.isoformat() if item.last_deducted_at else None,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
+
+
+def _generate_article_base(metal: str, grade: str | None, thickness: float | None) -> str:
+    """Generate article base like 'ст3/10мм'"""
+    grade_part = (grade or metal or "XX").strip().lower()[:3]
+    thickness_part = f"{int(thickness)}мм" if thickness else "XX"
+    return f"{grade_part}/{thickness_part}"
 
 
 def _generate_article(metal: str, grade: str | None, w: float | None, h: float | None, item_type: str) -> str:
@@ -134,17 +144,22 @@ async def create_warehouse_item(
 
     article = body.article
     if not article:
-        article = _generate_article(body.metal, body.grade, body.sheet_w, body.sheet_h, body.item_type)
-        # Ensure uniqueness
-        existing = await db.execute(select(WarehouseItem).where(WarehouseItem.article == article))
-        if existing.scalar_one_or_none():
-            # Append suffix
-            base = article
-            for i in range(2, 100):
-                article = f"{base}-{i:02d}"
-                existing = await db.execute(select(WarehouseItem).where(WarehouseItem.article == article))
-                if not existing.scalar_one_or_none():
-                    break
+        base = _generate_article_base(body.metal, body.grade, body.thickness)
+        # Find next available number for this base
+        existing = await db.execute(
+            select(WarehouseItem.article).where(WarehouseItem.article.like(f"{base}/%"))
+        )
+        used = set()
+        for row in existing.scalars():
+            try:
+                num = int(row.split("/")[-1].split(".")[0])
+                used.add(num)
+            except (ValueError, IndexError):
+                pass
+        next_num = 1
+        while next_num in used:
+            next_num += 1
+        article = f"{base}/{next_num}"
 
     item = WarehouseItem(
         metal=body.metal,
@@ -456,26 +471,65 @@ async def split_remnant(
         db: AsyncSession = Depends(get_db),
         user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
 ):
-    result = await db.execute(select(WarehouseRemnant).where(WarehouseRemnant.id == remnant_id))
-    remnant = result.scalar_one_or_none()
-    if not remnant:
-        raise HTTPException(status_code=404, detail="Остаток не найден")
+    remnant = None
+    wh_item = None
 
-    if not remnant.is_available:
-        raise HTTPException(status_code=400, detail="Остаток уже использован")
+    # If warehouse_item_id provided, find or create remnant from full sheet
+    if body.warehouse_item_id:
+        wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == body.warehouse_item_id))
+        wh_item = wh_result.scalar_one_or_none()
+        if not wh_item:
+            raise HTTPException(status_code=404, detail="Позиция на складе не найдена")
+
+        # Try to find existing remnant
+        rem_result = await db.execute(
+            select(WarehouseRemnant).where(
+                WarehouseRemnant.id == remnant_id,
+                WarehouseRemnant.is_available == True
+            )
+        )
+        remnant = rem_result.scalar_one_or_none()
+
+        # If no remnant, create remnant from item's actual shape
+        if not remnant:
+            if wh_item.vertices and isinstance(wh_item.vertices, list) and len(wh_item.vertices) >= 3:
+                full_vertices = wh_item.vertices
+            else:
+                full_vertices = [[0, 0], [wh_item.sheet_w, 0], [wh_item.sheet_w, wh_item.sheet_h], [0, wh_item.sheet_h]]
+            remnant = WarehouseRemnant(
+                warehouse_item_id=wh_item.id,
+                article=wh_item.article,
+                original_w=wh_item.sheet_w,
+                original_h=wh_item.sheet_h,
+                vertices=full_vertices,
+                area=wh_item.sheet_w * wh_item.sheet_h,
+                weight=wh_item.weight,
+                created_by=user.id,
+            )
+            db.add(remnant)
+            await db.flush()
+    else:
+        # Original flow: find remnant by ID
+        rem_result = await db.execute(
+            select(WarehouseRemnant).where(
+                WarehouseRemnant.id == remnant_id,
+                WarehouseRemnant.is_available == True
+            )
+        )
+        remnant = rem_result.scalar_one_or_none()
+        if not remnant:
+            raise HTTPException(status_code=404, detail="Остаток не найден или уже использован")
+
+        wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == remnant.warehouse_item_id))
+        wh_item = wh_result.scalar_one_or_none()
 
     vertices = remnant.vertices if isinstance(remnant.vertices, list) else json.loads(remnant.vertices)
 
-    # Clip rectangle from polygon using Sutherland-Hodgman
-    rect = [[body.x, body.y], [body.x + body.w, body.y], [body.x + body.w, body.y + body.h], [body.x, body.y + body.h]]
-    remaining = _clip_polygon(vertices, rect)
+    # Subtract cut rectangle from the actual polygon shape
+    remaining = _subtract_rect(vertices, body.x, body.y, body.w, body.h)
 
     if not remaining or _polygon_area(remaining) <= 0:
         raise HTTPException(status_code=400, detail="Выделенная область полностью покрывает остаток")
-
-    # Get parent warehouse item
-    wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == remnant.warehouse_item_id))
-    wh_item = wh_result.scalar_one_or_none()
 
     # Calculate weight for cut piece
     if remnant.weight and remnant.original_w and remnant.original_h:
@@ -486,23 +540,59 @@ async def split_remnant(
     else:
         cut_weight = body.w * body.h * 0.000001 * 7.85
 
-    # Generate article referencing parent
+    # Calculate weight for remaining piece
+    remaining_area = _polygon_area(remaining)
+    if remnant.weight and remnant.original_w and remnant.original_h:
+        remnant_total_area = remnant.original_w * remnant.original_h
+        remain_weight = remnant.weight * (remaining_area / remnant_total_area) if remnant_total_area > 0 else None
+    elif wh_item and wh_item.thickness:
+        remain_weight = round(wh_item.thickness * remaining_area / 1_000_000 * 7.85, 2)
+    else:
+        remain_weight = remaining_area * 0.000001 * 7.85
+
+    # Generate articles for both pieces (children of parent)
     parent_article = wh_item.article if wh_item else None
     if parent_article:
-        # Find next available suffix: parent/1, parent/2, ...
-        cut_article = None
-        for i in range(1, 100):
-            candidate = f"{parent_article}/{i}"
-            existing = await db.execute(select(WarehouseItem).where(WarehouseItem.article == candidate))
-            if not existing.scalar_one_or_none():
-                cut_article = candidate
-                break
-        if not cut_article:
-            cut_article = f"{parent_article}/99"
-    else:
-        cut_article = _generate_article(
-            wh_item.metal if wh_item else "Сталь", wh_item.grade, body.w, body.h, "standard"
+        # Find next available sub-suffixes: parent.1, parent.2, ...
+        used_subs = set()
+        existing = await db.execute(
+            select(WarehouseItem.article).where(WarehouseItem.article.like(f"{parent_article}.%"))
         )
+        for row in existing.scalars():
+            try:
+                sub = int(row.split(".")[-1])
+                used_subs.add(sub)
+            except (ValueError, IndexError):
+                pass
+
+        sub1 = 1
+        while sub1 in used_subs:
+            sub1 += 1
+        sub2 = sub1 + 1
+        while sub2 in used_subs:
+            sub2 += 1
+
+        cut_article = f"{parent_article}.{sub1}"
+        remain_article = f"{parent_article}.{sub2}"
+    else:
+        base = _generate_article_base(
+            wh_item.metal if wh_item else "Сталь", wh_item.grade, wh_item.thickness
+        )
+        existing = await db.execute(
+            select(WarehouseItem.article).where(WarehouseItem.article.like(f"{base}/%"))
+        )
+        used = set()
+        for row in existing.scalars():
+            try:
+                num = int(row.split("/")[-1].split(".")[0])
+                used.add(num)
+            except (ValueError, IndexError):
+                pass
+        next_num = 1
+        while next_num in used:
+            next_num += 1
+        cut_article = f"{base}/{next_num}"
+        remain_article = f"{base}/{next_num + 1}"
 
     # Create cut piece as new warehouse item
     cut_item = WarehouseItem(
@@ -515,28 +605,68 @@ async def split_remnant(
         sheet_count=1,
         weight=cut_weight,
         article=cut_article,
+        parent_article=parent_article,
         item_type="standard",
         owner=wh_item.owner if wh_item else None,
         created_by=user.id,
     )
     db.add(cut_item)
 
-    # Update remaining remnant
-    remaining_area = _polygon_area(remaining)
-    remnant.vertices = remaining
-    remnant.area = remaining_area
-    if remnant.weight:
-        remnant.weight = remnant.weight * (remaining_area / (remnant.original_w * remnant.original_h))
-    remnant.note = (remnant.note or "") + f"\nВырезан прямоугольник {body.w}x{body.h}"
+    # Create remaining piece as new warehouse item (ALWAYS)
+    remain_item = None
+    rw, rh = rectBounds(remaining) if remaining else (0, 0)
+    if rw >= 10 and rh >= 10:
+        remain_item = WarehouseItem(
+            metal=wh_item.metal if wh_item else "Сталь",
+            grade=wh_item.grade,
+            thickness=wh_item.thickness if wh_item else None,
+            sheet_w=rw,
+            sheet_h=rh,
+            size=f"{int(rw)}x{int(rh)}",
+            sheet_count=1,
+            weight=remain_weight,
+            article=remain_article,
+            parent_article=parent_article,
+            is_rectangular=isRectangle(remaining),
+            vertices=remaining,
+            item_type="standard",
+            owner=wh_item.owner if wh_item else None,
+            created_by=user.id,
+        )
+        db.add(remain_item)
+
+    # Decrement original sheet count by 1 (cut one sheet from the stack)
+    if wh_item:
+        wh_item.sheet_count = max(0, wh_item.sheet_count - 1)
+        wh_item.note = (wh_item.note or "") + f"\nРазрезан: {int(body.w)}x{int(body.h)}"
+        # If no sheets left, delete the item and its movements
+        if wh_item.sheet_count <= 0:
+            movements = await db.execute(
+                select(WarehouseMovement).where(WarehouseMovement.warehouse_item_id == wh_item.id)
+            )
+            for m in movements.scalars().all():
+                await db.delete(m)
+            await db.flush()
+            await db.delete(wh_item)
+
+    # Delete the temporary remnant
+    if remnant:
+        await db.delete(remnant)
 
     await db.commit()
 
-    return {
+    # Refresh to get IDs
+    await db.refresh(cut_item)
+    if remain_item:
+        await db.refresh(remain_item)
+
+    result = {
         "status": "success",
-        "cut_item_id": cut_item.id,
-        "cut_article": cut_article,
-        "remaining_area": remaining_area,
+        "cut_item": _item_to_dict(cut_item),
+        "remain_item": _item_to_dict(remain_item) if remain_item else None,
     }
+
+    return result
 
 
 @router.delete("/remnants/{remnant_id}")
@@ -565,6 +695,116 @@ def _polygon_area(vertices: list) -> float:
         area += vertices[i][0] * vertices[j][1]
         area -= vertices[j][0] * vertices[i][1]
     return abs(area) / 2
+
+
+def isRectangle(vertices: list) -> bool:
+    if not vertices or len(vertices) < 3:
+        return False
+    area = _polygon_area(vertices)
+    if area <= 0:
+        return False
+    xs = [v[0] for v in vertices]
+    ys = [v[1] for v in vertices]
+    bbox_area = (max(xs) - min(xs)) * (max(ys) - min(ys))
+    return abs(area - bbox_area) < 1.0
+
+
+def rectBounds(vertices: list) -> tuple:
+    xs = [v[0] for v in vertices]
+    ys = [v[1] for v in vertices]
+    x, y = min(xs), min(ys)
+    w, h = max(xs) - x, max(ys) - y
+    return w, h
+
+
+def _is_rect_polygon(vertices: list) -> bool:
+    """Check if polygon is a rectangle (axis-aligned, 4 vertices)."""
+    if not vertices or len(vertices) != 4:
+        return False
+    xs = sorted(set(round(v[0], 1) for v in vertices))
+    ys = sorted(set(round(v[1], 1) for v in vertices))
+    return len(xs) == 2 and len(ys) == 2
+
+
+def _subtract_rect(polygon: list, rx: float, ry: float, rw: float, rh: float) -> list:
+    """Subtract axis-aligned rectangle from polygon, return remaining vertices."""
+    if not polygon or len(polygon) < 3:
+        return polygon
+
+    # Fast path: rectangular sheet
+    if _is_rect_polygon(polygon):
+        W = max(v[0] for v in polygon)
+        H = max(v[1] for v in polygon)
+        x1, y1 = max(0.0, rx), max(0.0, ry)
+        x2, y2 = min(W, rx + rw), min(H, ry + rh)
+        if x1 >= x2 or y1 >= y2:
+            return polygon
+        if x1 == 0 and y1 == 0 and x2 == W and y2 == H:
+            return []
+        tl, tr = x1 == 0, x2 == W
+        tt, tb = y1 == 0, y2 == H
+        if tl and tt: return [[x2, 0], [W, 0], [W, H], [0, H], [0, y2], [x2, y2]]
+        if tr and tt: return [[0, 0], [x1, 0], [x1, y2], [W, y2], [W, H], [0, H]]
+        if tl and tb: return [[0, 0], [W, 0], [W, H], [x2, H], [x2, y1], [0, y1]]
+        if tr and tb: return [[0, 0], [W, 0], [W, y1], [x1, y1], [x1, H], [0, H]]
+        if tt: return [[0, 0], [x1, 0], [x1, y2], [x2, y2], [x2, 0], [W, 0], [W, H], [0, H]]
+        if tb: return [[0, 0], [W, 0], [W, H], [x2, H], [x2, y1], [x1, y1], [x1, H], [0, H]]
+        if tl: return [[0, 0], [W, 0], [W, H], [0, H], [0, y2], [x2, y2], [x2, y1], [0, y1]]
+        if tr: return [[0, 0], [W, 0], [W, y1], [x1, y1], [x1, y2], [W, y2], [W, H], [0, H]]
+        # Middle cut — largest remainder rectangle
+        pieces = []
+        if y1 > 0: pieces.append((0, 0, W, y1))
+        if y2 < H: pieces.append((0, y2, W, H - y2))
+        if x1 > 0: pieces.append((0, y1, x1, y2 - y1))
+        if x2 < W: pieces.append((x2, y1, W - x2, y2 - y1))
+        if not pieces: return polygon
+        px, py, pw, ph = max(pieces, key=lambda p: p[2] * p[3])
+        return [[px, py], [px + pw, py], [px + pw, py + ph], [px, py + ph]]
+
+    # General polygon: clip against OUTSIDE of each rectangle edge
+    rx2, ry2 = rx + rw, ry + rh
+    def inside(px, py):
+        return rx <= px <= rx2 and ry <= py <= ry2
+
+    def clip_edge(poly, axis, val, keep_above):
+        """Clip polygon keeping points where (axis coord - val) * keep_above > 0"""
+        if not poly:
+            return []
+        out = []
+        n = len(poly)
+        for i in range(n):
+            curr = poly[i]
+            prev = poly[(i - 1) % n]
+            cv = curr[0] if axis == 'x' else curr[1]
+            pv = prev[0] if axis == 'x' else prev[1]
+            c_in = (cv - val) * keep_above > 0
+            p_in = (pv - val) * keep_above > 0
+            if c_in:
+                if not p_in:
+                    t = (val - pv) / (cv - pv) if cv != pv else 0
+                    out.append([prev[0] + t * (curr[0] - prev[0]), prev[1] + t * (curr[1] - prev[1])])
+                out.append(curr)
+            elif p_in:
+                t = (val - pv) / (cv - pv) if cv != pv else 0
+                out.append([prev[0] + t * (curr[0] - prev[0]), prev[1] + t * (curr[1] - prev[1])])
+        return out
+
+    # Clip against outside of each edge (union approach via sequential clipping)
+    # First: keep only parts above cut (y < ry)
+    r = clip_edge(polygon, 'y', ry, -1)
+    # Then: keep only parts below cut (y > ry2)
+    r2 = clip_edge(polygon, 'y', ry2, 1)
+    # Then: keep only parts left of cut (x < rx)
+    r3 = clip_edge(polygon, 'x', rx, -1)
+    # Then: keep only parts right of cut (x > rx2)
+    r4 = clip_edge(polygon, 'x', rx2, 1)
+    # Merge: union of all 4 clippings
+    all_parts = [p for p in [r, r2, r3, r4] if p and len(p) >= 3]
+    if not all_parts:
+        return polygon
+    # Return the largest part by area
+    best = max(all_parts, key=lambda p: abs(_polygon_area(p)))
+    return best
 
 
 def _clip_polygon(subject: list, clip: list) -> list:
@@ -767,7 +1007,7 @@ async def deficit_analysis(
     )
     stock_items = stock_result.scalars().all()
 
-    stock = {}  # key: (grade, thickness) -> {total_sheets, total_area, by_customer: {name: sheets}}
+    stock = {}  # key: (grade, thickness) -> {total_sheets, total_area, by_customer: {name: sheets, articles}}
     for item in stock_items:
         grade = item.grade or ""
         thickness = item.thickness or 0
@@ -779,12 +1019,14 @@ async def deficit_analysis(
         if key not in stock:
             stock[key] = {"total_sheets": 0, "total_area": 0, "by_customer": {}}
         if cust_name not in stock[key]["by_customer"]:
-            stock[key]["by_customer"][cust_name] = {"sheets": 0, "area": 0}
+            stock[key]["by_customer"][cust_name] = {"sheets": 0, "area": 0, "articles": []}
 
         stock[key]["total_sheets"] += sheets
         stock[key]["total_area"] += area
         stock[key]["by_customer"][cust_name]["sheets"] += sheets
         stock[key]["by_customer"][cust_name]["area"] += area
+        if item.article:
+            stock[key]["by_customer"][cust_name]["articles"].append(item.article)
 
     # 4. Build deficit table
     all_keys = sorted(set(list(demand.keys()) + list(stock.keys())), key=lambda k: (k[0], k[1] or 0))
@@ -809,7 +1051,7 @@ async def deficit_analysis(
             "demand_by_customer": {k: {"area": v["area"], "sheets_std": round(v["area"] / standard_area, 1) if standard_area > 0 else 0} for k, v in d["by_customer"].items()},
             "stock_sheets": s["total_sheets"],
             "stock_area": s["total_area"],
-            "stock_by_customer": {k: {"sheets": v["sheets"], "area": v["area"]} for k, v in s["by_customer"].items()},
+            "stock_by_customer": {k: {"sheets": v["sheets"], "area": v["area"], "articles": v.get("articles", [])} for k, v in s["by_customer"].items()},
             "deficit_sheets": round(deficit_sheets, 1),
         })
 
@@ -932,7 +1174,7 @@ async def deficit_export(
     ws = wb.active
     ws.title = "Дефицит"
 
-    headers = ["Марка", "Толщ.", f"Заказы ({standard_w}x{standard_h})", "Заказы м²", "Склад листов", "Склад м²", "Баланс", "Тип", "Клиент", "Листов", "м²"]
+    headers = ["Марка", "Толщ.", f"Заказы ({standard_w}x{standard_h})", "Заказы м²", "Склад листов", "Склад м²", "Баланс", "Тип", "Клиент", "Листов", "м²", "Артикулы"]
     style_header(ws, headers)
 
     row_idx = 2
@@ -966,6 +1208,9 @@ async def deficit_export(
             ws.cell(row=row_idx, column=9, value=cust_name)
             ws.cell(row=row_idx, column=10, value=cust_data.get("sheets", 0))
             ws.cell(row=row_idx, column=11, value=round(cust_data.get("area", 0) / 1000000, 2))
+            articles = cust_data.get("articles", [])
+            if articles:
+                ws.cell(row=row_idx, column=12, value=", ".join(articles))
             row_idx += 1
 
         # Separator row

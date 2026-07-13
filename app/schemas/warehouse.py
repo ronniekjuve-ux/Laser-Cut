@@ -68,6 +68,7 @@ class RemnantSplitRequest(BaseModel):
     y: float
     w: float
     h: float
+    warehouse_item_id: int | None = None  # If set, split directly from sheet (no remnant needed)
     note: str | None = None
 
 
