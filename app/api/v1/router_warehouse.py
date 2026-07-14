@@ -22,6 +22,16 @@ def _item_to_dict(item: WarehouseItem) -> dict:
     computed_size = item.size
     if not computed_size and item.sheet_w and item.sheet_h:
         computed_size = f"{int(item.sheet_w)}x{int(item.sheet_h)}"
+
+    # Calculate actual area from vertices if available
+    vertices = item.vertices if isinstance(item.vertices, list) else None
+    if vertices and len(vertices) >= 3:
+        area = _polygon_area(vertices)
+    elif item.sheet_w and item.sheet_h:
+        area = item.sheet_w * item.sheet_h
+    else:
+        area = None
+
     return {
         "id": item.id,
         "metal": item.metal,
@@ -38,7 +48,8 @@ def _item_to_dict(item: WarehouseItem) -> dict:
         "parent_sheet_w": item.parent_sheet_w,
         "parent_sheet_h": item.parent_sheet_h,
         "is_rectangular": item.is_rectangular if item.is_rectangular is not None else True,
-        "vertices": item.vertices if isinstance(item.vertices, list) else None,
+        "vertices": vertices,
+        "area": area,
         "item_type": item.item_type or "standard",
         "owner": item.owner,
         "note": item.note,

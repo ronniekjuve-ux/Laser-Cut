@@ -61,8 +61,12 @@ function SheetPreview({ item, onClose }) {
 
 function MobileWarehouseCard({ item, onEdit, onDelete, onDeduct, onReturn, onCut, onMerge, onNotes, onPreview }) {
   const W = item.sheet_w || 0, H = item.sheet_h || 0;
+  const vertices = item.vertices;
+  const hasShape = vertices && vertices.length >= 3;
   const scale = Math.min(60 / Math.max(W, 1), 100 / Math.max(H, 1));
   const svgW = W * scale, svgH = H * scale;
+  const polyPoints = hasShape ? vertices.map(v => `${v[0] * scale},${v[1] * scale}`).join(' ') : null;
+  const area = item.area ? (item.area / 1000000).toFixed(2) : (W * H / 1000000).toFixed(2);
 
   return (
     <div style={{
@@ -73,13 +77,17 @@ function MobileWarehouseCard({ item, onEdit, onDelete, onDeduct, onReturn, onCut
         {W > 0 && H > 0 && (
           <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}
             style={{ border: '1px solid #333', background: '#f8f8f8', flexShrink: 0 }}>
-            <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="1.5" />
+            {hasShape ? (
+              <polygon points={polyPoints} fill="#dcfce7" fillOpacity="0.5" stroke="#333" strokeWidth="1.5" />
+            ) : (
+              <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="1.5" />
+            )}
           </svg>
         )}
         <div style={{ flex: 1, fontSize: 12, lineHeight: 1.6 }}>
           <div style={{ fontWeight: 700, fontSize: 13, color: item.parent_article ? '#6366f1' : '#333' }}>{item.article || '-'}</div>
           <div>{item.metal}{item.grade ? ` ${item.grade}` : ''} {item.thickness ? `${item.thickness}мм` : ''}</div>
-          <div>{W}x{H} мм | <strong>{(item.sheet_count || 0) > 0 ? item.sheet_count : (item.original_sheet_count || 0)}</strong> шт</div>
+          <div>{W}x{H} мм | {area} м² | <strong>{(item.sheet_count || 0) > 0 ? item.sheet_count : (item.original_sheet_count || 0)}</strong> шт</div>
           {item.owner && <div style={{ color: '#64748b' }}>{item.owner}</div>}
           {(item.bound_to || []).length > 0 && <div style={{ color: '#6366f1', fontSize: 11 }}>Закреплено: {item.bound_to.join(', ')}</div>}
         </div>
@@ -460,9 +468,24 @@ export default function Warehouse() {
       {activeTab === 'stock' ? (
         isRealMobile ? (
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, color: '#166534' }}>В наличии ({inStock.length})</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#166534' }}>В наличии ({inStock.length})</div>
+              <div style={{ display: 'flex', gap: 3 }}>
+                {[{ col: 'article', label: 'Арт' }, { col: 'owner', label: 'Влд' }, { col: 'thickness', label: 'Толщ' }, { col: 'metal', label: 'Мат' }].map(s => (
+                  <button key={s.col} className="btn" onClick={() => handleSort(s.col)}
+                    style={{ padding: '2px 5px', fontSize: 9, fontWeight: sortCol === s.col ? 700 : 400 }}>
+                    {s.label} {sortCol === s.col ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
             {inStock.length === 0 && <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Пусто</div>}
-            {inStock.map(item => (
+            {inStock.sort((a, b) => {
+              let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
+              if (sortCol === 'thickness') { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; return sortDir === 'asc' ? va - vb : vb - va; }
+              va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+              return sortDir === 'asc' ? va.localeCompare(vb, 'ru') : vb.localeCompare(va, 'ru');
+            }).map(item => (
               <MobileWarehouseCard key={item.id} item={item}
                 onEdit={startEdit} onDelete={(id) => setConfirmDelete(id)}
                 onDeduct={setDeductItem} onReturn={setReturnItem}
@@ -476,9 +499,24 @@ export default function Warehouse() {
       ) : (
         isRealMobile ? (
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, color: '#dc2626' }}>Списано ({deducted.length})</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#dc2626' }}>Списано ({deducted.length})</div>
+              <div style={{ display: 'flex', gap: 3 }}>
+                {[{ col: 'article', label: 'Арт' }, { col: 'owner', label: 'Влд' }, { col: 'thickness', label: 'Толщ' }, { col: 'metal', label: 'Мат' }].map(s => (
+                  <button key={s.col} className="btn" onClick={() => handleSort(s.col)}
+                    style={{ padding: '2px 5px', fontSize: 9, fontWeight: sortCol === s.col ? 700 : 400 }}>
+                    {s.label} {sortCol === s.col ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
             {deducted.length === 0 && <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Пусто</div>}
-            {deducted.map(item => (
+            {deducted.sort((a, b) => {
+              let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
+              if (sortCol === 'thickness') { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; return sortDir === 'asc' ? va - vb : vb - va; }
+              va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+              return sortDir === 'asc' ? va.localeCompare(vb, 'ru') : vb.localeCompare(va, 'ru');
+            }).map(item => (
               <MobileWarehouseCard key={item.id} item={item}
                 onEdit={startEdit} onDelete={(id) => setConfirmDelete(id)}
                 onDeduct={setDeductItem} onReturn={setReturnItem}

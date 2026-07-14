@@ -82,7 +82,9 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
   const [dimH, setDimH] = useState('');
   const [placing, setPlacing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [highlight, setHighlight] = useState(null); // 'cut' or 'remain'
+  const [highlight, setHighlight] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
   const S = 0.05;
   const W = item.sheet_w || 1500;
@@ -104,6 +106,7 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
     setDimH('');
     setPlacing(false);
     setHighlight(null);
+    setDragging(false);
   }, [item]);
 
   const toSVG = (e) => {
@@ -118,42 +121,64 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
   };
 
   const onMouseDown = (e) => {
-    if (!placing) return;
     const pt = toSVG(e);
-    const w = parseFloat(dimW) || 0, h = parseFloat(dimH) || 0;
-    const pos = findValidPosition(pt.x, pt.y, w, h, W, H, hasShape ? vertices : null);
-    if (!pos) return alert('Вырезка не помещается в форму листа');
-    setCutRect({ ...pos, w, h });
-    setPlacing(false);
+    if (!pt) return;
+
+    if (placing) {
+      const w = parseFloat(dimW) || 0, h = parseFloat(dimH) || 0;
+      const pos = findValidPosition(pt.x, pt.y, w, h, W, H, hasShape ? vertices : null);
+      if (!pos) return alert('Вырезка не помещается в форму листа');
+      setCutRect({ ...pos, w, h });
+      setPlacing(false);
+      return;
+    }
+
+    // Check if clicking on existing cut rect to start drag
+    if (cutRect && !result) {
+      if (pt.x >= cutRect.x && pt.x <= cutRect.x + cutRect.w &&
+          pt.y >= cutRect.y && pt.y <= cutRect.y + cutRect.h) {
+        setDragging(true);
+        setDragOffset({ x: pt.x - cutRect.x, y: pt.y - cutRect.y });
+      }
+    }
   };
 
   const onMouseMove = (e) => {
-    if (!placing) return;
     const pt = toSVG(e);
-    const w = parseFloat(dimW) || 0, h = parseFloat(dimH) || 0;
-    const pos = findValidPosition(pt.x, pt.y, w, h, W, H, hasShape ? vertices : null);
-    if (pos) setCutRect({ ...pos, w, h });
+    if (!pt) return;
+
+    if (placing) {
+      const w = parseFloat(dimW) || 0, h = parseFloat(dimH) || 0;
+      const pos = findValidPosition(pt.x, pt.y, w, h, W, H, hasShape ? vertices : null);
+      if (pos) setCutRect({ ...pos, w, h });
+      return;
+    }
+
+    if (dragging && cutRect) {
+      const newX = pt.x - dragOffset.x;
+      const newY = pt.y - dragOffset.y;
+      const pos = findValidPosition(newX, newY, cutRect.w, cutRect.h, W, H, hasShape ? vertices : null);
+      if (pos) setCutRect({ ...cutRect, x: pos.x, y: pos.y });
+    }
   };
 
-  // Touch handlers for mobile placement
+  const onMouseUp = () => {
+    setDragging(false);
+  };
+
+  // Touch handlers
   const onTouchStart = (e) => {
-    if (!placing) return;
     e.preventDefault();
-    const pt = toSVG(e);
-    const w = parseFloat(dimW) || 0, h = parseFloat(dimH) || 0;
-    const pos = findValidPosition(pt.x, pt.y, w, h, W, H, hasShape ? vertices : null);
-    if (!pos) return alert('Вырезка не помещается в форму листа');
-    setCutRect({ ...pos, w, h });
-    setPlacing(false);
+    onMouseDown(e);
   };
 
   const onTouchMove = (e) => {
-    if (!placing) return;
     e.preventDefault();
-    const pt = toSVG(e);
-    const w = parseFloat(dimW) || 0, h = parseFloat(dimH) || 0;
-    const pos = findValidPosition(pt.x, pt.y, w, h, W, H, hasShape ? vertices : null);
-    if (pos) setCutRect({ ...pos, w, h });
+    onMouseMove(e);
+  };
+
+  const onTouchEnd = () => {
+    setDragging(false);
   };
 
   const startPlace = () => {
@@ -200,12 +225,12 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
           </h3>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
-        <div className="modal-body" style={{ padding: '4px 14px 8px', display: 'flex', gap: 10, flex: 1, minHeight: 0 }}>
-          <div style={{ flex: '0 0 auto' }}>
+        <div className="modal-body" style={{ padding: '4px 14px 8px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0 }}>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             <svg ref={svgRef} width={sW} height={sH} viewBox={`0 0 ${sW} ${sH}`}
-              style={{ border: '2px solid #333', background: '#f8f8f8', cursor: placing ? 'crosshair' : 'default', touchAction: placing ? 'none' : 'auto' }}
-              onMouseDown={onMouseDown} onMouseMove={onMouseMove}
-              onTouchStart={onTouchStart} onTouchMove={onTouchMove}>
+              style={{ border: '2px solid #333', background: '#f8f8f8', cursor: placing ? 'crosshair' : dragging ? 'grabbing' : (cutRect && !result ? 'grab' : 'default'), touchAction: 'none', maxWidth: '60vw' }}
+              onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
+              onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
               {hasShape && (
                 <defs>
                   <clipPath id="sheet-clip">
@@ -271,15 +296,15 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
                 </>
               )}
             </svg>
-            <div style={{ marginTop: 3, fontSize: 10, color: '#64748b', textAlign: 'center' }}>1px = {1 / S} мм</div>
+            <div style={{ marginTop: 2, fontSize: 10, color: '#64748b', textAlign: 'center' }}>1px = {1 / S} мм</div>
           </div>
 
-          <div style={{ flex: 1, minWidth: 140, maxWidth: 220, display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' }}>
-            <div style={{ padding: '6px 8px', background: '#f8fafc', borderRadius: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            <div style={{ flex: '1 1 140px', padding: '6px 8px', background: '#f8fafc', borderRadius: 6 }}>
               <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}>Размер вырезки</div>
               <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-                <input type="number" value={dimW} onChange={e => setDimW(e.target.value)} placeholder="Ш мм" style={{ ...st, flex: 1 }} />
-                <input type="number" value={dimH} onChange={e => setDimH(e.target.value)} placeholder="В мм" style={{ ...st, flex: 1 }} />
+                <input type="number" value={dimW} onChange={e => setDimW(e.target.value)} placeholder="Ш мм" style={{ ...st, width: 70, flex: 'none' }} />
+                <input type="number" value={dimH} onChange={e => setDimH(e.target.value)} placeholder="В мм" style={{ ...st, width: 70, flex: 'none' }} />
               </div>
               {placing && <div style={{ fontSize: 10, color: '#1d4ed8', marginBottom: 3 }}>Кликните на лист</div>}
               <button className="btn" onClick={placing ? () => { setPlacing(false); setCutRect(null); } : startPlace}
