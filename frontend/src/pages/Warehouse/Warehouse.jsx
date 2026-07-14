@@ -16,6 +16,8 @@ function SheetPreview({ item, onClose }) {
   const polyPoints = vertices && vertices.length >= 3
     ? vertices.map(v => `${v[0] * scale},${v[1] * scale}`).join(' ')
     : null;
+  const area = item.area ? (item.area / 1000000).toFixed(2) : (W * H / 1000000).toFixed(2);
+  const weight = item.weight ? parseFloat(item.weight).toFixed(1) : null;
   return (
     <div className="modal-overlay active" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, padding: 16 }}>
@@ -23,8 +25,8 @@ function SheetPreview({ item, onClose }) {
           <strong style={{ fontSize: 13 }}>{item.article || `#${item.id}`} — {item.metal} {item.grade || ''} {item.thickness ? item.thickness + 'мм' : ''}</strong>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
-        <div style={{ textAlign: 'center', marginBottom: 8 }}>
-          <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ border: '2px solid #333', background: '#f8f8f8' }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8 }}>
+          <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ border: '2px solid #333', background: '#f8f8f8', flexShrink: 0 }}>
             {Array.from({ length: Math.floor(W / 500) + 1 }, (_, i) => (
               <line key={`v${i}`} x1={i * 500 * scale} y1={0} x2={i * 500 * scale} y2={svgH} stroke="#e5e7eb" strokeWidth="0.5" />
             ))}
@@ -35,19 +37,17 @@ function SheetPreview({ item, onClose }) {
               <>
                 <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#e5e7eb" strokeWidth="1" />
                 <polygon points={polyPoints} fill="#dcfce7" fillOpacity="0.5" stroke="#333" strokeWidth="2" />
-                <text x={svgW / 2} y={svgH / 2 - 6} textAnchor="middle" fontSize="10" fill="#166534" fontWeight="600">{item.area ? `${(item.area / 1000000).toFixed(2)} м²` : `${(W * H / 1000000).toFixed(2)} м²`}</text>
-                <text x={svgW / 2} y={svgH / 2 + 8} textAnchor="middle" fontSize="10" fill="#64748b">{item.sheet_count} лист(ов)</text>
-                {item.weight && <text x={svgW / 2} y={svgH / 2 + 20} textAnchor="middle" fontSize="10" fill="#64748b">{item.weight} кг</text>}
               </>
             ) : (
-              <>
-                <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="2" />
-                <text x={svgW / 2} y={svgH / 2 - 6} textAnchor="middle" fontSize="12" fill="#333" fontWeight="600">{W}x{H} мм</text>
-                <text x={svgW / 2} y={svgH / 2 + 12} textAnchor="middle" fontSize="10" fill="#64748b">{item.sheet_count} лист(ов)</text>
-                {item.weight && <text x={svgW / 2} y={svgH / 2 + 26} textAnchor="middle" fontSize="10" fill="#64748b">{item.weight} кг</text>}
-              </>
+              <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="2" />
             )}
           </svg>
+          <div style={{ fontSize: 12, lineHeight: 1.8, color: '#333', whiteSpace: 'nowrap' }}>
+            <div><strong>{W}x{H}</strong> мм</div>
+            <div>{area} м²</div>
+            <div>{item.sheet_count} лист(ов)</div>
+            {weight && <div>{weight} кг</div>}
+          </div>
         </div>
         <div style={{ fontSize: 12, color: '#64748b' }}>
           {item.owner && <div>Владелец: {item.owner}</div>}
@@ -58,11 +58,18 @@ function SheetPreview({ item, onClose }) {
   );
 }
 
-function WarehouseTable({ items, title, color, editingId, editForm, setEditForm, sortCol, sortDir, onSort, filterOwner, filterGrade, filterThickness, setFilterOwner, setFilterGrade, setFilterThickness, showFilters, setShowFilters, onEdit, onSave, onCancel, onDelete, onDeduct, onReturn, onCut, onNotes, onPreview }) {
+function WarehouseTable({ items, title, color, editingId, editForm, setEditForm, sortCol, sortDir, onSort, filterOwner, filterGrade, filterThickness, filterMaterial, setFilterOwner, setFilterGrade, setFilterThickness, setFilterMaterial, showFilters, setShowFilters, onEdit, onSave, onCancel, onDelete, onDeduct, onReturn, onCut, onMerge, onNotes, onPreview }) {
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 15;
+
+  // Reset page when items change (e.g., after delete/deduct/return)
+  useEffect(() => { setPage(1); }, [items.length]);
+
   const filtered = items
     .filter(i => filterOwner.length === 0 || filterOwner.includes(i.owner || '-'))
     .filter(i => filterGrade.length === 0 || filterGrade.includes(i.grade || '-'))
     .filter(i => filterThickness.length === 0 || filterThickness.includes(String(i.thickness || '-')))
+    .filter(i => filterMaterial.length === 0 || filterMaterial.includes(i.metal || '-'))
     .sort((a, b) => {
       let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
       if (sortCol === 'thickness' || sortCol === 'sheet_count') { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; return sortDir === 'asc' ? va - vb : vb - va; }
@@ -71,18 +78,37 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
       return sortDir === 'asc' ? va.localeCompare(vb, 'ru') : vb.localeCompare(va, 'ru');
     });
 
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const vals = (col) => [...new Set(items.map(i => col === 'thickness' ? String(i[col] || '-') : (i[col] || '-')))];
+
+  const getFilterState = (col) => {
+    if (col === 'owner') return filterOwner;
+    if (col === 'grade') return filterGrade;
+    if (col === 'thickness') return filterThickness;
+    if (col === 'metal') return filterMaterial;
+    return [];
+  };
+  const setFilterState = (col) => {
+    if (col === 'owner') return setFilterOwner;
+    if (col === 'grade') return setFilterGrade;
+    if (col === 'thickness') return setFilterThickness;
+    if (col === 'metal') return setFilterMaterial;
+    return () => {};
+  };
+  const hasActiveFilters = filterOwner.length + filterGrade.length + filterThickness.length + filterMaterial.length > 0;
 
   const DD = ({ col, label }) => (
     <th style={{ position: 'relative', whiteSpace: 'nowrap' }}>
       <span onClick={(e) => { e.stopPropagation(); setShowFilters(showFilters === col ? null : col); }} style={{ cursor: 'pointer', userSelect: 'none' }}>
-        {label} {filterOwner.length + filterGrade.length + filterThickness.length > 0 && (col === 'owner' ? filterOwner.length : col === 'grade' ? filterGrade.length : filterThickness.length) > 0 ? '' : '▾'}
+        {label} {hasActiveFilters && getFilterState(col).length > 0 ? '' : '▾'}
       </span>
       {showFilters === col && (
         <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 120, maxHeight: 200, overflowY: 'auto', padding: 4 }}>
           {vals(col).map(v => (
-            <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', fontSize: 12, cursor: 'pointer', borderRadius: 3, background: (col === 'owner' ? filterOwner : col === 'grade' ? filterGrade : filterThickness).includes(v) ? '#eff6ff' : 'transparent' }}>
-              <input type="checkbox" checked={(col === 'owner' ? filterOwner : col === 'grade' ? filterGrade : filterThickness).includes(v)} onChange={() => { const setter = col === 'owner' ? setFilterOwner : col === 'grade' ? setFilterGrade : setFilterThickness; setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]); }} style={{ margin: 0 }} />
+            <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', fontSize: 12, cursor: 'pointer', borderRadius: 3, background: getFilterState(col).includes(v) ? '#eff6ff' : 'transparent' }}>
+              <input type="checkbox" checked={getFilterState(col).includes(v)} onChange={() => { const setter = setFilterState(col); setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]); }} style={{ margin: 0 }} />
               {v}
             </label>
           ))}
@@ -108,20 +134,21 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
             <tr>
               <TH col="article" label="Артикул" />
               <DD col="owner" label="Владелец" />
-              <th>Материал</th>
+              <DD col="metal" label="Материал" />
               <DD col="thickness" label="Толщ." />
               <th>Размер</th>
               <th>Кол-во</th>
+              <th>Закреплено</th>
               <TH col="created_at" label="Дата" />
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 12, color: '#64748b', fontSize: 13 }}>Пусто</td></tr>
-            ) : filtered.map(item => (
+            {paged.length === 0 ? (
+              <tr><td colSpan={9} style={{ textAlign: 'center', padding: 12, color: '#64748b', fontSize: 13 }}>Пусто</td></tr>
+            ) : paged.map(item => (
               <tr key={item.id} style={editingId === item.id ? { background: '#f0f9ff' } : { cursor: 'pointer' }}
-                onClick={(e) => { if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return; if (editingId === item.id) return; if (item.sheet_w && item.sheet_h) onPreview(item); }}>
+                onClick={(e) => { if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return; if (editingId === item.id) return; if (item.sheet_w > 0 && item.sheet_h > 0) onPreview(item); }}>
                 {editingId === item.id ? (
                   <>
                     <td style={{ fontSize: 11, color: '#94a3b8' }}>{item.article || '-'}</td>
@@ -136,6 +163,7 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
                     <td><div style={{ display: 'flex', gap: 2 }}><input value={editForm.sheet_w} onChange={e => setEditForm({...editForm, sheet_w: e.target.value})} style={{ width: 45, padding: '2px 4px', fontSize: 12 }} /><span style={{ fontSize: 12, alignSelf: 'center' }}>x</span><input value={editForm.sheet_h} onChange={e => setEditForm({...editForm, sheet_h: e.target.value})} style={{ width: 45, padding: '2px 4px', fontSize: 12 }} /></div></td>
                     <td><input value={editForm.sheet_count} onChange={e => setEditForm({...editForm, sheet_count: e.target.value})} style={{ width: 50, padding: '2px 4px', fontSize: 12 }} /></td>
                     <td></td>
+                    <td></td>
                     <td><div style={{ display: 'flex', gap: 4 }}><button className="btn btn-primary" onClick={(e) => { e.stopPropagation(); onSave(item.id); }} style={{ padding: '3px 8px', fontSize: 11 }}>OK</button><button className="btn" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ padding: '3px 8px', fontSize: 11 }}>Отмена</button></div></td>
                   </>
                 ) : (
@@ -145,7 +173,12 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
                     <td style={{ fontWeight: 600 }}>{item.metal}{item.grade ? ` ${item.grade}` : ''}</td>
                     <td>{item.thickness ? `${item.thickness}мм` : '-'}</td>
                     <td>{sizeLabel(item)}</td>
-                    <td style={{ fontWeight: 600, color: item.sheet_count <= (item.min_quantity || 0) ? '#dc2626' : undefined }}>{item.sheet_count || 0}</td>
+                    <td style={{ fontWeight: 600, color: item.sheet_count <= (item.min_quantity || 0) ? '#dc2626' : undefined }}>
+                      {(item.sheet_count || 0) > 0 ? item.sheet_count : (item.original_sheet_count || 0)}
+                    </td>
+                    <td style={{ fontSize: 11, color: '#6366f1' }}>
+                      {(item.bound_to || []).length > 0 ? item.bound_to.join(', ') : '-'}
+                    </td>
                     <td style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>{item.created_at ? new Date(item.created_at).toLocaleDateString('ru-RU') : '-'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
@@ -155,6 +188,9 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
                           <>
                             <button className="btn" onClick={() => onDeduct(item)} style={{ padding: '3px 8px', fontSize: 11, background: '#fef3c7', color: '#92400e' }} title="Списание">↓</button>
                             {item.sheet_w && item.sheet_h && <button className="btn" onClick={() => onCut(item)} style={{ padding: '3px 8px', fontSize: 11, background: '#dbeafe', color: '#1d4ed8' }} title="Резка">✂️</button>}
+                            {item.parent_article && item.sheet_count > 0 && (
+                              <button className="btn" onClick={() => onMerge(item)} style={{ padding: '3px 8px', fontSize: 11, background: '#fef2f2', color: '#991b1b' }} title="Откат разрезания">↩</button>
+                            )}
                           </>
                         ) : (
                           <button className="btn" onClick={() => onReturn(item)} style={{ padding: '3px 8px', fontSize: 11, background: '#dcfce7', color: '#166534' }} title="Вернуть на склад">↑</button>
@@ -168,6 +204,98 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
             ))}
           </tbody>
         </table>
+      </div>
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 8, alignItems: 'center' }}>
+          <button className="btn" onClick={() => setPage(1)} disabled={page <= 1} style={{ fontSize: 11, padding: '2px 6px' }}>«</button>
+          <button className="btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={{ fontSize: 11, padding: '2px 6px' }}>‹</button>
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let p;
+            if (totalPages <= 5) p = i + 1;
+            else if (page <= 3) p = i + 1;
+            else if (page >= totalPages - 2) p = totalPages - 4 + i;
+            else p = page - 2 + i;
+            return (
+              <button key={p} className={'btn' + (p === page ? ' btn-primary' : '')}
+                onClick={() => setPage(p)}
+                style={{ fontSize: 11, padding: '2px 6px' }}>{p}</button>
+            );
+          })}
+          <button className="btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} style={{ fontSize: 11, padding: '2px 6px' }}>›</button>
+          <button className="btn" onClick={() => setPage(totalPages)} disabled={page >= totalPages} style={{ fontSize: 11, padding: '2px 6px' }}>»</button>
+          <span style={{ fontSize: 11, color: '#64748b', marginLeft: 4 }}>{filtered.length} записей | Стр. {page}/{totalPages}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MergeCutModal({ items, item, onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const sibling = items.find(i =>
+    i.id !== item.id &&
+    i.parent_article === item.parent_article &&
+    i.parent_article != null
+  );
+
+  const parentW = item.parent_sheet_w || sibling?.parent_sheet_w;
+  const parentH = item.parent_sheet_h || sibling?.parent_sheet_h;
+  const canMerge = sibling && parentW && parentH;
+
+  const handleMerge = async () => {
+    if (!canMerge) return;
+
+    setLoading(true);
+    setError('');
+    try {
+      await client.post('/api/v1/warehouse/merge-cut', {
+        item_id_1: item.id,
+        item_id_2: sibling.id,
+      });
+      onSuccess();
+    } catch (err) {
+      setError(err.response?.data?.detail || err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay active" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <div className="modal-header">
+          <h3>Откат разрезания</h3>
+          <button className="close-btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ padding: 10, background: '#f0f9ff', borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
+            <div><strong>{item.article}</strong> — {item.sheet_w}x{item.sheet_h}</div>
+            {sibling && <div style={{ marginTop: 4 }}><strong>{sibling.article}</strong> — {sibling.sheet_w}x{sibling.sheet_h}</div>}
+            {!sibling && <div style={{ color: '#dc2626', marginTop: 4 }}>Соседний кусок не найден</div>}
+          </div>
+
+          {canMerge ? (
+            <div style={{ padding: 10, background: '#f0fdf4', borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
+              <div>Исходный лист: <strong>{parentW}x{parentH} мм</strong></div>
+            </div>
+          ) : (
+            <div style={{ padding: 10, background: '#fef2f2', borderRadius: 6, marginBottom: 12, fontSize: 13, color: '#991b1b' }}>
+              Не удалось определить размер исходного листа
+            </div>
+          )}
+
+          {error && <div style={{ padding: 8, background: '#fef2f2', borderRadius: 6, color: '#991b1b', fontSize: 12, marginBottom: 12 }}>{error}</div>}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn" onClick={handleMerge} disabled={loading || !canMerge}
+              style={{ flex: 1, background: '#dcfce7', color: '#166534', border: '1px solid #86efac', fontWeight: 600 }}>
+              {loading ? 'Слияние...' : 'Вернуть целый лист'}
+            </button>
+            <button className="btn" onClick={onClose}>Отмена</button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -192,7 +320,10 @@ export default function Warehouse() {
   const [filterOwner, setFilterOwner] = useState([]);
   const [filterGrade, setFilterGrade] = useState([]);
   const [filterThickness, setFilterThickness] = useState([]);
+  const [filterMaterial, setFilterMaterial] = useState([]);
   const [showFilters, setShowFilters] = useState(null);
+  const [activeTab, setActiveTab] = useState('stock');
+  const [mergeItem, setMergeItem] = useState(null);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -235,7 +366,7 @@ export default function Warehouse() {
 
   if (loading) return <div className="loading">Загрузка...</div>;
 
-  const shared = { editingId, editForm, setEditForm, sortCol, sortDir, onSort: handleSort, filterOwner, filterGrade, filterThickness, setFilterOwner, setFilterGrade, setFilterThickness, showFilters, setShowFilters, onEdit: startEdit, onSave: saveEdit, onCancel: () => setEditingId(null), onDelete: (id) => setConfirmDelete(id), onDeduct: setDeductItem, onReturn: setReturnItem, onCut: setRemnantEditorItem, onNotes: setNotesChat, onPreview: setPreviewItem };
+  const shared = { editingId, editForm, setEditForm, sortCol, sortDir, onSort: handleSort, filterOwner, filterGrade, filterThickness, filterMaterial, setFilterOwner, setFilterGrade, setFilterThickness, setFilterMaterial, showFilters, setShowFilters, onEdit: startEdit, onSave: saveEdit, onCancel: () => setEditingId(null), onDelete: (id) => setConfirmDelete(id), onDeduct: setDeductItem, onReturn: setReturnItem, onCut: setRemnantEditorItem, onMerge: setMergeItem, onNotes: setNotesChat, onPreview: setPreviewItem };
 
   return (
     <div>
@@ -259,8 +390,32 @@ export default function Warehouse() {
         </div>
       )}
 
-      <WarehouseTable items={inStock} title="В наличии" color="#166534" {...shared} />
-      {deducted.length > 0 && <WarehouseTable items={deducted} title="Списано" color="#dc2626" {...shared} />}
+      {/* Tab toggle */}
+      <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--border)', marginBottom: 12 }}>
+        {[
+          { key: 'stock', label: `В наличии (${inStock.length})` },
+          { key: 'deducted', label: `Списано (${deducted.length})` },
+        ].map(tab => (
+          <div
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              flex: 1, textAlign: 'center', padding: '8px 0', fontSize: 13, fontWeight: 500,
+              cursor: 'pointer', borderBottom: activeTab === tab.key ? '2px solid var(--primary)' : '2px solid transparent',
+              color: activeTab === tab.key ? 'var(--primary)' : '#64748b',
+              marginBottom: -2,
+            }}
+          >
+            {tab.label}
+          </div>
+        ))}
+      </div>
+
+      {activeTab === 'stock' ? (
+        <WarehouseTable items={inStock} title="В наличии" color="#166534" {...shared} />
+      ) : (
+        <WarehouseTable items={deducted} title="Списано" color="#dc2626" {...shared} />
+      )}
 
       {confirmDelete && <ConfirmModal title="Удалить запись?" message="Запись склада будет удалена безвозвратно." onConfirm={confirmDeleteAction} onCancel={() => setConfirmDelete(null)} />}
       {notesChat && <ItemNotesChat itemType="warehouse" itemId={notesChat.id} onClose={() => setNotesChat(null)} />}
@@ -269,6 +424,7 @@ export default function Warehouse() {
       {movementsItem && <WarehouseMovementHistory item={movementsItem} onClose={() => setMovementsItem(null)} />}
       {remnantEditorItem && <RemnantEditor item={remnantEditorItem} onClose={() => setRemnantEditorItem(null)} onSuccess={() => fetchItems()} />}
       {previewItem && <SheetPreview item={previewItem} onClose={() => setPreviewItem(null)} />}
+      {mergeItem && <MergeCutModal items={items} item={mergeItem} onClose={() => setMergeItem(null)} onSuccess={() => { setMergeItem(null); fetchItems(); }} />}
     </div>
   );
 }

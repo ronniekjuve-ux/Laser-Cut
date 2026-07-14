@@ -96,8 +96,20 @@ export default function CompletedOrdersList() {
               </tr>
             </thead>
             <tbody>
-              {applications.map(app => (
-                <tr key={app.id} onClick={() => setSelectedApp(app)} style={{ cursor: 'pointer', opacity: 0.7 }}>
+              {applications.map(app => {
+                const hasUnbound = (app.layouts || []).some(l => {
+                  const runs = Array.isArray(l.completed_runs) ? l.completed_runs : [];
+                  const bindings = l.warehouse_bindings || {};
+                  const total = l.sheet_count || 1;
+                  return Array.from({length: total}, (_, i) => runs[i] && bindings[i] == null).some(Boolean);
+                });
+                return (
+                <tr key={app.id} onClick={() => setSelectedApp(app)} style={{
+                  cursor: 'pointer',
+                  opacity: 0.7,
+                  background: hasUnbound ? '#fef2f2' : undefined,
+                  borderLeft: hasUnbound ? '3px solid #ef4444' : undefined,
+                }}>
                   <td style={{ fontWeight: 600, color: '#64748b' }}>#{app.id}</td>
                   <td>{app.customer}</td>
                   <td>{app.machine}</td>
@@ -126,7 +138,8 @@ export default function CompletedOrdersList() {
                     </button>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
               {applications.length === 0 && (
                 <tr>
                   <td colSpan={10} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>

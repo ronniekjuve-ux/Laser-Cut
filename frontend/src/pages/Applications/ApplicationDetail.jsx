@@ -17,6 +17,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmUnmerge, setConfirmUnmerge] = useState(null);
   const [warehouseItems, setWarehouseItems] = useState([]);
+  const [reservedItems, setReservedItems] = useState({});
   const [selectedWhItem, setSelectedWhItem] = useState('');
   const [sheetsUsed, setSheetsUsed] = useState('');
   const [confirmCancelDeduct, setConfirmCancelDeduct] = useState(false);
@@ -142,8 +143,12 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
 
   const fetchWarehouseItems = async () => {
     try {
-      const res = await client.get('/api/v1/warehouse/');
-      setWarehouseItems(Array.isArray(res.data) ? res.data : []);
+      const [itemsRes, reservedRes] = await Promise.all([
+        client.get('/api/v1/warehouse/'),
+        client.get('/api/v1/warehouse/reserved').catch(() => ({ data: {} })),
+      ]);
+      setWarehouseItems(Array.isArray(itemsRes.data) ? itemsRes.data : []);
+      setReservedItems(reservedRes.data || {});
     } catch (err) {
       console.error('Failed to load warehouse', err);
     }
@@ -169,6 +174,8 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
   };
 
   const [layoutWhSelections, setLayoutWhSelections] = useState({});
+  const [runSelections, setRunSelections] = useState({});
+  const [showAllSheets, setShowAllSheets] = useState({});
 
   const bindLayoutWarehouse = async (layoutId) => {
     const whId = layoutWhSelections[layoutId];
@@ -193,6 +200,43 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
       });
       const res = await client.get('/api/v1/applications/' + app.id);
       setFullApp(res.data);
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const bindRun = async (layoutId, runIndex) => {
+    const key = `${layoutId}_${runIndex}`;
+    const whId = runSelections[key];
+    if (!whId) return alert('Выберите позицию на складе');
+    try {
+      const res = await client.patch('/api/v1/applications/layouts/' + layoutId + '/bind-run', {
+        run_index: runIndex,
+        warehouse_item_id: parseInt(whId),
+      });
+      if (res.data.area_warning) {
+        if (!confirm('Лист меньше по площади, чем раскладка. Продолжить?')) {
+          return;
+        }
+      }
+      const appRes = await client.get('/api/v1/applications/' + app.id);
+      setFullApp(appRes.data);
+      setRunSelections(prev => ({ ...prev, [key]: '' }));
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const unbindRun = async (layoutId, runIndex) => {
+    try {
+      await client.patch('/api/v1/applications/layouts/' + layoutId + '/bind-run', {
+        run_index: runIndex,
+        warehouse_item_id: null,
+      });
+      const appRes = await client.get('/api/v1/applications/' + app.id);
+      setFullApp(appRes.data);
       if (onUpdate) onUpdate();
     } catch (err) {
       alert('Ошибка: ' + (err.response?.data?.detail || err.message));
@@ -405,6 +449,8 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                         const isComplete = layoutDone >= layoutTotal;
                         const pct = layoutTotal > 0 ? Math.round((layoutDone / layoutTotal) * 100) : 0;
                         const isDisabled = isReplaced || isMergeCancelled;
+                        const bindings = layout.warehouse_bindings || {};
+                        const hasUnboundCutRuns = Array.from({length: layoutTotal}, (_, i) => runs[i] && bindings[i] == null).some(Boolean);
                         return (
                           <div
                             key={layout.id || li}
@@ -412,8 +458,13 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                               padding: 10, border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8,
                               cursor: isDisabled ? 'default' : 'pointer',
                               opacity: isDisabled ? 0.45 : 1,
-                              background: isMergeCancelled ? '#fef2f2' : isReplaced ? '#f1f5f9' : isComplete ? '#f0fdf4' : undefined,
-                              borderColor: isComplete ? '#bbf7d0' : undefined,
+                              background: isMergeCancelled ? '#fef2f2' : isReplaced ? '#f1f5f9'
+                                : isComplete && hasUnboundCutRuns ? '#fef2f2'
+                                : isComplete ? '#f0fdf4' : undefined,
+                              borderColor: isComplete && hasUnboundCutRuns ? '#fca5a5'
+                                : isComplete ? '#bbf7d0' : undefined,
+                              borderLeft: isComplete && hasUnboundCutRuns
+                                ? '3px solid #ef4444' : undefined,
                             }}
                             onClick={() => !isDisabled && setActiveLayout(li)}
                           >
@@ -433,6 +484,11 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                                 {layout.merged_from && !isMergeCancelled && !isReplaced && (
                                   <span style={{background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: 4, fontSize: 11}}>
                                     Слияние: {(layout.merged_from.layouts || []).map(l => `${l.app_id || '?'}.${l.code}`).join(' + ')}
+                                  </span>
+                                )}
+                                {hasUnboundCutRuns && isComplete && (
+                                  <span style={{fontSize: 10, padding: '1px 6px', borderRadius: 10, background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d'}}>
+                                    {Array.from({length: layoutTotal}, (_, i) => runs[i] && bindings[i] == null).filter(Boolean).length} без листа
                                   </span>
                                 )}
                                 {!isDisabled && `${layout.machine_type || ''} | ${layout.sheet_size} | Деталей: ${layout.parts_count}`}
@@ -482,14 +538,17 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                                 <div style={{display: 'flex', gap: 3, marginTop: 6}}>
                                   {Array.from({length: layoutTotal}, (_, i) => {
                                     const done = runs[i] || false;
+                                    const bindings = layout.warehouse_bindings || {};
+                                    const hasBinding = bindings[i] != null;
                                     return (
                                       <div
                                         key={i}
                                         style={{
                                           width: 20, height: 20, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                           fontSize: 9, fontWeight: 600,
-                                          background: done ? '#22c55e' : '#e2e8f0',
-                                          color: done ? '#fff' : '#64748b'
+                                          background: done ? '#22c55e' : hasBinding ? '#3b82f6' : '#e2e8f0',
+                                          color: done || hasBinding ? '#fff' : '#64748b',
+                                          border: done ? '2px solid #16a34a' : hasBinding ? '2px solid #2563eb' : '1px solid #cbd5e1'
                                         }}
                                       >
                                         {i + 1}
@@ -501,38 +560,98 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                             )}
                             {(user?.role === 'admin' || user?.role === 'operator' || user?.role === 'director') && !isDisabled && (
                               <div style={{marginTop: 8, padding: '6px 8px', background: '#f8fafc', borderRadius: 4, border: '1px solid var(--border)'}} onClick={e => e.stopPropagation()}>
-                                {layout.warehouse_item_id ? (
-                                  <div style={{display: 'flex', alignItems: 'center', gap: 6, fontSize: 12}}>
-                                    <span style={{color: '#166534', fontWeight: 600}}>Склад #{layout.warehouse_item_id}</span>
-                                    <button
-                                      onClick={() => unbindLayoutWarehouse(layout.id)}
-                                      style={{fontSize: 10, padding: '1px 6px', borderRadius: 3, border: '1px solid #fca5a5', background: '#fef2f2', color: '#991b1b', cursor: 'pointer'}}
-                                    >
-                                      отвязать
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
-                                    <select
-                                      value={layoutWhSelections[layout.id] || ''}
-                                      onChange={e => setLayoutWhSelections(prev => ({ ...prev, [layout.id]: e.target.value }))}
-                                      style={{flex: 1, padding: '2px 4px', fontSize: 11, border: '1px solid var(--border)', borderRadius: 3}}
-                                    >
-                                      <option value="">Склад...</option>
-                                      {warehouseItems.filter(w => w.sheet_count > 0).map(w => (
-                                        <option key={w.id} value={w.id}>
-                                          {w.metal} {w.grade ? `/ ${w.grade}` : ''} — {w.sheet_w && w.sheet_h ? `${w.sheet_w}x${w.sheet_h}` : w.size} ({w.sheet_count})
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <button
-                                      onClick={() => bindLayoutWarehouse(layout.id)}
-                                      style={{fontSize: 10, padding: '2px 6px', borderRadius: 3, border: '1px solid #93c5fd', background: '#dbeafe', color: '#1d4ed8', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap'}}
-                                    >
-                                      Привязать
-                                    </button>
-                                  </div>
-                                )}
+                                {Array.from({length: layoutTotal}, (_, runIdx) => {
+                                  const bindings = layout.warehouse_bindings || {};
+                                  const boundId = bindings[runIdx];
+                                  const isCut = runs[runIdx] || false;
+                                  const selKey = `${layout.id}_${runIdx}`;
+
+                                  const renderDropdown = (key, onSelect) => {
+                                    const items = warehouseItems.filter(w => w.sheet_count > 0);
+                                    const showAll = showAllSheets[key];
+                                    const matching = items.filter(w => {
+                                      const gm = !app.steel_grade || !w.grade || w.grade.toLowerCase() === app.steel_grade.toLowerCase();
+                                      const tm = !app.thickness || !w.thickness || w.thickness === app.thickness;
+                                      return gm && tm;
+                                    });
+                                    const others = items.filter(w => {
+                                      const gm = !app.steel_grade || !w.grade || w.grade.toLowerCase() === app.steel_grade.toLowerCase();
+                                      const tm = !app.thickness || !w.thickness || w.thickness === app.thickness;
+                                      return !(gm && tm);
+                                    });
+                                    const renderOpt = (w) => (
+                                      <option key={w.id} value={w.id}>
+                                        {w.article || `${w.metal}/${w.grade || 'XX'}/${w.id}`}
+                                        {(reservedItems[w.id] || []).length > 0 ? ` [резерв]` : ''}
+                                      </option>
+                                    );
+                                    return (
+                                      <select
+                                        value={runSelections[key] || ''}
+                                        onChange={e => {
+                                          if (e.target.value === '__show_all') {
+                                            setShowAllSheets(prev => ({ ...prev, [key]: true }));
+                                            return;
+                                          }
+                                          onSelect(e.target.value);
+                                        }}
+                                        style={{flex: 1, padding: '1px 3px', fontSize: 10, border: '1px solid var(--border)', borderRadius: 3}}
+                                      >
+                                        <option value="">Склад...</option>
+                                        {matching.map(renderOpt)}
+                                        {!showAll && others.length > 0 && (
+                                          <option value="__show_all" style={{fontWeight: 600, color: '#64748b'}}>
+                                            — Другой лист ({others.length}) —
+                                          </option>
+                                        )}
+                                        {showAll && others.map(renderOpt)}
+                                      </select>
+                                    );
+                                  };
+
+                                  const getWhLabel = (id) => {
+                                    const w = warehouseItems.find(x => x.id === id);
+                                    return w ? (w.article || `Склад #${w.id}`) : `Склад #${id}`;
+                                  };
+
+                                  return (
+                                    <div key={runIdx} style={{display: 'flex', alignItems: 'center', gap: 4, marginBottom: runIdx < layoutTotal - 1 ? 4 : 0, fontSize: 11}}>
+                                      <span style={{
+                                        width: 16, height: 16, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: 9, fontWeight: 600,
+                                        background: isCut ? '#22c55e' : boundId ? '#3b82f6' : '#e2e8f0',
+                                        color: isCut || boundId ? '#fff' : '#64748b'
+                                      }}>
+                                        {runIdx + 1}
+                                      </span>
+                                      {boundId ? (
+                                        <div style={{display: 'flex', alignItems: 'center', gap: 4, flex: 1}}>
+                                          <span style={{color: '#166534', fontWeight: 600, fontSize: 10}}>
+                                            {getWhLabel(boundId)}
+                                          </span>
+                                          {!isCut && (
+                                            <button
+                                              onClick={() => unbindRun(layout.id, runIdx)}
+                                              style={{fontSize: 9, padding: '0px 4px', borderRadius: 3, border: '1px solid #fca5a5', background: '#fef2f2', color: '#991b1b', cursor: 'pointer'}}
+                                            >
+                                              ✕
+                                            </button>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div style={{display: 'flex', gap: 3, alignItems: 'center', flex: 1}}>
+                                          {renderDropdown(selKey, (val) => setRunSelections(prev => ({ ...prev, [selKey]: val })))}
+                                          <button
+                                            onClick={() => bindRun(layout.id, runIdx)}
+                                            style={{fontSize: 9, padding: '1px 4px', borderRadius: 3, border: '1px solid #93c5fd', background: '#dbeafe', color: '#1d4ed8', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap'}}
+                                          >
+                                            Привязать
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>

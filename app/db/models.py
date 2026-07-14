@@ -162,6 +162,7 @@ class ApplicationLayout(Base):
     merged_from: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     warehouse_item_id: Mapped[Optional[int]] = mapped_column(ForeignKey("warehouse_items.id"), nullable=True)
     layout_sheets_used: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    warehouse_bindings: Mapped[Optional[str]] = mapped_column(JSON, nullable=True)
 
     application: Mapped["Application"] = relationship(back_populates="layouts")
     parts: Mapped[List["ApplicationLayoutPart"]] = relationship(back_populates="layout", cascade="all, delete-orphan")
@@ -367,6 +368,8 @@ class WarehouseItem(Base):
     min_quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     article: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, unique=True)
     parent_article: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    parent_sheet_w: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    parent_sheet_h: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     is_rectangular: Mapped[bool] = mapped_column(default=True)
     vertices: Mapped[Optional[str]] = mapped_column(JSON, nullable=True)
     item_type: Mapped[Optional[str]] = mapped_column(String(20), default="standard")

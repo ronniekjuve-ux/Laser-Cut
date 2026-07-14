@@ -356,6 +356,28 @@ MIGRATIONS = [
 
     # 37. Add vertices JSON to warehouse_items (polygon shape for L-shaped pieces)
     "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS vertices JSON;",
+
+    # 38. Add warehouse_bindings JSON to application_layouts (per-run binding)
+    "ALTER TABLE application_layouts ADD COLUMN IF NOT EXISTS warehouse_bindings JSON;",
+
+    # 38b. Migrate existing warehouse_item_id to warehouse_bindings
+    """DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN SELECT id, warehouse_item_id, sheet_count
+             FROM application_layouts
+             WHERE warehouse_item_id IS NOT NULL
+    LOOP
+        UPDATE application_layouts
+        SET warehouse_bindings = json_build_object('0', r.warehouse_item_id)
+        WHERE id = r.id;
+    END LOOP;
+END $$;""",
+
+    # 39. Add parent_sheet_w/parent_sheet_h to warehouse_items (original sheet dimensions before cut)
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS parent_sheet_w DOUBLE PRECISION;",
+    "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS parent_sheet_h DOUBLE PRECISION;",
 ]
 
 async def main():

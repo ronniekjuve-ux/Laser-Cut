@@ -49,10 +49,14 @@ function ProgressPopup({ allLayouts, onClose }) {
             const done = runs.filter(Boolean).length;
             const total = layout.sheet_count || 1;
             const isComplete = done >= total;
+            const bindings = layout.warehouse_bindings || {};
+            const hasUnboundCut = Array.from({length: total}, (_, j) => runs[j] && bindings[j] == null).some(Boolean);
             return (
               <div key={layout.id || i} style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
                 borderBottom: i < allLayouts.length - 1 ? '1px solid #f1f5f9' : 'none',
+                background: isComplete && hasUnboundCut ? '#fef2f2' : undefined,
+                borderRadius: 4,
               }}>
                 <span style={{ fontWeight: 600, fontSize: 13, minWidth: 50 }}>
                   {layout.layout_code || String(i + 1).padStart(3, '0')}
@@ -60,11 +64,14 @@ function ProgressPopup({ allLayouts, onClose }) {
                 <div style={{ flex: 1, display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                   {Array.from({ length: total }, (_, j) => {
                     const d = runs[j] || false;
+                    const bindings = layout.warehouse_bindings || {};
+                    const hasBinding = bindings[j] != null;
                     return (
                       <div key={j} style={{
                         width: 20, height: 20, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 9, fontWeight: 600, background: d ? '#22c55e' : '#e2e8f0',
-                        color: d ? '#fff' : '#94a3b8',
+                        fontSize: 9, fontWeight: 600,
+                        background: d ? '#22c55e' : hasBinding ? '#3b82f6' : '#e2e8f0',
+                        color: d || hasBinding ? '#fff' : '#94a3b8',
                       }}>
                         {j + 1}
                       </div>

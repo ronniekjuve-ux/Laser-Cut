@@ -35,6 +35,8 @@ def _item_to_dict(item: WarehouseItem) -> dict:
         "min_quantity": item.min_quantity,
         "article": item.article,
         "parent_article": item.parent_article,
+        "parent_sheet_w": item.parent_sheet_w,
+        "parent_sheet_h": item.parent_sheet_h,
         "is_rectangular": item.is_rectangular if item.is_rectangular is not None else True,
         "vertices": item.vertices if isinstance(item.vertices, list) else None,
         "item_type": item.item_type or "standard",
@@ -69,7 +71,48 @@ async def list_warehouse(
         select(WarehouseItem).order_by(desc(WarehouseItem.created_at))
     )
     items = result.scalars().all()
-    return [_item_to_dict(i) for i in items]
+
+    # Build binding map: warehouse_item_id → list of layout codes
+    bindings_map = {}
+    layouts_result = await db.execute(
+        select(ApplicationLayout).where(
+            ApplicationLayout.status == "active",
+            ApplicationLayout.warehouse_bindings.isnot(None)
+        )
+    )
+    for layout in layouts_result.scalars().all():
+        try:
+            bindings = json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else layout.warehouse_bindings
+            for ri, bid in bindings.items():
+                if bid not in bindings_map:
+                    bindings_map[bid] = []
+                bindings_map[bid].append(layout.layout_code)
+        except Exception:
+            pass
+
+    # For deducted items (sheet_count=0), get original quantity from last deduction movement
+    deducted_ids = [i.id for i in items if (i.sheet_count or 0) == 0]
+    original_qty_map = {}
+    if deducted_ids:
+        movements_result = await db.execute(
+            select(WarehouseMovement).where(
+                WarehouseMovement.warehouse_item_id.in_(deducted_ids),
+                WarehouseMovement.quantity_change < 0,
+            ).order_by(desc(WarehouseMovement.created_at))
+        )
+        for m in movements_result.scalars().all():
+            if m.warehouse_item_id not in original_qty_map:
+                original_qty_map[m.warehouse_item_id] = abs(m.quantity_change)
+
+    enriched = []
+    for i in items:
+        d = _item_to_dict(i)
+        d["bound_to"] = bindings_map.get(i.id, [])
+        if (i.sheet_count or 0) == 0 and i.id in original_qty_map:
+            d["original_sheet_count"] = original_qty_map[i.id]
+        enriched.append(d)
+
+    return enriched
 
 
 @router.get("/balance")
@@ -317,6 +360,19 @@ async def return_warehouse_item(
         created_by=user.id,
     )
     db.add(movement)
+
+    # Add note with reason, date, and user
+    if body.reason:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M")
+        note = ItemNote(
+            item_type="warehouse",
+            item_id=item.id,
+            user_id=user.id,
+            username=user.username,
+            text=f"[{now}] Возврат {body.quantity} лист(ов). Причина: {body.reason}",
+        )
+        db.add(note)
 
     if body.application_id:
         app_result = await db.execute(select(Application).where(Application.id == body.application_id))
@@ -606,6 +662,8 @@ async def split_remnant(
         weight=cut_weight,
         article=cut_article,
         parent_article=parent_article,
+        parent_sheet_w=wh_item.sheet_w if wh_item else None,
+        parent_sheet_h=wh_item.sheet_h if wh_item else None,
         item_type="standard",
         owner=wh_item.owner if wh_item else None,
         created_by=user.id,
@@ -627,6 +685,8 @@ async def split_remnant(
             weight=remain_weight,
             article=remain_article,
             parent_article=parent_article,
+            parent_sheet_w=wh_item.sheet_w if wh_item else None,
+            parent_sheet_h=wh_item.sheet_h if wh_item else None,
             is_rectangular=isRectangle(remaining),
             vertices=remaining,
             item_type="standard",
@@ -667,6 +727,128 @@ async def split_remnant(
     }
 
     return result
+
+
+@router.post("/merge-cut")
+async def merge_cut_pieces(
+        body: dict,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
+):
+    """Reverse a cut: merge two child pieces back into the original parent sheet."""
+    item_id_1 = body.get("item_id_1")
+    item_id_2 = body.get("item_id_2")
+
+    if not item_id_1 or not item_id_2:
+        raise HTTPException(status_code=400, detail="Укажите две позиции для слияния")
+    if item_id_1 == item_id_2:
+        raise HTTPException(status_code=400, detail="Нужны две разные позиции")
+
+    # Find both items
+    result1 = await db.execute(select(WarehouseItem).where(WarehouseItem.id == item_id_1))
+    item1 = result1.scalar_one_or_none()
+    result2 = await db.execute(select(WarehouseItem).where(WarehouseItem.id == item_id_2))
+    item2 = result2.scalar_one_or_none()
+
+    if not item1 or not item2:
+        raise HTTPException(status_code=404, detail="Одна или обе позиции не найдены")
+
+    # Both must be children of the same parent
+    if not item1.parent_article or not item2.parent_article:
+        raise HTTPException(status_code=400, detail="Обе позиции должны быть разрезанными кусками (иметь parent_article)")
+    if item1.parent_article != item2.parent_article:
+        raise HTTPException(status_code=400, detail=f"Позиции из разных родителей: {item1.parent_article} и {item2.parent_article}")
+
+    # Both must have stock
+    if (item1.sheet_count or 0) < 1:
+        raise HTTPException(status_code=400, detail=f"Позиция {item1.article} не может быть слияна: списана")
+    if (item2.sheet_count or 0) < 1:
+        raise HTTPException(status_code=400, detail=f"Позиция {item2.article} не может быть слияна: списана")
+
+    # Check neither is bound to any layout
+    layouts_result = await db.execute(
+        select(ApplicationLayout).where(
+            ApplicationLayout.status == "active",
+            ApplicationLayout.warehouse_bindings.isnot(None)
+        )
+    )
+    for layout in layouts_result.scalars().all():
+        try:
+            bindings = json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else layout.warehouse_bindings
+            for ri, bid in bindings.items():
+                if bid == item1.id:
+                    raise HTTPException(status_code=400, detail=f"Позиция {item1.article} закреплена за раскладкой {layout.layout_code}")
+                if bid == item2.id:
+                    raise HTTPException(status_code=400, detail=f"Позиция {item2.article} закреплена за раскладкой {layout.layout_code}")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    # Get original parent dimensions from children
+    parent_w = item1.parent_sheet_w or item2.parent_sheet_w
+    parent_h = item1.parent_sheet_h or item2.parent_sheet_h
+    if not parent_w or not parent_h:
+        raise HTTPException(status_code=400, detail="Не удалось определить размер исходного листа (parent_sheet_w/h отсутствует)")
+
+    # Create parent item
+    parent_article = item1.parent_article
+    weight_sum = (item1.weight or 0) + (item2.weight or 0)
+
+    # Delete all movements for children and any existing empty item with same article FIRST
+    for child in [item1, item2]:
+        movements = await db.execute(
+            select(WarehouseMovement).where(WarehouseMovement.warehouse_item_id == child.id)
+        )
+        for m in movements.scalars().all():
+            await db.delete(m)
+
+    # Check if an item with the same article already exists
+    existing_result = await db.execute(
+        select(WarehouseItem).where(WarehouseItem.article == parent_article)
+    )
+    existing = existing_result.scalar_one_or_none()
+    if existing:
+        if (existing.sheet_count or 0) > 0:
+            raise HTTPException(status_code=400, detail=f"Позиция {parent_article} уже существует на складе ({existing.sheet_count} листов)")
+        # Delete empty existing item's movements
+        movements = await db.execute(
+            select(WarehouseMovement).where(WarehouseMovement.warehouse_item_id == existing.id)
+        )
+        for m in movements.scalars().all():
+            await db.delete(m)
+        await db.delete(existing)
+
+    # Delete both children
+    for child in [item1, item2]:
+        await db.delete(child)
+
+    await db.flush()
+
+    # NOW create parent (after all deletes are flushed)
+    parent = WarehouseItem(
+        metal=item1.metal,
+        grade=item1.grade,
+        thickness=item1.thickness,
+        sheet_w=parent_w,
+        sheet_h=parent_h,
+        size=f"{int(parent_w)}x{int(parent_h)}",
+        sheet_count=1,
+        weight=weight_sum if weight_sum > 0 else None,
+        article=parent_article,
+        parent_article=None,
+        parent_sheet_w=None,
+        parent_sheet_h=None,
+        item_type="standard",
+        owner=item1.owner,
+        created_by=user.id,
+    )
+    db.add(parent)
+
+    await db.commit()
+    await db.refresh(parent)
+
+    return {"status": "success", "parent": _item_to_dict(parent)}
 
 
 @router.delete("/remnants/{remnant_id}")
@@ -939,6 +1121,14 @@ async def delete_warehouse_item(
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Запись не найдена")
+
+    # Delete associated movements first (FK constraint)
+    movements = await db.execute(
+        select(WarehouseMovement).where(WarehouseMovement.warehouse_item_id == item_id)
+    )
+    for m in movements.scalars().all():
+        await db.delete(m)
+    await db.flush()
 
     await db.delete(item)
     await db.commit()
@@ -1226,3 +1416,35 @@ async def deficit_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=deficit.xlsx"}
     )
+
+
+@router.get("/reserved")
+async def get_reserved_items(
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
+):
+    """Return map of warehouse_item_id → list of layout codes that reserve it."""
+    layouts_result = await db.execute(
+        select(ApplicationLayout).where(
+            ApplicationLayout.status == "active",
+            ApplicationLayout.warehouse_bindings.isnot(None)
+        )
+    )
+    reserved = {}
+    for layout in layouts_result.scalars().all():
+        try:
+            bindings = json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else layout.warehouse_bindings
+            runs = json.loads(layout.completed_runs) if layout.completed_runs else []
+            for ri, bid in bindings.items():
+                ri_int = int(ri)
+                # Reserved if run is not yet cut
+                if ri_int >= len(runs) or not runs[ri_int]:
+                    if bid not in reserved:
+                        reserved[bid] = []
+                    reserved[bid].append({
+                        "layout_code": layout.layout_code,
+                        "run_index": ri_int
+                    })
+        except Exception:
+            pass
+    return reserved

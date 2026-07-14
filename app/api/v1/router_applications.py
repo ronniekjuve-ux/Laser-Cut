@@ -731,6 +731,7 @@ async def list_applications(
                 "sheet_count": al.sheet_count or 1,
                 "completed_runs": json.loads(al.completed_runs) if al.completed_runs else [],
                 "warehouse_item_id": al.warehouse_item_id,
+                "warehouse_bindings": json.loads(al.warehouse_bindings) if al.warehouse_bindings else {},
             })
 
         enriched.append({
@@ -1592,6 +1593,7 @@ async def get_application_details(
             "cnc_path": layout.cnc_path,
             "layout_image": layout.layout_image,
             "warehouse_item_id": layout.warehouse_item_id,
+            "warehouse_bindings": json.loads(layout.warehouse_bindings) if layout.warehouse_bindings else {},
             "parts_count": len(parts),
             "parts": [
                 {
@@ -1802,10 +1804,20 @@ async def toggle_layout_run(
 
     layout.completed_runs = json.dumps(completed)
 
-    # Per-layout warehouse deduction: deduct 1 sheet when marking as cut, return when unmarking
+    # Per-run warehouse deduction: deduct 1 sheet when marking as cut, return when unmarking
     from datetime import datetime, timezone
-    if layout.warehouse_item_id:
-        wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == layout.warehouse_item_id))
+
+    # Parse per-run bindings
+    run_bindings = {}
+    if layout.warehouse_bindings:
+        try:
+            run_bindings = json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else layout.warehouse_bindings
+        except Exception:
+            run_bindings = {}
+
+    bound_wh_id = run_bindings.get(str(run_index))
+    if bound_wh_id:
+        wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == bound_wh_id))
         wh_item = wh_result.scalar_one_or_none()
         if wh_item:
             if not was_checked and completed[run_index]:
@@ -1818,9 +1830,12 @@ async def toggle_layout_run(
                         application_id=layout.application_id,
                         quantity_change=-1,
                         movement_type="deduction",
-                        reason=f"Списание при резке раскладки",
+                        reason=f"Списание при резке раскладки {layout.layout_code} (рез #{run_index+1})",
                         created_by=user.id,
                     ))
+                    # Remove binding after deduction
+                    run_bindings.pop(str(run_index), None)
+                    layout.warehouse_bindings = json.dumps(run_bindings) if run_bindings else None
             elif was_checked and not completed[run_index]:
                 # Unmarking — return sheet to warehouse
                 wh_item.sheet_count += 1
@@ -1829,7 +1844,7 @@ async def toggle_layout_run(
                     application_id=layout.application_id,
                     quantity_change=1,
                     movement_type="return",
-                    reason=f"Возврат при отмене резки раскладки",
+                    reason=f"Возврат при отмене резки раскладки {layout.layout_code} (рез #{run_index+1})",
                     created_by=user.id,
                 ))
 
@@ -2298,3 +2313,90 @@ async def bind_layout_warehouse(
     layout.warehouse_item_id = warehouse_item_id
     await db.commit()
     return {"status": "success"}
+
+
+@router.patch("/layouts/{layout_id}/bind-run")
+async def bind_layout_run(
+        layout_id: int,
+        body: dict,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
+):
+    run_index = body.get("run_index")
+    warehouse_item_id = body.get("warehouse_item_id")
+
+    if run_index is None:
+        raise HTTPException(status_code=400, detail="run_index обязателен")
+
+    result = await db.execute(select(ApplicationLayout).where(ApplicationLayout.id == layout_id))
+    layout = result.scalar_one_or_none()
+    if not layout:
+        raise HTTPException(status_code=404, detail="Раскладка не найдена")
+
+    # Parse existing bindings
+    bindings = {}
+    if layout.warehouse_bindings:
+        try:
+            bindings = json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else layout.warehouse_bindings
+        except Exception:
+            bindings = {}
+
+    # Unbind
+    if warehouse_item_id is None:
+        bindings.pop(str(run_index), None)
+        layout.warehouse_bindings = json.dumps(bindings) if bindings else None
+        await db.commit()
+        return {"status": "success", "warehouse_bindings": bindings}
+
+    # Validate warehouse item exists and has stock
+    wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == warehouse_item_id))
+    wh_item = wh_result.scalar_one_or_none()
+    if not wh_item:
+        raise HTTPException(status_code=404, detail="Позиция на складе не найдена")
+    if wh_item.sheet_count < 1:
+        raise HTTPException(status_code=400, detail="Нет листов на складе")
+
+    # Check reservation: if this item is bound to another uncut run, block
+    old_binding = bindings.get(str(run_index))
+    if old_binding != warehouse_item_id:
+        layouts_result = await db.execute(
+            select(ApplicationLayout).where(
+                ApplicationLayout.id != layout_id,
+                ApplicationLayout.status == "active"
+            )
+        )
+        for other_layout in layouts_result.scalars().all():
+            if other_layout.warehouse_bindings:
+                try:
+                    other_bindings = json.loads(other_layout.warehouse_bindings) if isinstance(other_layout.warehouse_bindings, str) else other_layout.warehouse_bindings
+                    for ri, bid in other_bindings.items():
+                        if bid == warehouse_item_id:
+                            other_runs = json.loads(other_layout.completed_runs) if other_layout.completed_runs else []
+                            if int(ri) < len(other_runs) and not other_runs[int(ri)]:
+                                raise HTTPException(
+                                    status_code=400,
+                                    detail=f"Лист уже зарезервирован раскладкой {other_layout.layout_code} (рез #{int(ri)+1})"
+                                )
+                except HTTPException:
+                    raise
+                except Exception:
+                    pass
+
+    # Area validation (warning only)
+    area_ok = True
+    if wh_item.sheet_w and wh_item.sheet_h and layout.sheet_w and layout.sheet_h:
+        wh_area = wh_item.sheet_w * wh_item.sheet_h
+        layout_area = layout.sheet_w * layout.sheet_h
+        if wh_area < layout_area:
+            area_ok = False
+
+    # Bind
+    bindings[str(run_index)] = warehouse_item_id
+    layout.warehouse_bindings = json.dumps(bindings)
+    await db.commit()
+
+    return {
+        "status": "success",
+        "warehouse_bindings": bindings,
+        "area_warning": not area_ok
+    }
