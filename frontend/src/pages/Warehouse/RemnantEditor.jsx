@@ -109,8 +109,10 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
   const toSVG = (e) => {
     const r = svgRef.current?.getBoundingClientRect();
     if (!r) return null;
-    const mx = Math.max(0, Math.min(r.width, e.clientX - r.left));
-    const my = Math.max(0, Math.min(r.height, e.clientY - r.top));
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const mx = Math.max(0, Math.min(r.width, clientX - r.left));
+    const my = Math.max(0, Math.min(r.height, clientY - r.top));
     const x = mx / S, y = my / S;
     return { x: Math.max(0, Math.min(W, x)), y: Math.max(0, Math.min(H, y)) };
   };
@@ -127,6 +129,27 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
 
   const onMouseMove = (e) => {
     if (!placing) return;
+    const pt = toSVG(e);
+    const w = parseFloat(dimW) || 0, h = parseFloat(dimH) || 0;
+    const pos = findValidPosition(pt.x, pt.y, w, h, W, H, hasShape ? vertices : null);
+    if (pos) setCutRect({ ...pos, w, h });
+  };
+
+  // Touch handlers for mobile placement
+  const onTouchStart = (e) => {
+    if (!placing) return;
+    e.preventDefault();
+    const pt = toSVG(e);
+    const w = parseFloat(dimW) || 0, h = parseFloat(dimH) || 0;
+    const pos = findValidPosition(pt.x, pt.y, w, h, W, H, hasShape ? vertices : null);
+    if (!pos) return alert('Вырезка не помещается в форму листа');
+    setCutRect({ ...pos, w, h });
+    setPlacing(false);
+  };
+
+  const onTouchMove = (e) => {
+    if (!placing) return;
+    e.preventDefault();
     const pt = toSVG(e);
     const w = parseFloat(dimW) || 0, h = parseFloat(dimH) || 0;
     const pos = findValidPosition(pt.x, pt.y, w, h, W, H, hasShape ? vertices : null);
@@ -169,7 +192,7 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
   return (
     <div className="modal-overlay active" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}
-        style={{ maxWidth: 900, width: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        style={{ maxWidth: 900, width: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
         <div className="modal-header" style={{ padding: '6px 14px', flexShrink: 0 }}>
           <h3 style={{ fontSize: 14, margin: 0 }}>
             Резка — {item.metal} {item.grade || ''} {W}x{H}
@@ -180,8 +203,9 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
         <div className="modal-body" style={{ padding: '4px 14px 8px', display: 'flex', gap: 10, flex: 1, minHeight: 0 }}>
           <div style={{ flex: '0 0 auto' }}>
             <svg ref={svgRef} width={sW} height={sH} viewBox={`0 0 ${sW} ${sH}`}
-              style={{ border: '2px solid #333', background: '#f8f8f8', cursor: placing ? 'crosshair' : 'default' }}
-              onMouseDown={onMouseDown} onMouseMove={onMouseMove}>
+              style={{ border: '2px solid #333', background: '#f8f8f8', cursor: placing ? 'crosshair' : 'default', touchAction: placing ? 'none' : 'auto' }}
+              onMouseDown={onMouseDown} onMouseMove={onMouseMove}
+              onTouchStart={onTouchStart} onTouchMove={onTouchMove}>
               {hasShape && (
                 <defs>
                   <clipPath id="sheet-clip">
@@ -250,7 +274,7 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
             <div style={{ marginTop: 3, fontSize: 10, color: '#64748b', textAlign: 'center' }}>1px = {1 / S} мм</div>
           </div>
 
-          <div style={{ flex: 1, minWidth: 180, display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' }}>
+          <div style={{ flex: 1, minWidth: 140, maxWidth: 220, display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' }}>
             <div style={{ padding: '6px 8px', background: '#f8fafc', borderRadius: 6 }}>
               <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}>Размер вырезки</div>
               <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>

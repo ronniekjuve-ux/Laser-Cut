@@ -121,12 +121,12 @@ export default function Deficit() {
       <div style={{ border: '1px solid #d1d5db', borderRadius: 6, overflow: 'hidden' }}>
         <table style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }}>
           <colgroup>
-            <col style={{ width: '18%' }} />
-            <col style={{ width: '10%' }} />
-            <col style={{ width: '20%' }} />
-            <col style={{ width: '20%' }} />
+            <col style={{ width: '22%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '22%' }} />
+            <col style={{ width: '22%' }} />
             <col style={{ width: '16%' }} />
-            <col style={{ width: '16%' }} />
+            <col style={{ width: '4%' }} />
           </colgroup>
           <thead>
             <tr style={{ borderBottom: '2px solid #9ca3af' }}>
@@ -135,7 +135,7 @@ export default function Deficit() {
               <th style={{ padding: '6px 10px', fontSize: 12, fontWeight: 600, textAlign: 'center', background: '#dbeafe', borderRight: '1px solid #93c5fd', color: '#1e40af' }}>Заказы</th>
               <th style={{ padding: '6px 10px', fontSize: 12, fontWeight: 600, textAlign: 'center', background: '#dcfce7', borderRight: '1px solid #86efac', color: '#166534' }}>Склад</th>
               <th style={{ padding: '6px 10px', fontSize: 12, fontWeight: 700, textAlign: 'center', background: '#f8fafc', borderRight: '1px solid #d1d5db' }}>Баланс</th>
-              <th style={{ width: 20, background: '#f8fafc' }}></th>
+              <th style={{ width: '4%', background: '#f8fafc', fontSize: 10 }}></th>
             </tr>
           </thead>
           <tbody>
@@ -163,35 +163,35 @@ export default function Deficit() {
                   <td colSpan={6} style={{ padding: 0 }}>
                     {/* Main row */}
                     <div onClick={() => toggle(key)} style={{ display: 'flex', cursor: 'pointer', background: isOpen ? '#f8fafc' : '#fff', borderBottom: isOpen ? '1px solid #e5e7eb' : 'none' }}>
-                      <div style={{ width: '18%', padding: '6px 10px', fontWeight: 600, borderRight: '1px solid #e5e7eb', fontSize: 13 }}>{row.grade || '—'}</div>
-                      <div style={{ width: '10%', padding: '6px 10px', textAlign: 'center', borderRight: '1px solid #e5e7eb', fontSize: 13 }}>{row.thickness ? `${row.thickness}мм` : '—'}</div>
-                      <div style={{ width: '20%', padding: '6px 10px', textAlign: 'center', background: '#eff6ff', borderRight: '1px solid #bfdbfe', fontSize: 13 }}>
+                      <div style={{ width: '22%', padding: '6px 8px', fontWeight: 600, borderRight: '1px solid #e5e7eb', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.grade || '—'}</div>
+                      <div style={{ width: '14%', padding: '6px 6px', textAlign: 'center', borderRight: '1px solid #e5e7eb', fontSize: 12 }}>{row.thickness ? `${row.thickness}мм` : '—'}</div>
+                      <div style={{ width: '22%', padding: '6px 6px', textAlign: 'center', background: '#eff6ff', borderRight: '1px solid #bfdbfe', fontSize: 12 }}>
                         <span style={{ fontWeight: 600 }}>{dS ? (typeof dS === 'number' ? dS.toFixed(1) : dS) : '0'}</span>
-                        <span style={{ fontSize: 10, color: '#6b7280', marginLeft: 3 }}>{(dA / 1000000).toFixed(1)}м²</span>
+                        <span style={{ fontSize: 9, color: '#6b7280', marginLeft: 2 }}>{(dA / 1000000).toFixed(1)}м²</span>
                       </div>
-                      <div style={{ width: '20%', padding: '6px 10px', textAlign: 'center', background: '#f0fdf4', borderRight: '1px solid #bbf7d0', fontSize: 13 }}>
+                      <div style={{ width: '22%', padding: '6px 6px', textAlign: 'center', background: '#f0fdf4', borderRight: '1px solid #bbf7d0', fontSize: 12 }}>
                         <span style={{ fontWeight: 600 }}>{sS}</span>
-                        <span style={{ fontSize: 10, color: '#6b7280', marginLeft: 3 }}>{(sA / 1000000).toFixed(1)}м²</span>
+                        <span style={{ fontSize: 9, color: '#6b7280', marginLeft: 2 }}>{(sA / 1000000).toFixed(1)}м²</span>
                       </div>
-                      <div style={{ width: '16%', padding: '6px 10px', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
+                      <div style={{ width: '16%', padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
                         <span style={{
-                          fontWeight: 700, fontSize: 13, padding: '1px 8px', borderRadius: 3, display: 'inline-block', minWidth: 40,
+                          fontWeight: 700, fontSize: 12, padding: '1px 6px', borderRadius: 3, display: 'inline-block', minWidth: 36,
                           background: bal < 0 ? '#fee2e2' : bal === 0 ? '#f1f5f9' : '#dcfce7',
                           color: bal < 0 ? '#dc2626' : bal === 0 ? '#6b7280' : '#166534',
                         }}>
                           {bal > 0 ? '+' : ''}{typeof bal === 'number' ? (bal % 1 === 0 ? bal : bal.toFixed(1)) : bal}
                         </span>
                       </div>
-                      <div style={{ width: '16%', padding: '6px 8px', textAlign: 'center', fontSize: 11, color: '#9ca3af' }}>{isOpen ? '▲' : '▼'}</div>
+                      <div style={{ width: '4%', padding: '6px 2px', textAlign: 'center', fontSize: 9, color: '#9ca3af' }}>{isOpen ? '▲' : '▼'}</div>
                     </div>
                     {/* Detail row */}
                     {isOpen && (
-                      <div style={{ display: 'flex', background: '#fafbfc', borderBottom: '1px solid #e5e7eb', fontSize: 12 }}>
+                      <div style={{ display: 'flex', background: '#fafbfc', borderBottom: '1px solid #e5e7eb', fontSize: 11 }}>
                         {/* Spacer for Марка + Толщ columns */}
-                        <div style={{ width: '28%', borderRight: '1px solid #e5e7eb' }}></div>
+                        <div style={{ width: '36%', borderRight: '1px solid #e5e7eb' }}></div>
                         {/* Orders detail — under Заказы column */}
-                        <div style={{ width: '20%', padding: '6px 8px', background: '#f0f7ff', borderRight: '1px solid #bfdbfe' }}>
-                          <div style={{ fontWeight: 700, marginBottom: 3, color: '#2563eb', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Заказы по клиентам</div>
+                        <div style={{ width: '22%', padding: '4px 6px', background: '#f0f7ff', borderRight: '1px solid #bfdbfe' }}>
+                          <div style={{ fontWeight: 700, marginBottom: 2, color: '#2563eb', fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.5 }}>Заказы</div>
                           {dCusts.length === 0 ? (
                             <div style={{ color: '#9ca3b8', fontSize: 10, fontStyle: 'italic' }}>Нет активных заказов</div>
                           ) : dCusts.map(([name, v]) => (
@@ -202,8 +202,8 @@ export default function Deficit() {
                           ))}
                         </div>
                         {/* Stock detail — under Склад column */}
-                        <div style={{ width: '20%', padding: '6px 8px', background: '#f0fdf4', borderRight: '1px solid #bbf7d0' }}>
-                          <div style={{ fontWeight: 700, marginBottom: 3, color: '#16a34a', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Склад по владельцам</div>
+                        <div style={{ width: '22%', padding: '4px 6px', background: '#f0fdf4', borderRight: '1px solid #bbf7d0' }}>
+                          <div style={{ fontWeight: 700, marginBottom: 2, color: '#16a34a', fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.5 }}>Склад</div>
                           {sCusts.length === 0 ? (
                             <div style={{ color: '#9ca3b8', fontSize: 10, fontStyle: 'italic' }}>Нет на складе</div>
                           ) : sCusts.map(([name, v]) => (

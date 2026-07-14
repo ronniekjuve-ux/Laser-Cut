@@ -86,7 +86,7 @@ async def list_warehouse(
             for ri, bid in bindings.items():
                 if bid not in bindings_map:
                     bindings_map[bid] = []
-                bindings_map[bid].append(layout.layout_code)
+                bindings_map[bid].append(f"{layout.application_id}.{layout.layout_code}")
         except Exception:
             pass
 
@@ -809,41 +809,33 @@ async def merge_cut_pieces(
     )
     existing = existing_result.scalar_one_or_none()
     if existing:
-        if (existing.sheet_count or 0) > 0:
-            raise HTTPException(status_code=400, detail=f"Позиция {parent_article} уже существует на складе ({existing.sheet_count} листов)")
-        # Delete empty existing item's movements
-        movements = await db.execute(
-            select(WarehouseMovement).where(WarehouseMovement.warehouse_item_id == existing.id)
+        # Update existing parent: increment sheet_count
+        existing.sheet_count = (existing.sheet_count or 0) + 1
+        existing.weight = weight_sum if weight_sum > 0 else existing.weight
+        parent = existing
+    else:
+        parent = WarehouseItem(
+            metal=item1.metal,
+            grade=item1.grade,
+            thickness=item1.thickness,
+            sheet_w=parent_w,
+            sheet_h=parent_h,
+            size=f"{int(parent_w)}x{int(parent_h)}",
+            sheet_count=1,
+            weight=weight_sum if weight_sum > 0 else None,
+            article=parent_article,
+            parent_article=None,
+            parent_sheet_w=None,
+            parent_sheet_h=None,
+            item_type="standard",
+            owner=item1.owner,
+            created_by=user.id,
         )
-        for m in movements.scalars().all():
-            await db.delete(m)
-        await db.delete(existing)
+        db.add(parent)
 
     # Delete both children
     for child in [item1, item2]:
         await db.delete(child)
-
-    await db.flush()
-
-    # NOW create parent (after all deletes are flushed)
-    parent = WarehouseItem(
-        metal=item1.metal,
-        grade=item1.grade,
-        thickness=item1.thickness,
-        sheet_w=parent_w,
-        sheet_h=parent_h,
-        size=f"{int(parent_w)}x{int(parent_h)}",
-        sheet_count=1,
-        weight=weight_sum if weight_sum > 0 else None,
-        article=parent_article,
-        parent_article=None,
-        parent_sheet_w=None,
-        parent_sheet_h=None,
-        item_type="standard",
-        owner=item1.owner,
-        created_by=user.id,
-    )
-    db.add(parent)
 
     await db.commit()
     await db.refresh(parent)

@@ -1912,11 +1912,11 @@ async def update_application_status(
         app.cut_by = user.id if user.role == UserRole.OPERATOR else None
 
         # Автосписание со склада при завершении резки
+        # 1. Legacy per-layout warehouse_item_id
         if app.warehouse_item_id and not app.warehouse_deducted:
             wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == app.warehouse_item_id))
             wh_item = wh_result.scalar_one_or_none()
             if wh_item:
-                # Рассчитываем реальное кол-во листов по раскладкам
                 layouts_result = await db.execute(
                     select(ApplicationLayout).where(
                         ApplicationLayout.application_id == app.id,
@@ -1951,6 +1951,41 @@ async def update_application_status(
                     ))
                     app.sheets_used = sheets_to_deduct
                     app.warehouse_deducted = True
+
+        # 2. Per-run warehouse_bindings: deduct bound sheets
+        layouts_result = await db.execute(
+            select(ApplicationLayout).where(
+                ApplicationLayout.application_id == app.id,
+                ApplicationLayout.status == "active",
+            )
+        )
+        for layout in layouts_result.scalars().all():
+            if not layout.warehouse_bindings:
+                continue
+            try:
+                bindings = json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else layout.warehouse_bindings
+                runs = json.loads(layout.completed_runs) if layout.completed_runs else []
+            except Exception:
+                continue
+            for ri, bid in bindings.items():
+                ri_int = int(ri)
+                # Only deduct if run is marked as cut
+                if ri_int < len(runs) and runs[ri_int]:
+                    wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == bid))
+                    wh_item = wh_result.scalar_one_or_none()
+                    if wh_item and (wh_item.sheet_count or 0) >= 1:
+                        wh_item.sheet_count -= 1
+                        wh_item.last_deducted_at = datetime.now(timezone.utc)
+                        db.add(WarehouseMovement(
+                            warehouse_item_id=wh_item.id,
+                            application_id=app.id,
+                            quantity_change=-1,
+                            movement_type="deduction",
+                            reason=f"Автосписание при завершении резки: {layout.layout_code} (рез #{ri_int+1})",
+                            created_by=user.id,
+                        ))
+            # Clear bindings after deduction
+            layout.warehouse_bindings = None
     elif status != "cut" and old_status == "cut":
         app.cut_at = None
         app.cut_by = None

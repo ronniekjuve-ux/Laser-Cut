@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import client from '../../api/client';
+import useIsMobile from '../../hooks/useIsMobile';
 import ConfirmModal from '../../components/ConfirmModal';
 import ItemNotesChat from '../../components/ItemNotesChat';
 import WarehouseDeductModal from './WarehouseDeductModal';
@@ -53,6 +54,49 @@ function SheetPreview({ item, onClose }) {
           {item.owner && <div>Владелец: {item.owner}</div>}
           {item.note && <div>Примечание: {item.note}</div>}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileWarehouseCard({ item, onEdit, onDelete, onDeduct, onReturn, onCut, onMerge, onNotes, onPreview }) {
+  const W = item.sheet_w || 0, H = item.sheet_h || 0;
+  const scale = Math.min(60 / Math.max(W, 1), 100 / Math.max(H, 1));
+  const svgW = W * scale, svgH = H * scale;
+
+  return (
+    <div style={{
+      background: '#fff', borderRadius: 8, border: '1px solid var(--border)',
+      padding: 12, marginBottom: 8, cursor: 'pointer',
+    }} onClick={() => { if (W > 0 && H > 0) onPreview(item); }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        {W > 0 && H > 0 && (
+          <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}
+            style={{ border: '1px solid #333', background: '#f8f8f8', flexShrink: 0 }}>
+            <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="1.5" />
+          </svg>
+        )}
+        <div style={{ flex: 1, fontSize: 12, lineHeight: 1.6 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: item.parent_article ? '#6366f1' : '#333' }}>{item.article || '-'}</div>
+          <div>{item.metal}{item.grade ? ` ${item.grade}` : ''} {item.thickness ? `${item.thickness}мм` : ''}</div>
+          <div>{W}x{H} мм | <strong>{(item.sheet_count || 0) > 0 ? item.sheet_count : (item.original_sheet_count || 0)}</strong> шт</div>
+          {item.owner && <div style={{ color: '#64748b' }}>{item.owner}</div>}
+          {(item.bound_to || []).length > 0 && <div style={{ color: '#6366f1', fontSize: 11 }}>Закреплено: {item.bound_to.join(', ')}</div>}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+        <button className="btn" onClick={() => onEdit(item)} style={{ padding: '3px 8px', fontSize: 11 }} title="Редактировать">✏️</button>
+        <button className="btn" onClick={() => onNotes(item)} style={{ padding: '3px 8px', fontSize: 11 }} title="Примечания">💬</button>
+        {item.sheet_count > 0 ? (
+          <>
+            <button className="btn" onClick={() => onDeduct(item)} style={{ padding: '3px 8px', fontSize: 11, background: '#fef3c7', color: '#92400e' }} title="Списание">↓</button>
+            {W > 0 && H > 0 && <button className="btn" onClick={() => onCut(item)} style={{ padding: '3px 8px', fontSize: 11, background: '#dbeafe', color: '#1d4ed8' }} title="Резка">✂️</button>}
+            {item.parent_article && <button className="btn" onClick={() => onMerge(item)} style={{ padding: '3px 8px', fontSize: 11, background: '#fef2f2', color: '#991b1b' }} title="Откат">↩</button>}
+          </>
+        ) : (
+          <button className="btn" onClick={() => onReturn(item)} style={{ padding: '3px 8px', fontSize: 11, background: '#dcfce7', color: '#166534' }} title="Возврат">↑</button>
+        )}
+        <button className="btn" onClick={() => onDelete(item.id)} style={{ padding: '3px 8px', fontSize: 11 }} title="Удалить">🗑️</button>
       </div>
     </div>
   );
@@ -324,6 +368,8 @@ export default function Warehouse() {
   const [showFilters, setShowFilters] = useState(null);
   const [activeTab, setActiveTab] = useState('stock');
   const [mergeItem, setMergeItem] = useState(null);
+  const isMobile = useIsMobile();
+  const isRealMobile = isMobile && window.innerWidth <= 768;
 
   const fetchItems = useCallback(async () => {
     try {
@@ -412,9 +458,37 @@ export default function Warehouse() {
       </div>
 
       {activeTab === 'stock' ? (
-        <WarehouseTable items={inStock} title="В наличии" color="#166534" {...shared} />
+        isRealMobile ? (
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, color: '#166534' }}>В наличии ({inStock.length})</div>
+            {inStock.length === 0 && <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Пусто</div>}
+            {inStock.map(item => (
+              <MobileWarehouseCard key={item.id} item={item}
+                onEdit={startEdit} onDelete={(id) => setConfirmDelete(id)}
+                onDeduct={setDeductItem} onReturn={setReturnItem}
+                onCut={setRemnantEditorItem} onMerge={setMergeItem}
+                onNotes={setNotesChat} onPreview={setPreviewItem} />
+            ))}
+          </div>
+        ) : (
+          <WarehouseTable items={inStock} title="В наличии" color="#166534" {...shared} />
+        )
       ) : (
-        <WarehouseTable items={deducted} title="Списано" color="#dc2626" {...shared} />
+        isRealMobile ? (
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, color: '#dc2626' }}>Списано ({deducted.length})</div>
+            {deducted.length === 0 && <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Пусто</div>}
+            {deducted.map(item => (
+              <MobileWarehouseCard key={item.id} item={item}
+                onEdit={startEdit} onDelete={(id) => setConfirmDelete(id)}
+                onDeduct={setDeductItem} onReturn={setReturnItem}
+                onCut={setRemnantEditorItem} onMerge={setMergeItem}
+                onNotes={setNotesChat} onPreview={setPreviewItem} />
+            ))}
+          </div>
+        ) : (
+          <WarehouseTable items={deducted} title="Списано" color="#dc2626" {...shared} />
+        )
       )}
 
       {confirmDelete && <ConfirmModal title="Удалить запись?" message="Запись склада будет удалена безвозвратно." onConfirm={confirmDeleteAction} onCancel={() => setConfirmDelete(null)} />}
