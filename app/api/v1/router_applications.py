@@ -1946,7 +1946,7 @@ async def update_application_status(
                         application_id=app.id,
                         quantity_change=-sheets_to_deduct,
                         movement_type="deduction",
-                        reason=f"Автосписание при завершении резки: заявка «{app.order_name}»",
+                        reason=f"Автосписание при завершении резки: заказ #{app.id} «{app.order_name}»",
                         created_by=user.id,
                     ))
                     app.sheets_used = sheets_to_deduct
@@ -2001,7 +2001,7 @@ async def update_application_status(
                     application_id=app.id,
                     quantity_change=app.sheets_used,
                     movement_type="return",
-                    reason=f"Автовозврат при отмене резки: заявка «{app.order_name}»",
+                    reason=f"Автовозврат при отмене резки: заказ #{app.id} «{app.order_name}»",
                     created_by=user.id,
                 ))
                 app.warehouse_deducted = False
@@ -2056,7 +2056,7 @@ async def update_application_status(
             cust_name = f" | {customer.name}" if customer else ""
         old_label = status_labels.get(old_status, old_status or "В очереди")
         new_label = status_labels.get(status, status)
-        msg = f"Заявка «{app.order_name}»{cust_name} ({order_date}): «{old_label}» → «{new_label}» ({user.username})"
+        msg = f"Заказ #{app.id} «{app.order_name}»{cust_name} ({order_date}): «{old_label}» → «{new_label}» ({user.username})"
 
         # Заказчику
         if app.customer_id:
@@ -2164,7 +2164,7 @@ async def create_deficit(
         msg = f"Нехватка металла: {material}"
         if thickness:
             msg += f", толщина {thickness} мм"
-        msg += f" — заявка «{app.order_name}» ({order_date})"
+        msg += f" — заказ #{app.id} «{app.order_name}» ({order_date})"
         if note:
             msg += f". {note}"
 
@@ -2277,7 +2277,7 @@ async def cancel_deduct(
                 application_id=app.id,
                 quantity_change=app.sheets_used,
                 movement_type="return",
-                reason=f"Ручной возврат: заявка «{app.order_name}»",
+                reason=f"Ручной возврат: заказ #{app.id} «{app.order_name}»",
                 created_by=user.id,
             ))
 

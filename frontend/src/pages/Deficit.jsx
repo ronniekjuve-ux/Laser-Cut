@@ -6,7 +6,9 @@ export default function Deficit() {
   const [loading, setLoading] = useState(true);
   const [stdW, setStdW] = useState(1500);
   const [stdH, setStdH] = useState(6000);
-  const [expanded, setExpanded] = useState(null); // key: grade|thickness
+  const [appliedW, setAppliedW] = useState(1500);
+  const [appliedH, setAppliedH] = useState(6000);
+  const [modalRow, setModalRow] = useState(null);
   const [filterGrade, setFilterGrade] = useState([]);
   const [filterThickness, setFilterThickness] = useState([]);
   const [filterCustomer, setFilterCustomer] = useState([]);
@@ -14,13 +16,18 @@ export default function Deficit() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await client.get('/api/v1/warehouse/deficit-analysis', { params: { standard_w: stdW, standard_h: stdH } });
+      const res = await client.get('/api/v1/warehouse/deficit-analysis', { params: { standard_w: appliedW, standard_h: appliedH } });
       setData(res.data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  }, [stdW, stdH]);
+  }, [appliedW, appliedH]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const applySize = () => {
+    setAppliedW(stdW);
+    setAppliedH(stdH);
+  };
   useEffect(() => { const h = () => setShowFilter(null); if (showFilter) document.addEventListener('click', h); return () => document.removeEventListener('click', h); }, [showFilter]);
 
   const exportExcel = async () => {
@@ -43,7 +50,7 @@ export default function Deficit() {
   if (!data) return <div style={{ padding: 20, color: '#64748b' }}>Нет данных</div>;
 
   const { deficit } = data;
-  const stdArea = (stdW * stdH / 1000000).toFixed(2);
+  const stdArea = (appliedW * appliedH / 1000000).toFixed(2);
   const hasCF = filterCustomer.length > 0;
 
   const allCustomers = [...new Set(deficit.flatMap(r => [
@@ -58,7 +65,7 @@ export default function Deficit() {
       if (!hasCF) return r;
       let cDemand = 0, cStock = 0, cStockArea = 0;
       for (const c of filterCustomer) { cDemand += (r.demand_by_customer || {})[c]?.area || 0; cStock += (r.stock_by_customer || {})[c]?.sheets || 0; cStockArea += (r.stock_by_customer || {})[c]?.area || 0; }
-      return { ...r, _ds: cDemand / (stdW * stdH), _da: cDemand, _ss: cStock, _sa: cStockArea, _bal: cStock - cDemand / (stdW * stdH) };
+      return { ...r, _ds: cDemand / (appliedW * appliedH), _da: cDemand, _ss: cStock, _sa: cStockArea, _bal: cStock - cDemand / (appliedW * appliedH) };
     })
     .filter(r => !hasCF || r._da > 0 || r._ss > 0);
 
@@ -85,7 +92,7 @@ export default function Deficit() {
     </th>
   );
 
-  const toggle = (key) => setExpanded(expanded === key ? null : key);
+  const toggle = (key) => setModalRow(modalRow === key ? null : key);
 
   return (
     <div>
@@ -96,6 +103,9 @@ export default function Deficit() {
         <span style={{ fontSize: 11 }}>×</span>
         <input type="number" value={stdH} onChange={e => setStdH(parseInt(e.target.value) || 6000)} style={{ width: 55, padding: '2px 5px', fontSize: 12, border: '1px solid var(--border)', borderRadius: 3 }} />
         <span style={{ fontSize: 11, color: '#64748b' }}>мм ({stdArea} м²)</span>
+        {(stdW !== appliedW || stdH !== appliedH) && (
+          <button className="btn btn-primary" onClick={applySize} style={{ padding: '2px 8px', fontSize: 11 }}>Применить</button>
+        )}
         <span style={{ fontSize: 12, color: '#64748b', marginLeft: 12 }}>Заказчик:</span>
         <div style={{ position: 'relative' }}>
           <span onClick={(e) => { e.stopPropagation(); setShowFilter(showFilter === 'customer' ? null : 'customer'); }}
@@ -143,94 +153,114 @@ export default function Deficit() {
               <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, color: '#64748b' }}>Нет данных</td></tr>
             ) : filtered.map((row) => {
               const key = `${row.grade}|${row.thickness}`;
-              const isOpen = expanded === key;
               const dS = hasCF ? row._ds : row.demand_sheets_std;
               const dA = hasCF ? row._da : row.demand_area;
               const sS = hasCF ? row._ss : row.stock_sheets;
               const sA = hasCF ? row._sa : row.stock_area;
               const bal = hasCF ? row._bal : row.deficit_sheets;
 
-              // Filter detail to selected customers only
-              const dCusts = hasCF
-                ? Object.entries(row.demand_by_customer || {}).filter(([n]) => filterCustomer.includes(n))
-                : Object.entries(row.demand_by_customer || {});
-              const sCusts = hasCF
-                ? Object.entries(row.stock_by_customer || {}).filter(([n]) => filterCustomer.includes(n))
-                : Object.entries(row.stock_by_customer || {});
-
               return (
-                <tr key={key} style={{ borderBottom: isOpen ? 'none' : '1px solid #e5e7eb' }}>
-                  <td colSpan={6} style={{ padding: 0 }}>
-                    {/* Main row */}
-                    <div onClick={() => toggle(key)} style={{ display: 'flex', cursor: 'pointer', background: isOpen ? '#f8fafc' : '#fff', borderBottom: isOpen ? '1px solid #e5e7eb' : 'none' }}>
-                      <div style={{ width: '22%', padding: '6px 8px', fontWeight: 600, borderRight: '1px solid #e5e7eb', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.grade || '—'}</div>
-                      <div style={{ width: '14%', padding: '6px 6px', textAlign: 'center', borderRight: '1px solid #e5e7eb', fontSize: 12 }}>{row.thickness ? `${row.thickness}мм` : '—'}</div>
-                      <div style={{ width: '22%', padding: '6px 6px', textAlign: 'center', background: '#eff6ff', borderRight: '1px solid #bfdbfe', fontSize: 12 }}>
-                        <span style={{ fontWeight: 600 }}>{dS ? (typeof dS === 'number' ? dS.toFixed(1) : dS) : '0'}</span>
-                        <span style={{ fontSize: 9, color: '#6b7280', marginLeft: 2 }}>{(dA / 1000000).toFixed(1)}м²</span>
-                      </div>
-                      <div style={{ width: '22%', padding: '6px 6px', textAlign: 'center', background: '#f0fdf4', borderRight: '1px solid #bbf7d0', fontSize: 12 }}>
-                        <span style={{ fontWeight: 600 }}>{sS}</span>
-                        <span style={{ fontSize: 9, color: '#6b7280', marginLeft: 2 }}>{(sA / 1000000).toFixed(1)}м²</span>
-                      </div>
-                      <div style={{ width: '16%', padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
-                        <span style={{
-                          fontWeight: 700, fontSize: 12, padding: '1px 6px', borderRadius: 3, display: 'inline-block', minWidth: 36,
-                          background: bal < 0 ? '#fee2e2' : bal === 0 ? '#f1f5f9' : '#dcfce7',
-                          color: bal < 0 ? '#dc2626' : bal === 0 ? '#6b7280' : '#166534',
-                        }}>
-                          {bal > 0 ? '+' : ''}{typeof bal === 'number' ? (bal % 1 === 0 ? bal : bal.toFixed(1)) : bal}
-                        </span>
-                      </div>
-                      <div style={{ width: '4%', padding: '6px 2px', textAlign: 'center', fontSize: 9, color: '#9ca3af' }}>{isOpen ? '▲' : '▼'}</div>
-                    </div>
-                    {/* Detail row */}
-                    {isOpen && (
-                      <div style={{ display: 'flex', background: '#fafbfc', borderBottom: '1px solid #e5e7eb', fontSize: 11 }}>
-                        {/* Spacer for Марка + Толщ columns */}
-                        <div style={{ width: '36%', borderRight: '1px solid #e5e7eb' }}></div>
-                        {/* Orders detail — under Заказы column */}
-                        <div style={{ width: '22%', padding: '4px 6px', background: '#f0f7ff', borderRight: '1px solid #bfdbfe' }}>
-                          <div style={{ fontWeight: 700, marginBottom: 2, color: '#2563eb', fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.5 }}>Заказы</div>
-                          {dCusts.length === 0 ? (
-                            <div style={{ color: '#9ca3b8', fontSize: 10, fontStyle: 'italic' }}>Нет активных заказов</div>
-                          ) : dCusts.map(([name, v]) => (
-                            <div key={name} style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0', fontSize: 11, borderBottom: '1px solid #e0edff' }}>
-                              <span style={{ color: '#374151' }}>{name}</span>
-                              <span style={{ color: '#6b7280', whiteSpace: 'nowrap', fontSize: 10 }}>{v.sheets_std} л · {(v.area / 1000000).toFixed(1)}м²</span>
-                            </div>
-                          ))}
-                        </div>
-                        {/* Stock detail — under Склад column */}
-                        <div style={{ width: '22%', padding: '4px 6px', background: '#f0fdf4', borderRight: '1px solid #bbf7d0' }}>
-                          <div style={{ fontWeight: 700, marginBottom: 2, color: '#16a34a', fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.5 }}>Склад</div>
-                          {sCusts.length === 0 ? (
-                            <div style={{ color: '#9ca3b8', fontSize: 10, fontStyle: 'italic' }}>Нет на складе</div>
-                          ) : sCusts.map(([name, v]) => (
-                            <div key={name} style={{ padding: '2px 0', fontSize: 11, borderBottom: '1px solid #dcfce7' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span style={{ color: '#374151' }}>{name}</span>
-                                <span style={{ color: '#6b7280', whiteSpace: 'nowrap', fontSize: 10 }}>{v.sheets} л · {(v.area / 1000000).toFixed(1)}м²</span>
-                              </div>
-                              {v.articles && v.articles.length > 0 && (
-                                <div style={{ fontSize: 9, color: '#6366f1', fontFamily: 'monospace', marginTop: 1 }}>
-                                  {v.articles.join(', ')}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        {/* Spacer for Баланс + arrow columns */}
-                        <div style={{ width: '32%' }}></div>
-                      </div>
-                    )}
+                <tr key={key} onClick={() => toggle(key)} style={{ cursor: 'pointer', borderBottom: '1px solid #e5e7eb' }}>
+                  <td style={{ padding: '6px 8px', fontWeight: 600, borderRight: '1px solid #e5e7eb', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.grade || '—'}</td>
+                  <td style={{ padding: '6px 6px', textAlign: 'center', borderRight: '1px solid #e5e7eb', fontSize: 12 }}>{row.thickness ? `${row.thickness}мм` : '—'}</td>
+                  <td style={{ padding: '6px 6px', textAlign: 'center', background: '#eff6ff', borderRight: '1px solid #bfdbfe', fontSize: 12 }}>
+                    <span style={{ fontWeight: 600 }}>{dS ? (typeof dS === 'number' ? dS.toFixed(1) : dS) : '0'}</span>
+                    <span style={{ fontSize: 9, color: '#6b7280', marginLeft: 2 }}>{(dA / 1000000).toFixed(1)}м²</span>
                   </td>
+                  <td style={{ padding: '6px 6px', textAlign: 'center', background: '#f0fdf4', borderRight: '1px solid #bbf7d0', fontSize: 12 }}>
+                    <span style={{ fontWeight: 600 }}>{sS}</span>
+                    <span style={{ fontSize: 9, color: '#6b7280', marginLeft: 2 }}>{(sA / 1000000).toFixed(1)}м²</span>
+                  </td>
+                  <td style={{ padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
+                    <span style={{
+                      fontWeight: 700, fontSize: 12, padding: '1px 6px', borderRadius: 3, display: 'inline-block', minWidth: 36,
+                      background: bal < 0 ? '#fee2e2' : bal === 0 ? '#f1f5f9' : '#dcfce7',
+                      color: bal < 0 ? '#dc2626' : bal === 0 ? '#6b7280' : '#166534',
+                    }}>
+                      {bal > 0 ? '+' : ''}{typeof bal === 'number' ? (bal % 1 === 0 ? bal : bal.toFixed(1)) : bal}
+                    </span>
+                  </td>
+                  <td style={{ width: '4%', padding: '6px 2px', textAlign: 'center', fontSize: 9, color: '#9ca3af' }}>▾</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      {/* Detail modal */}
+      {modalRow && (() => {
+        const row = filtered.find(r => `${r.grade}|${r.thickness}` === modalRow);
+        if (!row) return null;
+        const dA = hasCF ? (filterCustomer.reduce((s, c) => s + ((row.demand_by_customer || {})[c]?.area || 0), 0)) : row.demand_area;
+        const sS = hasCF ? (filterCustomer.reduce((s, c) => s + ((row.stock_by_customer || {})[c]?.sheets || 0), 0)) : row.stock_sheets;
+        const sA = hasCF ? (filterCustomer.reduce((s, c) => s + ((row.stock_by_customer || {})[c]?.area || 0), 0)) : row.stock_area;
+        const dS = hasCF ? (dA / (appliedW * appliedH)) : row.demand_sheets_std;
+        const dCusts = hasCF
+          ? Object.entries(row.demand_by_customer || {}).filter(([n]) => filterCustomer.includes(n))
+          : Object.entries(row.demand_by_customer || {});
+        const sCusts = hasCF
+          ? Object.entries(row.stock_by_customer || {}).filter(([n]) => filterCustomer.includes(n))
+          : Object.entries(row.stock_by_customer || {});
+        const allArticles = sCusts.flatMap(([, v]) => v.articles || []);
+        return (
+          <div className="modal-overlay active" onClick={() => setModalRow(null)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
+              <div className="modal-header">
+                <h3 style={{ fontSize: 14 }}>{row.grade || '—'} {row.thickness ? `${row.thickness}мм` : ''}</h3>
+                <button className="close-btn" onClick={() => setModalRow(null)}>✕</button>
+              </div>
+              <div className="modal-body">
+                <div style={{ display: 'flex', gap: 16 }}>
+                  {/* Orders — left */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', marginBottom: 6 }}>Заказы</div>
+                    {dCusts.length === 0 ? (
+                      <div style={{ color: '#9ca3b8', fontSize: 12 }}>Нет активных заказов</div>
+                    ) : dCusts.map(([name, v]) => (
+                      <div key={name} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #e0edff', fontSize: 12 }}>
+                        <span>{name}</span>
+                        <span style={{ color: '#64748b', whiteSpace: 'nowrap', marginLeft: 8 }}>{v.sheets_std} л · {(v.area / 1000000).toFixed(1)} м²</span>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontWeight: 700, fontSize: 13, borderTop: '2px solid #bfdbfe', marginTop: 4 }}>
+                      <span>Итого</span>
+                      <span>{typeof dS === 'number' ? dS.toFixed(1) : dS} л · {(dA / 1000000).toFixed(1)} м²</span>
+                    </div>
+                  </div>
+                  {/* Stock — right */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', marginBottom: 6 }}>Склад</div>
+                    {sCusts.length === 0 ? (
+                      <div style={{ color: '#9ca3b8', fontSize: 12 }}>Нет на складе</div>
+                    ) : sCusts.map(([name, v]) => (
+                      <div key={name} style={{ padding: '4px 0', borderBottom: '1px solid #dcfce7', fontSize: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{name}</span>
+                          <span style={{ color: '#64748b', whiteSpace: 'nowrap', marginLeft: 8 }}>{v.sheets} л · {(v.area / 1000000).toFixed(1)} м²</span>
+                        </div>
+                        {v.articles && v.articles.length > 0 && (
+                          <div style={{ fontSize: 10, color: '#6366f1', fontFamily: 'monospace', marginTop: 2 }}>
+                            {v.articles.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontWeight: 700, fontSize: 13, borderTop: '2px solid #bbf7d0', marginTop: 4 }}>
+                      <span>Итого</span>
+                      <span>{sS} л · {(sA / 1000000).toFixed(1)} м²</span>
+                    </div>
+                    {allArticles.length > 0 && (
+                      <div style={{ fontSize: 10, color: '#6366f1', fontFamily: 'monospace', marginTop: 4 }}>
+                        Артикулы: {allArticles.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

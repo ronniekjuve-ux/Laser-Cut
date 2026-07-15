@@ -144,6 +144,23 @@ async def get_feedback_file(filename: str):
     return FileResponse(file_path, media_type=content_type)
 
 
+@router.delete("/{fb_id}")
+async def delete_feedback(
+        fb_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(Feedback).where(Feedback.id == fb_id))
+    fb = result.scalar_one_or_none()
+    if not fb:
+        raise HTTPException(status_code=404, detail="Отзыв не найден")
+    if fb.user_id != user.id and user.role not in (UserRole.ADMIN, UserRole.DIRECTOR):
+        raise HTTPException(status_code=403, detail="Нет прав на удаление")
+    await db.delete(fb)
+    await db.commit()
+    return {"status": "success"}
+
+
 @router.patch("/{fb_id}")
 async def update_feedback(
         fb_id: int,

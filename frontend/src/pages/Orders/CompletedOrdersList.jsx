@@ -137,7 +137,7 @@ export default function CompletedOrdersList() {
 
       {isRealMobile ? (
         <div className="order-cards">
-          {applications.map(app => (
+          {filtered.map(app => (
             <div key={app.id} style={{ position: 'relative' }}>
               <MobileOrderCard app={app} />
               <button
@@ -153,7 +153,7 @@ export default function CompletedOrdersList() {
               </button>
             </div>
           ))}
-          {applications.length === 0 && (
+          {filtered.length === 0 && (
             <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Нет выполненных заказов</div>
           )}
         </div>

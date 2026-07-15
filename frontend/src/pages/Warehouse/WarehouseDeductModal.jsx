@@ -19,6 +19,13 @@ export default function WarehouseDeductModal({ item, onClose, onSuccess }) {
       .catch(() => {});
   }, []);
 
+  const filteredApplications = applications.filter(a => {
+    if (!item) return true;
+    const matchMaterial = !item.metal || !a.steel_grade || a.steel_grade.toLowerCase() === item.metal.toLowerCase();
+    const matchThickness = !item.thickness || !a.thickness || parseFloat(a.thickness) === parseFloat(item.thickness);
+    return matchMaterial && matchThickness;
+  });
+
   useEffect(() => {
     if (!applicationId) {
       setLayouts([]);
@@ -63,6 +70,21 @@ export default function WarehouseDeductModal({ item, onClose, onSuccess }) {
     }
   };
 
+  const [showAllLayouts, setShowAllLayouts] = useState(false);
+
+  const matchingLayouts = layouts.filter(l => {
+    if (!item) return true;
+    const matchW = !item.sheet_w || !l.sheet_w || parseFloat(l.sheet_w) === parseFloat(item.sheet_w);
+    const matchH = !item.sheet_h || !l.sheet_h || parseFloat(l.sheet_h) === parseFloat(item.sheet_h);
+    return matchW && matchH;
+  });
+  const otherLayouts = layouts.filter(l => {
+    if (!item) return false;
+    const matchW = !item.sheet_w || !l.sheet_w || parseFloat(l.sheet_w) === parseFloat(item.sheet_w);
+    const matchH = !item.sheet_h || !l.sheet_h || parseFloat(l.sheet_h) === parseFloat(item.sheet_h);
+    return !(matchW && matchH);
+  });
+
   const selectedLayout = layouts.find(l => String(l.id) === String(layoutId));
 
   return (
@@ -85,16 +107,16 @@ export default function WarehouseDeductModal({ item, onClose, onSuccess }) {
           </div>
 
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Заявка</label>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Заказ</label>
             <select
               value={applicationId}
               onChange={e => setApplicationId(e.target.value)}
               style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
             >
               <option value="">Без привязки</option>
-              {applications.map(a => (
+              {filteredApplications.map(a => (
                 <option key={a.id} value={a.id}>
-                  {a.order_name} — {a.customer} ({a.material}, {a.thickness}мм)
+                  #{a.id}.{a.order_name}/{a.customer}/{a.steel_grade || a.material}
                 </option>
               ))}
             </select>
@@ -105,11 +127,24 @@ export default function WarehouseDeductModal({ item, onClose, onSuccess }) {
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Раскладка</label>
               <select
                 value={layoutId}
-                onChange={e => setLayoutId(e.target.value)}
+                onChange={e => {
+                  if (e.target.value === '__show_all') { setShowAllLayouts(true); return; }
+                  setLayoutId(e.target.value);
+                }}
                 style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
               >
                 <option value="">Все раскладки</option>
-                {layouts.map(l => (
+                {matchingLayouts.map(l => (
+                  <option key={l.id} value={l.id}>
+                    {l.layout_code} — {l.sheet_size} ({l.sheet_count} листов, {l.machine_type})
+                  </option>
+                ))}
+                {!showAllLayouts && otherLayouts.length > 0 && (
+                  <option value="__show_all" style={{ fontWeight: 600, color: '#64748b' }}>
+                    — Другие ({otherLayouts.length}) —
+                  </option>
+                )}
+                {showAllLayouts && otherLayouts.map(l => (
                   <option key={l.id} value={l.id}>
                     {l.layout_code} — {l.sheet_size} ({l.sheet_count} листов, {l.machine_type})
                   </option>

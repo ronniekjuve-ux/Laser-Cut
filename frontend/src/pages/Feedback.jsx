@@ -120,6 +120,16 @@ export default function Feedback() {
     }
   };
 
+  const handleDelete = async (id) => {
+    if (!confirm('Удалить отзыв?')) return;
+    try {
+      await client.delete('/api/v1/feedback/' + id);
+      fetchItems();
+    } catch (err) {
+      alert('Ошибка удаления');
+    }
+  };
+
   const handleRespond = async (id) => {
     if (!responseText.trim() && !responseImageFile) return;
     setUploading(true);
@@ -372,6 +382,13 @@ export default function Feedback() {
                 <td style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>
                   {item.created_at ? new Date(item.created_at).toLocaleDateString('ru-RU') : '-'}
                 </td>
+                {!isAdmin && item.user_id === user?.id && (
+                  <td>
+                    <button className="btn" onClick={() => handleDelete(item.id)} style={{ padding: '3px 8px', fontSize: 11, color: '#ef4444' }} title="Удалить">
+                      🗑️
+                    </button>
+                  </td>
+                )}
                 {isAdmin && (
                   <td>
                     {respondingId === item.id ? (
@@ -432,9 +449,14 @@ export default function Feedback() {
                         </div>
                       </div>
                     ) : (
-                      <button className="btn" onClick={() => { setRespondingId(item.id); setResponseText(item.admin_response || ''); }} style={{ padding: '3px 8px', fontSize: 11 }} title="Ответить">
-                        💬
-                      </button>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn" onClick={() => { setRespondingId(item.id); setResponseText(item.admin_response || ''); }} style={{ padding: '3px 8px', fontSize: 11 }} title="Ответить">
+                          💬
+                        </button>
+                        <button className="btn" onClick={() => handleDelete(item.id)} style={{ padding: '3px 8px', fontSize: 11, color: '#ef4444' }} title="Удалить">
+                          🗑️
+                        </button>
+                      </div>
                     )}
                   </td>
                 )}

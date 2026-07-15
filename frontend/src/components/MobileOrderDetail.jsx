@@ -18,7 +18,11 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
   const [notesText, setNotesText] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
   const [statusDropdown, setStatusDropdown] = useState(false);
+  const [warehouseItems, setWarehouseItems] = useState([]);
+  const [runSelections, setRunSelections] = useState({});
+  const [showAllSheets, setShowAllSheets] = useState({});
   const canChangeStatus = user?.role === 'admin' || user?.role === 'operator';
+  const canBind = user?.role === 'admin' || user?.role === 'operator' || user?.role === 'director';
 
   useEffect(() => {
     const fetchFull = async () => {
@@ -35,6 +39,46 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
     };
     fetchFull();
   }, [app.id]);
+
+  useEffect(() => {
+    if (canBind) {
+      client.get('/api/v1/warehouse/').then(res => {
+        setWarehouseItems(Array.isArray(res.data) ? res.data : []);
+      }).catch(() => {});
+    }
+  }, [canBind]);
+
+  const bindRun = async (layoutId, runIndex) => {
+    const key = `${layoutId}_${runIndex}`;
+    const whId = runSelections[key];
+    if (!whId) return alert('Выберите позицию на складе');
+    try {
+      await client.patch('/api/v1/applications/layouts/' + layoutId + '/bind-run', {
+        run_index: runIndex,
+        warehouse_item_id: parseInt(whId),
+      });
+      const res = await client.get('/api/v1/applications/' + app.id);
+      setFullApp(res.data);
+      setRunSelections(prev => ({ ...prev, [key]: '' }));
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const unbindRun = async (layoutId, runIndex) => {
+    try {
+      await client.patch('/api/v1/applications/layouts/' + layoutId + '/bind-run', {
+        run_index: runIndex,
+        warehouse_item_id: null,
+      });
+      const res = await client.get('/api/v1/applications/' + app.id);
+      setFullApp(res.data);
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      alert('Ошибка');
+    }
+  };
 
   const data = fullApp ? (fullApp.application || fullApp) : app;
   const layouts = fullApp
@@ -154,6 +198,73 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* Warehouse binding UI */}
+            {canBind && !isDisabled && (
+              <div style={{ marginBottom: 12, padding: 8, background: '#f8fafc', borderRadius: 6, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>Привязка к складу</div>
+                {Array.from({ length: layoutTotal }, (_, runIdx) => {
+                  const bindings = currentLayout.warehouse_bindings || {};
+                  const boundId = bindings[runIdx];
+                  const isCut = runs[runIdx] || false;
+                  const selKey = `${currentLayout.id}_${runIdx}`;
+                  const items = warehouseItems.filter(w => w.sheet_count > 0);
+                  const showAll = showAllSheets[selKey];
+                  const matching = items.filter(w => {
+                    const gm = !data.steel_grade || !w.grade || w.grade.toLowerCase() === data.steel_grade.toLowerCase();
+                    const tm = !data.thickness || !w.thickness || w.thickness === data.thickness;
+                    return gm && tm;
+                  });
+                  const others = items.filter(w => {
+                    const gm = !data.steel_grade || !w.grade || w.grade.toLowerCase() === data.steel_grade.toLowerCase();
+                    const tm = !data.thickness || !w.thickness || w.thickness === data.thickness;
+                    return !(gm && tm);
+                  });
+                  return (
+                    <div key={runIdx} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: runIdx < layoutTotal - 1 ? 4 : 0, fontSize: 11 }}>
+                      <span style={{
+                        width: 18, height: 18, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, fontWeight: 600,
+                        background: isCut ? '#22c55e' : boundId ? '#3b82f6' : '#e2e8f0',
+                        color: isCut || boundId ? '#fff' : '#64748b',
+                        flexShrink: 0,
+                      }}>
+                        {runIdx + 1}
+                      </span>
+                      {boundId ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
+                          <span style={{ color: '#166534', fontWeight: 600, fontSize: 10 }}>
+                            {warehouseItems.find(x => x.id === boundId)?.article || `#${boundId}`}
+                          </span>
+                          {!isCut && (
+                            <button onClick={() => unbindRun(currentLayout.id, runIdx)}
+                              style={{ fontSize: 9, padding: '0 4px', borderRadius: 3, border: '1px solid #fca5a5', background: '#fef2f2', color: '#991b1b', cursor: 'pointer' }}>
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 3, alignItems: 'center', flex: 1 }}>
+                          <select value={runSelections[selKey] || ''} onChange={e => {
+                            if (e.target.value === '__show_all') { setShowAllSheets(prev => ({ ...prev, [selKey]: true })); return; }
+                            setRunSelections(prev => ({ ...prev, [selKey]: e.target.value }));
+                          }} style={{ flex: 1, padding: '2px 4px', fontSize: 10, border: '1px solid var(--border)', borderRadius: 3 }}>
+                            <option value="">Склад...</option>
+                            {matching.map(w => <option key={w.id} value={w.id}>{w.article || `#${w.id}`}</option>)}
+                            {!showAll && others.length > 0 && <option value="__show_all" style={{ fontWeight: 600, color: '#64748b' }}>— Другой ({others.length}) —</option>}
+                            {showAll && others.map(w => <option key={w.id} value={w.id}>{w.article || `#${w.id}`}</option>)}
+                          </select>
+                          <button onClick={() => bindRun(currentLayout.id, runIdx)}
+                            style={{ fontSize: 9, padding: '2px 6px', borderRadius: 3, border: '1px solid #93c5fd', background: '#dbeafe', color: '#1d4ed8', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            Привязать
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 

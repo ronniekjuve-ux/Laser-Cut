@@ -375,6 +375,7 @@ export default function Warehouse() {
   const [filterMaterial, setFilterMaterial] = useState([]);
   const [showFilters, setShowFilters] = useState(null);
   const [activeTab, setActiveTab] = useState('stock');
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(null);
   const [mergeItem, setMergeItem] = useState(null);
   const isMobile = useIsMobile();
   const isRealMobile = isMobile && window.innerWidth <= 768;
@@ -470,17 +471,48 @@ export default function Warehouse() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#166534' }}>В наличии ({inStock.length})</div>
-              <div style={{ display: 'flex', gap: 3 }}>
-                {[{ col: 'article', label: 'Арт' }, { col: 'owner', label: 'Влд' }, { col: 'thickness', label: 'Толщ' }, { col: 'metal', label: 'Мат' }].map(s => (
-                  <button key={s.col} className="btn" onClick={() => handleSort(s.col)}
-                    style={{ padding: '2px 5px', fontSize: 9, fontWeight: sortCol === s.col ? 700 : 400 }}>
-                    {s.label} {sortCol === s.col ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-                  </button>
+              <button className="btn" onClick={() => setMobileFilterOpen(mobileFilterOpen ? null : 'stock')}
+                style={{ padding: '2px 8px', fontSize: 11, background: (filterOwner.length + filterGrade.length + filterThickness.length + filterMaterial.length > 0) ? '#dbeafe' : undefined }}>
+                Фильтр {(filterOwner.length + filterGrade.length + filterThickness.length + filterMaterial.length > 0) ? `(${filterOwner.length + filterGrade.length + filterThickness.length + filterMaterial.length})` : '▾'}
+              </button>
+            </div>
+            {mobileFilterOpen === 'stock' && (
+              <div style={{ background: '#f8fafc', borderRadius: 6, padding: 8, marginBottom: 8, border: '1px solid var(--border)' }}>
+                {[{
+                  label: 'Владелец', values: [...new Set(inStock.map(i => i.owner || '-'))],
+                  selected: filterOwner, setter: setFilterOwner
+                }, {
+                  label: 'Марка', values: [...new Set(inStock.map(i => i.grade || '-'))],
+                  selected: filterGrade, setter: setFilterGrade
+                }, {
+                  label: 'Толщина', values: [...new Set(inStock.map(i => String(i.thickness || '-')))],
+                  selected: filterThickness, setter: setFilterThickness
+                }, {
+                  label: 'Материал', values: [...new Set(inStock.map(i => i.metal || '-'))],
+                  selected: filterMaterial, setter: setFilterMaterial
+                }].map(f => (
+                  <div key={f.label} style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: '#64748b', marginBottom: 2 }}>{f.label}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                      {f.values.map(v => (
+                        <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 10, cursor: 'pointer', padding: '1px 4px', borderRadius: 3, background: f.selected.includes(v) ? '#dbeafe' : '#fff', border: '1px solid var(--border)' }}>
+                          <input type="checkbox" checked={f.selected.includes(v)}
+                            onChange={() => f.setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v])}
+                            style={{ margin: 0, width: 10, height: 10 }} />
+                          {v}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
+            )}
             {inStock.length === 0 && <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Пусто</div>}
-            {inStock.sort((a, b) => {
+            {inStock.filter(i => filterOwner.length === 0 || filterOwner.includes(i.owner || '-'))
+              .filter(i => filterGrade.length === 0 || filterGrade.includes(i.grade || '-'))
+              .filter(i => filterThickness.length === 0 || filterThickness.includes(String(i.thickness || '-')))
+              .filter(i => filterMaterial.length === 0 || filterMaterial.includes(i.metal || '-'))
+              .sort((a, b) => {
               let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
               if (sortCol === 'thickness') { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; return sortDir === 'asc' ? va - vb : vb - va; }
               va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
@@ -501,17 +533,48 @@ export default function Warehouse() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#dc2626' }}>Списано ({deducted.length})</div>
-              <div style={{ display: 'flex', gap: 3 }}>
-                {[{ col: 'article', label: 'Арт' }, { col: 'owner', label: 'Влд' }, { col: 'thickness', label: 'Толщ' }, { col: 'metal', label: 'Мат' }].map(s => (
-                  <button key={s.col} className="btn" onClick={() => handleSort(s.col)}
-                    style={{ padding: '2px 5px', fontSize: 9, fontWeight: sortCol === s.col ? 700 : 400 }}>
-                    {s.label} {sortCol === s.col ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-                  </button>
+              <button className="btn" onClick={() => setMobileFilterOpen(mobileFilterOpen ? null : 'deducted')}
+                style={{ padding: '2px 8px', fontSize: 11, background: (filterOwner.length + filterGrade.length + filterThickness.length + filterMaterial.length > 0) ? '#dbeafe' : undefined }}>
+                Фильтр {(filterOwner.length + filterGrade.length + filterThickness.length + filterMaterial.length > 0) ? `(${filterOwner.length + filterGrade.length + filterThickness.length + filterMaterial.length})` : '▾'}
+              </button>
+            </div>
+            {mobileFilterOpen === 'deducted' && (
+              <div style={{ background: '#f8fafc', borderRadius: 6, padding: 8, marginBottom: 8, border: '1px solid var(--border)' }}>
+                {[{
+                  label: 'Владелец', values: [...new Set(deducted.map(i => i.owner || '-'))],
+                  selected: filterOwner, setter: setFilterOwner
+                }, {
+                  label: 'Марка', values: [...new Set(deducted.map(i => i.grade || '-'))],
+                  selected: filterGrade, setter: setFilterGrade
+                }, {
+                  label: 'Толщина', values: [...new Set(deducted.map(i => String(i.thickness || '-')))],
+                  selected: filterThickness, setter: setFilterThickness
+                }, {
+                  label: 'Материал', values: [...new Set(deducted.map(i => i.metal || '-'))],
+                  selected: filterMaterial, setter: setFilterMaterial
+                }].map(f => (
+                  <div key={f.label} style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: '#64748b', marginBottom: 2 }}>{f.label}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                      {f.values.map(v => (
+                        <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 10, cursor: 'pointer', padding: '1px 4px', borderRadius: 3, background: f.selected.includes(v) ? '#dbeafe' : '#fff', border: '1px solid var(--border)' }}>
+                          <input type="checkbox" checked={f.selected.includes(v)}
+                            onChange={() => f.setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v])}
+                            style={{ margin: 0, width: 10, height: 10 }} />
+                          {v}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
+            )}
             {deducted.length === 0 && <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Пусто</div>}
-            {deducted.sort((a, b) => {
+            {deducted.filter(i => filterOwner.length === 0 || filterOwner.includes(i.owner || '-'))
+              .filter(i => filterGrade.length === 0 || filterGrade.includes(i.grade || '-'))
+              .filter(i => filterThickness.length === 0 || filterThickness.includes(String(i.thickness || '-')))
+              .filter(i => filterMaterial.length === 0 || filterMaterial.includes(i.metal || '-'))
+              .sort((a, b) => {
               let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
               if (sortCol === 'thickness') { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; return sortDir === 'asc' ? va - vb : vb - va; }
               va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
