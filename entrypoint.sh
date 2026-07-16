@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+echo "Ensuring schema changes..."
+python /app/scripts/ensure_password_plain.py || echo "Schema ensure skipped"
+
 echo "Running alembic migrations..."
 alembic upgrade heads || echo "Migration skipped (multiple heads or already applied)"
 
