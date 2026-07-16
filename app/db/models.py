@@ -2,7 +2,7 @@
 import enum
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, Text, JSON, Enum as SAEnum, func, UniqueConstraint
+from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, Text, JSON, Enum as SAEnum, func, UniqueConstraint, Table, Column, Table, Column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -37,18 +37,34 @@ class ApplicationPriority(str, enum.Enum):
     URGENT = "urgent"
 
 
+
+# Junction table for many-to-many user-customer relationship
+user_customers = Table(
+    "user_customers",
+    Base.metadata,
+    Column("user_id", ForeignKey("users.id"), primary_key=True),
+    Column("customer_id", ForeignKey("customers.id"), primary_key=True),
+)
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     email: Mapped[str | None] = mapped_column(String(100), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    password_plain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.OPERATOR)
     status: Mapped[UserStatus] = mapped_column(SAEnum(UserStatus), default=UserStatus.ACTIVE)
     customer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("customers.id"), nullable=True)
     last_active: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     customer: Mapped[Optional["Customer"]] = relationship(back_populates="users")
+    assigned_customers: Mapped[List["Customer"]] = relationship(
+        secondary=user_customers,
+        primaryjoin="User.id == user_customers.c.user_id",
+        secondaryjoin="Customer.id == user_customers.c.customer_id",
+        viewonly=True
+    )
 
 
 class Session(Base):
@@ -81,7 +97,12 @@ class Customer(Base):
     objects: Mapped[List["Object"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
     applications: Mapped[List["Application"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
     orders: Mapped[List["Order"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
-    users: Mapped[List["User"]] = relationship(back_populates="customer")
+    users: Mapped[List["User"]] = relationship(
+        secondary=user_customers,
+        primaryjoin="Customer.id == user_customers.c.customer_id",
+        secondaryjoin="User.id == user_customers.c.user_id",
+        viewonly=True
+    )
 
 
 class Object(Base):

@@ -4,13 +4,33 @@ from sqlalchemy import select, func, desc
 from datetime import datetime, timedelta, timezone
 from app.db.base import get_db
 from app.models.user import User, UserRole, UserStatus
-from app.db.models import AuditLog, ChangeLog, UserActivity, LoginHistory
+from app.db.models import AuditLog, ChangeLog, UserActivity, LoginHistory, user_customers, Customer
 from app.schemas.user import UserCreate, UserUpdate, UserOut
 from app.core.deps import require_role, log_audit
 from app.core.security import get_password_hash
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
+
+
+
+
+async def _get_user_customers(user_id: int, db):
+    result = await db.execute(
+        select(user_customers.c.customer_id).where(user_customers.c.user_id == user_id)
+    )
+    cust_ids = [r[0] for r in result.all()]
+    if not cust_ids:
+        return [], []
+    cust_result = await db.execute(select(Customer).where(Customer.id.in_(cust_ids)))
+    customers = cust_result.scalars().all()
+    return [c.id for c in customers], [c.name for c in customers]
+
+
+async def _set_user_customers(user_id: int, customer_ids: list[int], db):
+    await db.execute(user_customers.delete().where(user_customers.c.user_id == user_id))
+    for cid in customer_ids:
+        await db.execute(user_customers.insert().values(user_id=user_id, customer_id=cid))
 
 def parse_user_agent(ua: str) -> str:
     if not ua:
@@ -54,13 +74,25 @@ async def create_user(
         username=payload.username,
         email=payload.email,
         password_hash=get_password_hash(payload.password),
+        password_plain=payload.password,
         role=role,
         status=UserStatus.ACTIVE
     )
     db.add(user)
+    await db.flush()
+
+    if payload.customer_ids:
+        await _set_user_customers(user.id, payload.customer_ids, db)
+
     await db.commit()
     await db.refresh(user)
-    return user
+
+    cust_ids, cust_names = await _get_user_customers(user.id, db)
+    return UserOut(
+        id=user.id, username=user.username, email=user.email,
+        role=user.role, status=user.status,
+        customer_ids=cust_ids, customer_names=cust_names
+    )
 
 
 @router.get("/")
@@ -87,6 +119,7 @@ async def list_users(
         last_login = last_login_res.scalar_one_or_none()
         device_info = parse_user_agent(last_login.user_agent) if last_login and last_login.user_agent else None
 
+        cust_ids, cust_names = await _get_user_customers(u.id, db)
         result.append({
             "id": u.id,
             "username": u.username,
@@ -96,6 +129,9 @@ async def list_users(
             "last_active": u.last_active.isoformat() if u.last_active else None,
             "is_online": is_online,
             "device_info": device_info,
+            "customer_ids": cust_ids,
+            "customer_names": cust_names,
+            "password_plain": u.password_plain or "",
         })
     return result
 
@@ -119,11 +155,20 @@ async def update_user(
         user.status = payload.status
     if payload.password:
         user.password_hash = get_password_hash(payload.password)
+        user.password_plain = payload.password
+    if payload.customer_ids is not None:
+        await _set_user_customers(user.id, payload.customer_ids, db)
 
     await db.commit()
     await db.refresh(user)
     await log_audit(admin, "UPDATE", "user", user_id, str(payload.model_dump(exclude_unset=True)), db)
-    return user
+
+    cust_ids, cust_names = await _get_user_customers(user.id, db)
+    return UserOut(
+        id=user.id, username=user.username, email=user.email,
+        role=user.role, status=user.status,
+        customer_ids=cust_ids, customer_names=cust_names
+    )
 
 
 @router.delete("/{user_id}")
@@ -356,3 +401,13 @@ async def get_user_history(
         "total_actions": total_actions + total_changes,
         "period_days": days,
     }
+
+
+@router.get("/customers")
+async def list_customers_for_assignment(
+        db: AsyncSession = Depends(get_db),
+        admin: User = Depends(require_role(UserRole.ADMIN))
+):
+    result = await db.execute(select(Customer).order_by(Customer.name))
+    customers = result.scalars().all()
+    return [{"id": c.id, "name": c.name} for c in customers]

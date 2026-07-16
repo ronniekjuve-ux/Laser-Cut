@@ -11,7 +11,7 @@ from app.db.models import (
     Application, Customer, ApplicationLayout, ApplicationLayoutPart,
     ScheduleOverride
 )
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_customer_ids
 
 router = APIRouter(prefix="/audit", tags=["Audit"])
 
@@ -447,6 +447,13 @@ async def audit_applications(
         query = query.where(Application.created_at < datetime.fromisoformat(date_to) + timedelta(days=1))
     if customer_id:
         query = query.where(Application.customer_id == customer_id)
+
+    # Filter by customer-role user assigned customers
+    audit_cust_ids = await get_customer_ids(user, db)
+    if audit_cust_ids is not None:
+        if not audit_cust_ids:
+            return []
+        query = query.where(Application.customer_id.in_(audit_cust_ids))
 
     result = await db.execute(query)
     rows = result.all()

@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 from datetime import datetime, timezone
 from app.db.base import get_db
-from app.db.models import WarehouseItem, WarehouseMovement, WarehouseRemnant, ItemNote, Application, ApplicationLayout, Customer
+from app.db.models import WarehouseItem, WarehouseMovement, WarehouseRemnant, ItemNote, Application, ApplicationLayout, Customer, user_customers
 from app.models.user import User, UserRole
-from app.core.deps import require_role
+from app.core.deps import require_role, get_customer_ids
 from app.schemas.warehouse import (
     WarehouseItemCreate, WarehouseItemUpdate,
     WarehouseDeductRequest, WarehouseReturnRequest,
@@ -78,9 +78,20 @@ async def list_warehouse(
         db: AsyncSession = Depends(get_db),
         user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR, UserRole.ACCOUNTANT))
 ):
-    result = await db.execute(
-        select(WarehouseItem).order_by(desc(WarehouseItem.created_at))
-    )
+    # Get customer filter for customer-role users
+    wh_customer_ids = await get_customer_ids(user, db)
+
+    query = select(WarehouseItem).order_by(desc(WarehouseItem.created_at))
+    if wh_customer_ids is not None:
+        # Get customer names for filtering by owner
+        cust_result = await db.execute(select(Customer.name).where(Customer.id.in_(wh_customer_ids)))
+        cust_names = [r[0] for r in cust_result.all()]
+        if cust_names:
+            query = query.where(WarehouseItem.owner.in_(cust_names))
+        else:
+            return []
+
+    result = await db.execute(query)
     items = result.scalars().all()
 
     # Build binding map: warehouse_item_id → list of layout codes
@@ -156,9 +167,20 @@ async def export_warehouse_xlsx(
 ):
     from app.services.exporters import export_warehouse
 
-    result = await db.execute(
-        select(WarehouseItem).order_by(desc(WarehouseItem.created_at))
-    )
+    # Get customer filter for customer-role users
+    wh_customer_ids = await get_customer_ids(user, db)
+
+    query = select(WarehouseItem).order_by(desc(WarehouseItem.created_at))
+    if wh_customer_ids is not None:
+        # Get customer names for filtering by owner
+        cust_result = await db.execute(select(Customer.name).where(Customer.id.in_(wh_customer_ids)))
+        cust_names = [r[0] for r in cust_result.all()]
+        if cust_names:
+            query = query.where(WarehouseItem.owner.in_(cust_names))
+        else:
+            return []
+
+    result = await db.execute(query)
     items = result.scalars().all()
 
     data = [
@@ -1159,11 +1181,19 @@ async def deficit_analysis(
     standard_area = standard_w * standard_h
 
     # 1. Get all active applications (not cut, not rejected) with layouts
-    apps_result = await db.execute(
-        select(Application, Customer)
-        .join(Customer, Application.customer_id == Customer.id, isouter=True)
-        .where(Application.status.notin_(["cut", "rejected"]))
-    )
+    # Get customer filter for customer-role users
+    da_customer_ids = await get_customer_ids(user, db)
+
+    apps_query = select(Application, Customer).join(
+        Customer, Application.customer_id == Customer.id, isouter=True
+    ).where(Application.status.notin_(["cut", "rejected"]))
+
+    if da_customer_ids is not None:
+        if not da_customer_ids:
+            return {"standard_w": standard_w, "standard_h": standard_h, "deficit": []}
+        apps_query = apps_query.where(Application.customer_id.in_(da_customer_ids))
+
+    apps_result = await db.execute(apps_query)
     apps = apps_result.all()
 
     # 2. For each app, get layouts
@@ -1273,11 +1303,19 @@ async def deficit_export(
     # Reuse deficit logic
     standard_area = standard_w * standard_h
 
-    apps_result = await db.execute(
-        select(Application, Customer)
-        .join(Customer, Application.customer_id == Customer.id, isouter=True)
-        .where(Application.status.notin_(["cut", "rejected"]))
-    )
+    # Get customer filter for customer-role users
+    da_customer_ids = await get_customer_ids(user, db)
+
+    apps_query = select(Application, Customer).join(
+        Customer, Application.customer_id == Customer.id, isouter=True
+    ).where(Application.status.notin_(["cut", "rejected"]))
+
+    if da_customer_ids is not None:
+        if not da_customer_ids:
+            return {"standard_w": standard_w, "standard_h": standard_h, "deficit": []}
+        apps_query = apps_query.where(Application.customer_id.in_(da_customer_ids))
+
+    apps_result = await db.execute(apps_query)
     apps = apps_result.all()
 
     demand = {}

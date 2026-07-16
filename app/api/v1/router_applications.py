@@ -15,7 +15,7 @@ from app.db.models import (
     DeficitRequest, Notification, ChangeLog, OrderGroup,
     WarehouseItem, WarehouseMovement
 )
-from app.core.deps import get_current_user, require_role
+from app.core.deps import get_current_user, require_role, get_customer_ids
 from app.services.unified_parser import (
     extract_text,
     parse_application_text,
@@ -610,9 +610,7 @@ async def list_applications(
         pass
 
     # Если заказчик — только свои заявки
-    customer_filter = None
-    if user.role == UserRole.CUSTOMER and user.customer_id:
-        customer_filter = user.customer_id
+    customer_ids = await get_customer_ids(user, db)
 
     # Если есть поиск — сначала найдём ID заявок по полям ИЛИ по деталям
     matching_app_ids = None
@@ -640,8 +638,10 @@ async def list_applications(
         matching_app_ids = set(r[0] for r in result_ids.all())
 
     query = select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True).options(joinedload(Application.group))
-    if customer_filter:
-        query = query.where(Application.customer_id == customer_filter)
+    if customer_ids is not None:
+        if not customer_ids:
+            return {"items": [], "total": 0, "page": page, "pages": 0, "filter_values": {}}
+        query = query.where(Application.customer_id.in_(customer_ids))
 
     if tab == "applications":
         query = query.where(Application.status.in_(["pending", "rejected"]))
@@ -827,8 +827,12 @@ async def export_applications_xlsx(
     from app.services.exporters import export_applications
 
     query = select(Application, Customer).join(Customer, Application.customer_id == Customer.id, isouter=True)
-    if user.role == UserRole.CUSTOMER and user.customer_id:
-        query = query.where(Application.customer_id == user.customer_id)
+    export_customer_ids = await get_customer_ids(user, db)
+    if export_customer_ids is not None:
+        if not export_customer_ids:
+            from fastapi.responses import StreamingResponse
+            return StreamingResponse(iter([b""]), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        query = query.where(Application.customer_id.in_(export_customer_ids))
     if tab == "applications":
         query = query.where(Application.status.in_(["pending", "rejected"]))
     elif tab == "orders":
@@ -968,8 +972,15 @@ async def list_deficit(
     query = select(DeficitRequest)
     if status_filter:
         query = query.where(DeficitRequest.status == status_filter)
-    if user.role == UserRole.CUSTOMER and user.customer_id:
-        query = query.where(DeficitRequest.customer_name == user.username)
+    if user.role == UserRole.CUSTOMER:
+        deficit_cust_ids = await get_customer_ids(user, db)
+        if deficit_cust_ids is not None:
+            cust_result = await db.execute(select(Customer.name).where(Customer.id.in_(deficit_cust_ids)))
+            cust_names = [r[0] for r in cust_result.all()]
+            if cust_names:
+                query = query.where(DeficitRequest.customer_name.in_(cust_names))
+            else:
+                return []
 
     result = await db.execute(query.order_by(DeficitRequest.created_at.desc()))
     deficits = result.scalars().all()
@@ -1336,7 +1347,7 @@ async def unmerge_layout(
         layout_id: int,
         action: str = "cancel",
         db: AsyncSession = Depends(get_db),
-        user: User = Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
 ):
     result = await db.execute(
         select(ApplicationLayout)
@@ -1776,7 +1787,7 @@ async def toggle_layout_run(
         layout_id: int,
         run_index: int = Query(...),
         db: AsyncSession = Depends(get_db),
-        user: User = Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
 ):
     result = await db.execute(select(ApplicationLayout).where(ApplicationLayout.id == layout_id))
     layout = result.scalar_one_or_none()
@@ -2325,7 +2336,7 @@ async def bind_layout_warehouse(
         layout_id: int,
         body: dict,
         db: AsyncSession = Depends(get_db),
-        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
 ):
     result = await db.execute(select(ApplicationLayout).where(ApplicationLayout.id == layout_id))
     layout = result.scalar_one_or_none()
@@ -2355,7 +2366,7 @@ async def bind_layout_run(
         layout_id: int,
         body: dict,
         db: AsyncSession = Depends(get_db),
-        user: User = Depends(require_role(UserRole.ADMIN, UserRole.OPERATOR))
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
 ):
     run_index = body.get("run_index")
     warehouse_item_id = body.get("warehouse_item_id")

@@ -8,7 +8,7 @@ from app.db.base import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.core.security import decode_token
 from app.models.audit import AuditLog
-from app.db.models import UserActivity, LoginHistory
+from app.db.models import UserActivity, LoginHistory, user_customers
 from fastapi.security import HTTPBearer
 import uuid
 import json
@@ -76,3 +76,14 @@ def mask_timestamp(dt: datetime, role: str) -> str:
     if role == "admin":
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     return dt.strftime("%Y-%m-%d")
+
+
+async def get_customer_ids(user: User, db: AsyncSession) -> list[int] | None:
+    """Return customer IDs for customer-role users, None for admin/director/operator/accountant (no filter)."""
+    if user.role != UserRole.CUSTOMER:
+        return None
+    result = await db.execute(
+        select(user_customers.c.customer_id).where(user_customers.c.user_id == user.id)
+    )
+    ids = [r[0] for r in result.all()]
+    return ids if ids else []

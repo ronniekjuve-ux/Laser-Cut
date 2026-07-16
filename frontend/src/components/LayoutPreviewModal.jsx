@@ -18,7 +18,7 @@ export default function LayoutPreviewModal({ appId, layoutId, allLayoutIds, onCl
   const [loading, setLoading] = useState(true);
   const [showPartImage, setShowPartImage] = useState(null);
   const [statusDropdown, setStatusDropdown] = useState(false);
-  const canChangeStatus = user?.role === 'admin' || user?.role === 'operator';
+  const canChangeStatus = user?.role === 'admin' || user?.role === 'director';
 
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);

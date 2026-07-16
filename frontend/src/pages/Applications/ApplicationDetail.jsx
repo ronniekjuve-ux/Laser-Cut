@@ -558,7 +558,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                                 </div>
                               </div>
                             )}
-                            {(user?.role === 'admin' || user?.role === 'operator' || user?.role === 'director') && !isDisabled && (
+                            {(user?.role === 'admin' || user?.role === 'director') && !isDisabled && (
                               <div style={{marginTop: 8, padding: '6px 8px', background: '#f8fafc', borderRadius: 4, border: '1px solid var(--border)'}} onClick={e => e.stopPropagation()}>
                                 {Array.from({length: layoutTotal}, (_, runIdx) => {
                                   const bindings = layout.warehouse_bindings || {};
@@ -661,7 +661,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                   )}
                 </div>
 
-                {(user?.role === 'admin' || user?.role === 'operator') && ['approved', 'in_progress', 'partially_cut', 'cut'].includes(data.status) && (
+                {(user?.role === 'admin' || user?.role === 'director') && ['approved', 'in_progress', 'partially_cut', 'cut'].includes(data.status) && (
                   <div style={{width: 180, flexShrink: 0}}>
                     {(() => {
                       const totalSheets = layouts.reduce((s, l) => s + (l.sheet_count || 1), 0);

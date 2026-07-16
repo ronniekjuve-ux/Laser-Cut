@@ -32,6 +32,7 @@ export default function UsersList() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editUser, setEditUser] = useState(null);
+  const [visiblePasswords, setVisiblePasswords] = useState({});
 
   const fetchUsers = async () => {
     try {
@@ -49,6 +50,10 @@ export default function UsersList() {
     const id = setInterval(fetchUsers, 30000);
     return () => clearInterval(id);
   }, []);
+
+  const togglePassword = (userId) => {
+    setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
+  };
 
   if (loading) return <div className="loading">Загрузка...</div>;
 
@@ -69,6 +74,8 @@ export default function UsersList() {
             <tr>
               <th>Имя</th>
               <th>Роль</th>
+              <th>Заказчики</th>
+              <th>Пароль</th>
               <th>Устройство</th>
               <th>Статус</th>
               <th style={{width: 60}}></th>
@@ -89,6 +96,53 @@ export default function UsersList() {
                   <span className="user-role">
                     {ROLE_LABELS[user.role] || user.role}
                   </span>
+                </td>
+                <td style={{fontSize: 12, color: '#64748b', maxWidth: 200}}>
+                  {user.customer_names && user.customer_names.length > 0 ? (
+                    <div style={{display: 'flex', flexWrap: 'wrap', gap: 4}}>
+                      {user.customer_names.map((name, i) => (
+                        <span key={i} style={{
+                          padding: '2px 6px',
+                          borderRadius: 8,
+                          background: '#f0f9ff',
+                          border: '1px solid #bae6fd',
+                          color: '#0369a1',
+                          fontSize: 11,
+                        }}>
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span style={{color: '#d1d5db'}}>—</span>
+                  )}
+                </td>
+                <td style={{fontSize: 12, fontFamily: 'monospace'}}>
+                  {user.role === 'admin' ? (
+                    <span style={{color: '#d1d5db'}}>—</span>
+                  ) : user.password_plain ? (
+                    <div style={{display: 'flex', alignItems: 'center', gap: 4}}>
+                      <span style={{color: '#374151'}}>
+                        {visiblePasswords[user.id] ? user.password_plain : '••••••'}
+                      </span>
+                      <button
+                        onClick={() => togglePassword(user.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 2,
+                          fontSize: 12,
+                          color: '#6b7280',
+                        }}
+                        title={visiblePasswords[user.id] ? 'Скрыть' : 'Показать'}
+                      >
+                        {visiblePasswords[user.id] ? '👁️' : '👁️‍🗨️'}
+                      </button>
+                    </div>
+                  ) : (
+                    <span style={{color: '#d1d5db'}}>—</span>
+                  )}
                 </td>
                 <td style={{fontSize: 12, color: '#64748b', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
                   {user.device_info || '—'}
@@ -120,7 +174,7 @@ export default function UsersList() {
             ))}
             {users.length === 0 && (
               <tr>
-                <td colSpan={5} style={{textAlign: 'center', padding: 20, color: '#64748b'}}>
+                <td colSpan={7} style={{textAlign: 'center', padding: 20, color: '#64748b'}}>
                   Пользователи не найдены
                 </td>
               </tr>

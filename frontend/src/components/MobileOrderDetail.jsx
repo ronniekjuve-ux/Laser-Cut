@@ -21,8 +21,8 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
   const [warehouseItems, setWarehouseItems] = useState([]);
   const [runSelections, setRunSelections] = useState({});
   const [showAllSheets, setShowAllSheets] = useState({});
-  const canChangeStatus = user?.role === 'admin' || user?.role === 'operator';
-  const canBind = user?.role === 'admin' || user?.role === 'operator' || user?.role === 'director';
+  const canChangeStatus = user?.role === 'admin' || user?.role === 'director';
+  const canBind = user?.role === 'admin' || user?.role === 'director';
 
   useEffect(() => {
     const fetchFull = async () => {

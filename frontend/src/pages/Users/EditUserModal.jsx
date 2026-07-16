@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import client from '../../api/client';
 
 const ROLES = [
@@ -15,12 +15,35 @@ export default function EditUserModal({ user, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [allCustomers, setAllCustomers] = useState([]);
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState(user.customer_ids || []);
+
+  useEffect(() => {
+    client.get('/users/customers').then(res => {
+      setAllCustomers(Array.isArray(res.data) ? res.data : []);
+    }).catch(() => {});
+  }, []);
 
   const saveRole = async () => {
     setSaving(true);
     setError('');
     try {
       await client.patch('/users/' + user.id, { role });
+      onSaved();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Ошибка');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveCustomers = async () => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      await client.patch('/users/' + user.id, { customer_ids: selectedCustomerIds });
+      setSuccess('Заказчики обновлены');
       onSaved();
     } catch (err) {
       setError(err.response?.data?.detail || 'Ошибка');
@@ -76,6 +99,12 @@ export default function EditUserModal({ user, onClose, onSaved }) {
     }
   };
 
+  const toggleCustomer = (cid) => {
+    setSelectedCustomerIds(prev =>
+      prev.includes(cid) ? prev.filter(id => id !== cid) : [...prev, cid]
+    );
+  };
+
   return (
     <div className="modal-overlay active" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
@@ -104,6 +133,37 @@ export default function EditUserModal({ user, onClose, onSaved }) {
               </button>
             </div>
           </div>
+
+          {role === 'customer' && (
+            <div style={{ marginBottom: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+              <label style={{ display: 'block', fontSize: 13, marginBottom: 4, fontWeight: 500 }}>Заказчики</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {allCustomers.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => toggleCustomer(c.id)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 12,
+                      fontSize: 12,
+                      border: '1px solid ' + (selectedCustomerIds.includes(c.id) ? '#3b82f6' : 'var(--border)'),
+                      background: selectedCustomerIds.includes(c.id) ? '#dbeafe' : '#fff',
+                      color: selectedCustomerIds.includes(c.id) ? '#1d4ed8' : '#374151',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+                {allCustomers.length === 0 && (
+                  <span style={{ fontSize: 12, color: '#9ca3af' }}>Нет заказчиков в базе</span>
+                )}
+              </div>
+              <button className="btn btn-primary" onClick={saveCustomers} disabled={saving} style={{ fontSize: 13 }}>
+                Сохранить заказчиков
+              </button>
+            </div>
+          )}
 
           <div style={{ marginBottom: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
             <label style={{ display: 'block', fontSize: 13, marginBottom: 4, fontWeight: 500 }}>Новый пароль</label>

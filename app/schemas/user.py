@@ -7,12 +7,14 @@ class UserCreate(BaseModel):
     email: str | None = None
     password: str
     role: UserRole | None = None
+    customer_ids: list[int] | None = None
 
 
 class UserUpdate(BaseModel):
     role: UserRole | None = None
     status: UserStatus | None = None
     password: str | None = None
+    customer_ids: list[int] | None = None
 
 
 class UserOut(BaseModel):
@@ -21,6 +23,8 @@ class UserOut(BaseModel):
     email: str | None
     role: UserRole
     status: UserStatus
+    customer_ids: list[int] = []
+    customer_names: list[str] = []
 
     class Config:
         from_attributes = True
