@@ -1,8 +1,11 @@
 #!/bin/sh
 set -e
 
+echo "Ensuring schema..."
+python /app/scripts/ensure_password_plain.py || echo "Schema ensure skipped (non-critical)"
+
 echo "Running alembic migrations..."
-alembic upgrade heads || echo "Migration skipped (multiple heads or already applied)"
+alembic upgrade heads || echo "Migration skipped"
 
 echo "Applying SQL migrations..."
 python /app/scripts/apply_sql_migrations.py || echo "SQL migration skipped"
