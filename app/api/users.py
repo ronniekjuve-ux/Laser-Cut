@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, text
 from datetime import datetime, timedelta, timezone
 from app.db.base import get_db
 from app.models.user import User, UserRole, UserStatus
@@ -81,6 +81,12 @@ async def create_user(
     db.add(user)
     await db.flush()
 
+    # Store plain password via raw SQL (column may not exist yet)
+    try:
+        await db.execute(text("UPDATE users SET password_plain = :pwd WHERE id = :id"), {"pwd": payload.password, "id": user.id})
+    except Exception:
+        pass
+
     if payload.customer_ids:
         await _set_user_customers(user.id, payload.customer_ids, db)
 
@@ -131,8 +137,27 @@ async def list_users(
             "device_info": device_info,
             "customer_ids": cust_ids,
             "customer_names": cust_names,
-            "password_plain": u.password_plain or "",
         })
+
+    # Batch-fetch password_plain via raw SQL
+    user_ids = [u["id"] for u in result]
+    pwd_map = {}
+    if user_ids:
+        try:
+            placeholders = ",".join([f":id{i}" for i in range(len(user_ids))])
+            params = {f"id{i}": uid for i, uid in enumerate(user_ids)}
+            pwd_result = await db.execute(
+                text(f"SELECT id, password_plain FROM users WHERE id IN ({placeholders})"),
+                params
+            )
+            for row in pwd_result.all():
+                if row[1]:
+                    pwd_map[row[0]] = row[1]
+        except Exception:
+            pass
+    for u in result:
+        u["password_plain"] = pwd_map.get(u["id"], "")
+
     return result
 
 
@@ -155,7 +180,10 @@ async def update_user(
         user.status = payload.status
     if payload.password:
         user.password_hash = get_password_hash(payload.password)
-        user.password_plain = payload.password
+        try:
+            await db.execute(text("UPDATE users SET password_plain = :pwd WHERE id = :id"), {"pwd": payload.password, "id": user.id})
+        except Exception:
+            pass
     if payload.customer_ids is not None:
         await _set_user_customers(user.id, payload.customer_ids, db)
 
