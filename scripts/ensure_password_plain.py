@@ -1,43 +1,52 @@
 # -*- coding: utf-8 -*-
-"""Ensure password_plain column and user_customers table exist."""
+"""Ensure password_plain column and user_customers table exist.
+Uses raw asyncpg connection — no app imports, no model loading."""
 import asyncio
-from sqlalchemy import text
-from app.db.base import engine
+import os
 
 async def ensure():
-    async with engine.connect() as conn:
+    import asyncpg
+    dsn = os.environ.get("DATABASE_URL", "")
+    if not dsn:
+        print("DATABASE_URL not set, skipping schema ensure")
+        return
+
+    conn = await asyncpg.connect(dsn)
+    try:
         # 1. Ensure user_customers table
-        result = await conn.execute(text(
+        exists = await conn.fetchval(
             "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'user_customers')"
-        ))
-        if not result.scalar():
-            await conn.execute(text(
-                "CREATE TABLE user_customers ("
-                "user_id INTEGER REFERENCES users(id) PRIMARY KEY,"
-                "customer_id INTEGER REFERENCES customers(id) PRIMARY_KEY)"
-            ))
-            # Migrate existing customer_id data
-            await conn.execute(text(
-                "INSERT INTO user_customers (user_id, customer_id) "
-                "SELECT id, customer_id FROM users WHERE customer_id IS NOT NULL "
-                "ON CONFLICT DO NOTHING"
-            ))
-            await conn.commit()
+        )
+        if not exists:
+            await conn.execute("""
+                CREATE TABLE user_customers (
+                    user_id INTEGER REFERENCES users(id),
+                    customer_id INTEGER REFERENCES customers(id),
+                    PRIMARY KEY (user_id, customer_id)
+                )
+            """)
+            await conn.execute("""
+                INSERT INTO user_customers (user_id, customer_id)
+                SELECT id, customer_id FROM users WHERE customer_id IS NOT NULL
+                ON CONFLICT DO NOTHING
+            """)
             print("Created user_customers table")
         else:
             print("user_customers table already exists")
 
         # 2. Ensure password_plain column
-        result = await conn.execute(text(
+        col = await conn.fetchval(
             "SELECT column_name FROM information_schema.columns "
             "WHERE table_name = 'users' AND column_name = 'password_plain'"
-        ))
-        if result.fetchone() is None:
-            await conn.execute(text("ALTER TABLE users ADD COLUMN password_plain VARCHAR(255)"))
-            await conn.commit()
+        )
+        if col is None:
+            await conn.execute("ALTER TABLE users ADD COLUMN password_plain VARCHAR(255)")
             print("Added password_plain column to users table")
         else:
             print("password_plain column already exists")
+
+    finally:
+        await conn.close()
 
 if __name__ == "__main__":
     asyncio.run(ensure())
