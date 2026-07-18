@@ -246,7 +246,40 @@ async def upload_layout(
         except Exception as e:
             print(f"WORD_ERROR: {e}")
 
-        # 2. If no Word image, wait for auto_convert.py (background process)
+        # 2. Try local converter (.exe running on Windows host)
+        if not layout_image_path:
+            try:
+                import urllib.request
+                # Check if local converter is running
+                req = urllib.request.Request("http://host.docker.internal:8001/health", method='GET')
+                urllib.request.urlopen(req, timeout=2)
+                # Convert via local converter
+                convert_data = json.dumps({"path": file_path}).encode('utf-8')
+                req = urllib.request.Request(
+                    "http://host.docker.internal:8001/convert",
+                    data=convert_data,
+                    headers={'Content-Type': 'application/json'},
+                    method='POST'
+                )
+                resp = urllib.request.urlopen(req, timeout=30)
+                result = json.loads(resp.read().decode('utf-8'))
+                if result.get('images'):
+                    # Find the layout image in the result
+                    for img in result['images']:
+                        if img.get('name', '').endswith(('.gif', '.png', '.jpg')):
+                            # Copy to layouts directory
+                            src = IMAGE_DIR / img['name']
+                            if src.exists():
+                                dest_name = img['name']
+                                dest = dest_dir / dest_name
+                                shutil.copy2(src, dest)
+                                layout_image_path = f"/api/v1/images/layouts/{app.order_name}_{layout_code}/{dest_name}"
+                                print(f"LOCAL_CONVERTER_OK: {layout_image_path}")
+                                break
+            except Exception:
+                pass  # Local converter not available, continue
+
+        # 3. If no Word image, wait for auto_convert.py (background process)
         if not layout_image_path:
             for wait in range(6):
                 await asyncio.sleep(1)
@@ -261,7 +294,7 @@ async def upload_layout(
                 if layout_image_path:
                     break
 
-        # 3. Fallback to LibreOffice (known to lose curves, but better than nothing)
+        # 4. Fallback to LibreOffice (known to lose curves, but better than nothing)
         if not layout_image_path:
             print(f"FALLBACK: LibreOffice (may lose curves)")
             layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
