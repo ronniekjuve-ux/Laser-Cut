@@ -795,44 +795,10 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft:
 
 
 def extract_layout_image(filepath: str, output_dir: str, prefix: str = "", dpi: int = 300) -> Optional[str]:
-    """Извлекает изображение раскладки.
-
-    Метод 1: DOC → PNG напрямую через LibreOffice (высокое DPI).
-    Метод 2: DOC → HTML → GIF (fallback).
+    """Извлекает изображение раскладки через LibreOffice (fallback — теряет кривые).
 
     Returns: URL изображения или None при ошибке.
     """
-    import subprocess
-    import shutil
-
-    IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp'}
-    dest_dir = Path(output_dir) / prefix
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
-    # Метод 1: DOC → PNG напрямую через LibreOffice
-    try:
-        png_out = Path(tempfile.mkdtemp()) / "png_out"
-        png_out.mkdir(exist_ok=True)
-        result = subprocess.run(
-            ['libreoffice', '--headless', '--convert-to', 'png', '--outdir', str(png_out), filepath],
-            capture_output=True, timeout=120
-        )
-        png_files = list(png_out.glob("*.png"))
-        if png_files:
-            # Берём самый большой PNG (обычно основное изображение)
-            best = max(png_files, key=lambda f: f.stat().st_size)
-            dest_name = f"{Path(filepath).stem}_layout.png"
-            dest = dest_dir / dest_name
-            shutil.copy2(best, dest)
-            img_url = f"/api/v1/images/{prefix}/{dest_name}"
-            print(f"PNG method: {img_url} ({best.stat().st_size} bytes)")
-            shutil.rmtree(png_out, ignore_errors=True)
-            return img_url
-        shutil.rmtree(png_out, ignore_errors=True)
-    except Exception as e:
-        print(f"PNG method failed: {e}")
-
-    # Метод 2: DOC → HTML (fallback)
     images = extract_images(filepath, output_dir, prefix=prefix, filter_dft=False)
     if images:
         return images[0]

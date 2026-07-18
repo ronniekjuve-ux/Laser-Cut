@@ -2,6 +2,8 @@
 import json
 import glob
 import re
+import shutil
+import time
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
@@ -188,32 +190,80 @@ async def upload_layout(
         text = extract_text(file_path)
         layout_data = parse_layout_text(text, file.filename)
 
-        # === Wait for Word conversion ===
+        # === Image extraction: Word (DOC→HTML→GIF) preferred, LibreOffice fallback ===
         import asyncio
         layout_image_path = None
         saved_name = Path(file_path).stem.replace(" ", "_").replace(".", "_")
+        dest_dir = IMAGE_DIR / f"layouts/{app.order_name}_{layout_code}"
+        dest_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"WORD_WAIT: saved_name={saved_name}", flush=True)
+        # 1. Try Word directly (works on Windows with MS Word installed)
+        try:
+            import pythoncom
+            pythoncom.CoInitialize()
+            import win32com.client
+            import tempfile as _tmp
+            with _tmp.TemporaryDirectory() as tmpdir:
+                tmpdir = Path(tmpdir)
+                word = win32com.client.Dispatch("Word.Application")
+                word.Visible = False
+                word.DisplayAlerts = 0
+                try:
+                    doc = word.Documents.Open(str(Path(file_path).absolute()))
+                    html_path = tmpdir / f"{tmpdir.name}.html"
+                    doc.SaveAs2(str(html_path), FileFormat=10)  # wdFormatHTML
+                    doc.Close(False)
+                finally:
+                    word.Quit()
 
-        for wait in range(10):
-            await asyncio.sleep(1)
-            for ext in ['gif', 'png', 'jpg']:
-                pattern = f"{saved_name}_*.{ext}"
-                word_images = list(IMAGE_DIR.glob(pattern))
-                if wait == 0:
-                    print(f"WORD_WAIT: pattern={pattern} found={len(word_images)}", flush=True)
-                    for w in word_images:
-                        print(f"WORD_WAIT: file={w.name} size={w.stat().st_size}", flush=True)
-                if word_images:
-                    best = max(word_images, key=lambda f: f.stat().st_size)
-                    layout_image_path = f"/api/v1/images/{best.name}"
-                    print(f"WORD_OK: {best.name}", flush=True)
-                    break
-            if layout_image_path:
-                break
+                time.sleep(0.5)
 
+                # Find GIF in _files folder or root
+                IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.emf', '.wmf'}
+                all_images = {}
+                for d in tmpdir.glob("*_files"):
+                    if d.is_dir():
+                        for f in d.iterdir():
+                            if f.is_file() and f.suffix.lower() in IMG_EXTS:
+                                all_images[f.name] = f
+                for f in tmpdir.iterdir():
+                    if f.is_file() and f.suffix.lower() in IMG_EXTS:
+                        if f.name not in all_images:
+                            all_images[f.name] = f
+
+                if all_images:
+                    # Pick the largest image (main layout image)
+                    best_name = max(all_images, key=lambda k: all_images[k].stat().st_size)
+                    best_src = all_images[best_name]
+                    dest_name = f"{saved_name}_{best_name}"
+                    dest = dest_dir / dest_name
+                    shutil.copy2(best_src, dest)
+                    layout_image_path = f"/api/v1/images/layouts/{app.order_name}_{layout_code}/{dest_name}"
+                    print(f"WORD_OK: {layout_image_path} ({dest.stat().st_size} bytes)")
+            pythoncom.CoUninitialize()
+        except ImportError:
+            print("WORD_SKIP: win32com not available, trying auto_convert.py")
+        except Exception as e:
+            print(f"WORD_ERROR: {e}")
+
+        # 2. If no Word image, wait for auto_convert.py (background process)
         if not layout_image_path:
-            print(f"WORD_FALLBACK: using LibreOffice")
+            for wait in range(6):
+                await asyncio.sleep(1)
+                for ext in ['gif', 'png', 'jpg']:
+                    pattern = f"{saved_name}_*.{ext}"
+                    word_images = list(IMAGE_DIR.glob(pattern))
+                    if word_images:
+                        best = max(word_images, key=lambda f: f.stat().st_size)
+                        layout_image_path = f"/api/v1/images/{best.name}"
+                        print(f"AUTO_CONVERT_OK: {best.name}")
+                        break
+                if layout_image_path:
+                    break
+
+        # 3. Fallback to LibreOffice (known to lose curves, but better than nothing)
+        if not layout_image_path:
+            print(f"FALLBACK: LibreOffice (may lose curves)")
             layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
             if not layout_image_path:
                 layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
