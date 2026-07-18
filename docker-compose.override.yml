@@ -14,4 +14,6 @@ services:
       - "8000:8000"
     volumes:
       - ./app:/app/app
+      - ./data/uploads:/app/data/uploads
+      - ./data/images:/app/data/images
     restart: "no"

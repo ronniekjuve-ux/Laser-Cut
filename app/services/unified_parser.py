@@ -734,22 +734,33 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft:
             # Собираем ВСЕ изображения из tmpdir
             all_images = {}
             html_name = Path(filepath).stem
-            img_dir = Path(tmpdir) / f"{html_name}_files"
-            if img_dir.exists():
-                for img_file in img_dir.iterdir():
-                    if img_file.is_file() and img_file.suffix.lower() in IMG_EXTS:
-                        all_images[img_file.name] = img_file
+
+            # 1. Ищем в ВСЕХ папках *_files (LibreOffice может создавать разные имена)
+            for img_dir in Path(tmpdir).glob("*_files"):
+                if img_dir.is_dir():
+                    for img_file in img_dir.iterdir():
+                        if img_file.is_file() and img_file.suffix.lower() in IMG_EXTS:
+                            all_images[img_file.name] = img_file
+                            print(f"DEBUG extract_images: found in _files: {img_file.name}", flush=True)
+
+            # 2. Ищем в корне tmpdir (LibreOffice может класть GIF рядом с HTML)
             for img_file in Path(tmpdir).iterdir():
+                print(f"DEBUG extract_images: checking {img_file.name}, is_file={img_file.is_file()}, ext={img_file.suffix.lower()}", flush=True)
                 if img_file.is_file() and img_file.suffix.lower() in IMG_EXTS:
                     if img_file.name not in all_images:
                         all_images[img_file.name] = img_file
+                        print(f"DEBUG extract_images: found in root: {img_file.name}", flush=True)
+            print(f"DEBUG extract_images: all_images keys = {list(all_images.keys())}", flush=True)
 
             # Для каждого <img> в HTML
             for m in re.finditer(r'<img[^>]+src=["\']([^"\']+)', html_text):
                 img_ref = unquote(m.group(1)).split('/')[-1]
+                print(f"DEBUG extract_images: img_ref={img_ref}, looking in all_images", flush=True)
                 src = all_images.get(img_ref)
                 if not src:
+                    print(f"DEBUG extract_images: NOT FOUND: {img_ref}", flush=True)
                     continue
+                print(f"DEBUG extract_images: FOUND: {img_ref} -> {src}", flush=True)
 
                 if filter_dft:
                     img_pos = m.start()
