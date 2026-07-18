@@ -154,6 +154,7 @@ export default function ApplicationsList() {
   const [filterSearch, setFilterSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [groupDetailId, setGroupDetailId] = useState(null);
+  const [groupDetailBeforeApp, setGroupDetailBeforeApp] = useState(null);
   const [selectedApps, setSelectedApps] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [editModal, setEditModal] = useState(null);
@@ -703,7 +704,13 @@ export default function ApplicationsList() {
       {selectedApp && !isRealMobile && (
         <ApplicationDetail
           app={selectedApp}
-          onClose={() => setSelectedApp(null)}
+          onClose={() => {
+            setSelectedApp(null);
+            if (groupDetailBeforeApp) {
+              setGroupDetailId(groupDetailBeforeApp);
+              setGroupDetailBeforeApp(null);
+            }
+          }}
           onUpdate={fetchApplications}
         />
       )}
@@ -792,6 +799,12 @@ export default function ApplicationsList() {
           groupId={groupDetailId}
           onClose={() => setGroupDetailId(null)}
           onRefresh={() => fetchApplications(search || undefined)}
+          onOpenApp={(app) => {
+            console.log('onOpenApp called:', app);
+            setGroupDetailBeforeApp(groupDetailId);
+            setGroupDetailId(null);
+            setSelectedApp(app);
+          }}
         />
       )}
 

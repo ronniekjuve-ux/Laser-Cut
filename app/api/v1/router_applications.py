@@ -188,12 +188,36 @@ async def upload_layout(
         text = extract_text(file_path)
         layout_data = parse_layout_text(text, file.filename)
 
-        # === Извлечение изображения раскладки (высокое качество DOC→PDF→PNG) ===
-        layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+        # === Wait for Word conversion ===
+        import asyncio
+        layout_image_path = None
+        saved_name = Path(file_path).stem.replace(" ", "_").replace(".", "_")
+
+        print(f"WORD_WAIT: saved_name={saved_name}", flush=True)
+
+        for wait in range(10):
+            await asyncio.sleep(1)
+            for ext in ['gif', 'png', 'jpg']:
+                pattern = f"{saved_name}_*.{ext}"
+                word_images = list(IMAGE_DIR.glob(pattern))
+                if wait == 0:
+                    print(f"WORD_WAIT: pattern={pattern} found={len(word_images)}", flush=True)
+                    for w in word_images:
+                        print(f"WORD_WAIT: file={w.name} size={w.stat().st_size}", flush=True)
+                if word_images:
+                    best = max(word_images, key=lambda f: f.stat().st_size)
+                    layout_image_path = f"/api/v1/images/{best.name}"
+                    print(f"WORD_OK: {best.name}", flush=True)
+                    break
+            if layout_image_path:
+                break
+
         if not layout_image_path:
-            # Fallback на старый метод (HTML)
-            layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
-            layout_image_path = layout_images[0] if layout_images else None
+            print(f"WORD_FALLBACK: using LibreOffice")
+            layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+            if not layout_image_path:
+                layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+                layout_image_path = layout_images[0] if layout_images else None
 
         # === Ищем файл заявки (для весов и чистых имен) ===
         print(f"\n🔍 Ищем файл заявки: {app.order_name}*.doc")
@@ -1491,6 +1515,7 @@ async def get_group_details(
     apps_data = []
     total_weight = 0
     total_parts = 0
+    total_types = 0
     for app in apps:
         cust_result = await db.execute(select(Customer).where(Customer.id == app.customer_id))
         cust = cust_result.scalar_one_or_none()
@@ -1514,7 +1539,23 @@ async def get_group_details(
 
         if app.total_weight:
             total_weight += app.total_weight
-        total_parts += app.total_parts_count or 0
+
+        # Total parts = ordered or placed count (total quantity, not unique types)
+        app_total_parts = app.ordered_parts_count or app.placed_parts_count or 0
+        # If still 0, sum from layout parts
+        if app_total_parts == 0:
+            for l in active_layouts:
+                parts_result = await db.execute(
+                    select(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == l.id)
+                )
+                layout_parts = parts_result.scalars().all()
+                app_total_parts += sum(p.quantity for p in layout_parts)
+
+        # Unique types from total_parts_count
+        app_types_count = app.total_parts_count or 0
+
+        total_parts += app_total_parts
+        total_types += app_types_count
 
         apps_data.append({
             "id": app.id,
@@ -1524,7 +1565,8 @@ async def get_group_details(
             "thickness": app.thickness,
             "status": app.status,
             "machine": machine,
-            "total_parts": app.total_parts_count,
+            "total_parts": app_total_parts,
+            "types_count": app_types_count,
             "total_weight": app.total_weight,
             "layouts_count": len(active_layouts),
             "progress_pct": pct,
@@ -1541,6 +1583,7 @@ async def get_group_details(
             "total_apps": len(apps_data),
             "total_weight": total_weight,
             "total_parts": total_parts,
+            "total_types": total_types,
         }
     }
 

@@ -90,8 +90,10 @@ export default function OrdersList({ initialTab }) {
   const [filterSearch, setFilterSearch] = useState('');
   const [page, setPage] = useState(1);
   const [statusDropdown, setStatusDropdown] = useState(null);
+  const [statusDropdownPos, setStatusDropdownPos] = useState({ top: 0, left: 0 });
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [groupDetailId, setGroupDetailId] = useState(null);
+  const [groupDetailBeforeApp, setGroupDetailBeforeApp] = useState(null);
   const [selectedApps, setSelectedApps] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [editModal, setEditModal] = useState(null);
@@ -575,7 +577,13 @@ export default function OrdersList({ initialTab }) {
                                   )}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setStatusDropdown(statusDropdown === app.id ? null : app.id);
+                                    if (statusDropdown === app.id) {
+                                      setStatusDropdown(null);
+                                    } else {
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setStatusDropdownPos({ top: rect.bottom + 4, left: rect.left });
+                                      setStatusDropdown(app.id);
+                                    }
                                   }}
                                   style={{ cursor: 'pointer' }}
                                 >
@@ -586,9 +594,9 @@ export default function OrdersList({ initialTab }) {
                                 {statusDropdown === app.id && (
                                   <div
                                     style={{
-                                      position: 'absolute', top: '100%', left: 0, zIndex: 9999,
+                                      position: 'fixed', top: statusDropdownPos.top, left: statusDropdownPos.left, zIndex: 9999,
                                       background: '#fff', border: '1px solid var(--border)', borderRadius: 6,
-                                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 160, marginTop: 4,
+                                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 160,
                                     }}
                                   >
                                     {[
@@ -858,7 +866,13 @@ export default function OrdersList({ initialTab }) {
       {selectedApp && !isMobile && (
         <ApplicationDetail
           app={selectedApp}
-          onClose={() => setSelectedApp(null)}
+          onClose={() => {
+            setSelectedApp(null);
+            if (groupDetailBeforeApp) {
+              setGroupDetailId(groupDetailBeforeApp);
+              setGroupDetailBeforeApp(null);
+            }
+          }}
           onUpdate={() => fetchOrders()}
         />
       )}
@@ -892,6 +906,11 @@ export default function OrdersList({ initialTab }) {
           groupId={groupDetailId}
           onClose={() => setGroupDetailId(null)}
           onRefresh={() => fetchOrders()}
+          onOpenApp={(app) => {
+            setGroupDetailBeforeApp(groupDetailId);
+            setGroupDetailId(null);
+            setSelectedApp(app);
+          }}
         />
       )}
 

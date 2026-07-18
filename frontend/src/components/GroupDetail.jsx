@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import client from '../api/client';
 import ConfirmModal from './ConfirmModal';
 
-export default function GroupDetail({ groupId, onClose, onRefresh }) {
+export default function GroupDetail({ groupId, onClose, onRefresh, onOpenApp }) {
   const [group, setGroup] = useState(null);
   const [loading, setLoading] = useState(true);
   const [confirmRemove, setConfirmRemove] = useState(null);
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(false);
+  const [selectedAppId, setSelectedAppId] = useState(null);
 
   const fetchGroup = async () => {
     try {
@@ -54,6 +55,13 @@ export default function GroupDetail({ groupId, onClose, onRefresh }) {
     }
   };
 
+  const handleOpenApp = (appId) => {
+    console.log('CLICKED APP:', appId, 'onOpenApp:', !!onOpenApp);
+    if (onOpenApp) {
+      onOpenApp({ id: appId });
+    }
+  };
+
   if (loading) return (
     <div className="modal-overlay active" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -86,6 +94,7 @@ export default function GroupDetail({ groupId, onClose, onRefresh }) {
             <div><span style={{fontWeight: 600}}>Заявок:</span> {summary.total_apps}</div>
             <div><span style={{fontWeight: 600}}>Вес:</span> {summary.total_weight ? summary.total_weight.toFixed(1) + ' кг' : '-'}</div>
             <div><span style={{fontWeight: 600}}>Деталей:</span> {summary.total_parts}</div>
+            <div><span style={{fontWeight: 600}}>Видов:</span> {summary.total_types}</div>
           </div>
 
           <div style={{maxHeight: 400, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6}}>
@@ -104,7 +113,12 @@ export default function GroupDetail({ groupId, onClose, onRefresh }) {
               </thead>
               <tbody>
                 {apps.map(app => (
-                  <tr key={app.id} style={{background: '#fff'}}>
+                  <tr key={app.id}
+                    style={{background: '#fff', cursor: 'pointer'}}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleOpenApp(app.id); }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                  >
                     <td style={{padding: '6px 8px', borderBottom: '1px solid var(--border)', fontWeight: 600, color: '#64748b'}}>
                       #{app.id}
                     </td>
@@ -135,7 +149,7 @@ export default function GroupDetail({ groupId, onClose, onRefresh }) {
                     </td>
                     <td style={{padding: '6px 8px', borderBottom: '1px solid var(--border)'}}>
                       <button
-                        onClick={() => setConfirmRemove(app.id)}
+                        onClick={(e) => { e.stopPropagation(); setConfirmRemove(app.id); }}
                         style={{border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 11}}
                       >
                         Убрать
