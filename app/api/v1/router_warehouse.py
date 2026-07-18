@@ -76,7 +76,7 @@ def _generate_article(metal: str, grade: str | None, w: float | None, h: float |
 @router.get("/")
 async def list_warehouse(
         db: AsyncSession = Depends(get_db),
-        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR, UserRole.ACCOUNTANT))
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR, UserRole.ACCOUNTANT, UserRole.CUSTOMER))
 ):
     # Get customer filter for customer-role users
     wh_customer_ids = await get_customer_ids(user, db)
@@ -144,9 +144,17 @@ async def get_warehouse_balance(
         sheet_w: float = None,
         sheet_h: float = None,
         db: AsyncSession = Depends(get_db),
-        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR, UserRole.ACCOUNTANT))
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR, UserRole.ACCOUNTANT, UserRole.CUSTOMER))
 ):
+    wh_customer_ids = await get_customer_ids(user, db)
     query = select(WarehouseItem)
+    if wh_customer_ids is not None:
+        cust_result = await db.execute(select(Customer.name).where(Customer.id.in_(wh_customer_ids)))
+        cust_names = [r[0] for r in cust_result.all()]
+        if cust_names:
+            query = query.where(WarehouseItem.owner.in_(cust_names))
+        else:
+            return []
     if metal:
         query = query.where(WarehouseItem.metal.ilike(f"%{metal}%"))
     if grade:
@@ -1175,7 +1183,7 @@ async def deficit_analysis(
         standard_w: float = 1500,
         standard_h: float = 6000,
         db: AsyncSession = Depends(get_db),
-        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR, UserRole.ACCOUNTANT))
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR, UserRole.ACCOUNTANT, UserRole.CUSTOMER))
 ):
     """Анализ дефицита: потребность заказов vs наличие на складе"""
     standard_area = standard_w * standard_h
@@ -1215,7 +1223,7 @@ async def deficit_analysis(
         if key not in demand:
             demand[key] = {"total_area": 0, "total_sheets": 0, "by_customer": {}}
         if cust_name not in demand[key]["by_customer"]:
-            demand[key]["by_customer"][cust_name] = {"area": 0, "sheets": 0}
+            demand[key]["by_customer"][cust_name] = {"area": 0, "sheets": 0, "layouts": []}
 
         for layout in layouts:
             area = (layout.sheet_w or 0) * (layout.sheet_h or 0) * (layout.sheet_count or 1)
@@ -1223,12 +1231,28 @@ async def deficit_analysis(
             demand[key]["by_customer"][cust_name]["area"] += area
             demand[key]["total_sheets"] += layout.sheet_count or 1
             demand[key]["by_customer"][cust_name]["sheets"] += layout.sheet_count or 1
+            demand[key]["by_customer"][cust_name]["layouts"].append({
+                "app_id": app.id,
+                "order_name": app.order_name,
+                "sheet_w": layout.sheet_w,
+                "sheet_h": layout.sheet_h,
+                "sheet_count": layout.sheet_count or 1,
+                "machine_type": layout.machine_type or "",
+                "layout_code": layout.layout_code or "",
+            })
 
     # 3. Warehouse stock grouped by (grade, thickness)
-    stock_result = await db.execute(
-        select(WarehouseItem).where(WarehouseItem.sheet_count > 0)
-    )
-    stock_items = stock_result.scalars().all()
+    stock_query = select(WarehouseItem).where(WarehouseItem.sheet_count > 0)
+    if da_customer_ids is not None:
+        # Filter stock by owner name matching customer names
+        cust_result = await db.execute(select(Customer.name).where(Customer.id.in_(da_customer_ids)))
+        cust_names = [r[0] for r in cust_result.all()]
+        if cust_names:
+            stock_query = stock_query.where(WarehouseItem.owner.in_(cust_names))
+        else:
+            stock_items = []
+    stock_result = await db.execute(stock_query) if da_customer_ids is None or cust_names else None
+    stock_items = stock_result.scalars().all() if stock_result else []
 
     stock = {}  # key: (grade, thickness) -> {total_sheets, total_area, by_customer: {name: sheets, articles}}
     for item in stock_items:
@@ -1242,7 +1266,7 @@ async def deficit_analysis(
         if key not in stock:
             stock[key] = {"total_sheets": 0, "total_area": 0, "by_customer": {}}
         if cust_name not in stock[key]["by_customer"]:
-            stock[key]["by_customer"][cust_name] = {"sheets": 0, "area": 0, "articles": []}
+            stock[key]["by_customer"][cust_name] = {"sheets": 0, "area": 0, "articles": [], "items": []}
 
         stock[key]["total_sheets"] += sheets
         stock[key]["total_area"] += area
@@ -1250,6 +1274,19 @@ async def deficit_analysis(
         stock[key]["by_customer"][cust_name]["area"] += area
         if item.article:
             stock[key]["by_customer"][cust_name]["articles"].append(item.article)
+        stock[key]["by_customer"][cust_name]["items"].append({
+            "id": item.id,
+            "article": item.article or "",
+            "metal": item.metal or "",
+            "grade": item.grade or "",
+            "thickness": item.thickness,
+            "sheet_w": item.sheet_w,
+            "sheet_h": item.sheet_h,
+            "sheet_count": item.sheet_count or 0,
+            "vertices": item.vertices,
+            "owner": item.owner,
+            "note": item.note,
+        })
 
     # 4. Build deficit table
     all_keys = sorted(set(list(demand.keys()) + list(stock.keys())), key=lambda k: (k[0], k[1] or 0))
@@ -1271,10 +1308,10 @@ async def deficit_analysis(
             "thickness": thickness,
             "demand_area": d["total_area"],
             "demand_sheets_std": round(d_sheets_std, 1),
-            "demand_by_customer": {k: {"area": v["area"], "sheets_std": round(v["area"] / standard_area, 1) if standard_area > 0 else 0} for k, v in d["by_customer"].items()},
+            "demand_by_customer": {k: {"area": v["area"], "sheets_std": round(v["area"] / standard_area, 1) if standard_area > 0 else 0, "layouts": v.get("layouts", [])} for k, v in d["by_customer"].items()},
             "stock_sheets": s["total_sheets"],
             "stock_area": s["total_area"],
-            "stock_by_customer": {k: {"sheets": v["sheets"], "area": v["area"], "articles": v.get("articles", [])} for k, v in s["by_customer"].items()},
+            "stock_by_customer": {k: {"sheets": v["sheets"], "area": v["area"], "articles": v.get("articles", []), "items": v.get("items", [])} for k, v in s["by_customer"].items()},
             "deficit_sheets": round(deficit_sheets, 1),
         })
 
@@ -1293,7 +1330,7 @@ async def deficit_export(
         thickness: str = None,
         customer_filter: str = Query(None, alias="customer"),
         db: AsyncSession = Depends(get_db),
-        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR, UserRole.ACCOUNTANT))
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR, UserRole.ACCOUNTANT, UserRole.CUSTOMER))
 ):
     """Экспорт дефицита в Excel"""
     from app.services.exporters import style_header
