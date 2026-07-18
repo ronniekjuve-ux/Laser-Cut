@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 export default function Deficit() {
+  const { user } = useAuth();
+  const isCustomer = user?.role === 'customer';
+  const myCustomerNames = user?.customer_names || [];
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [stdW, setStdW] = useState(1500);
@@ -9,6 +13,8 @@ export default function Deficit() {
   const [appliedW, setAppliedW] = useState(1500);
   const [appliedH, setAppliedH] = useState(6000);
   const [modalRow, setModalRow] = useState(null);
+  const [expandedOrder, setExpandedOrder] = useState(null);
+  const [selectedArticle, setSelectedArticle] = useState(null);
   const [filterGrade, setFilterGrade] = useState([]);
   const [filterThickness, setFilterThickness] = useState([]);
   const [filterCustomer, setFilterCustomer] = useState([]);
@@ -23,6 +29,13 @@ export default function Deficit() {
   }, [appliedW, appliedH]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Auto-set customer filter for customer-role users
+  useEffect(() => {
+    if (isCustomer && myCustomerNames.length > 0 && filterCustomer.length === 0) {
+      setFilterCustomer(myCustomerNames);
+    }
+  }, [isCustomer, myCustomerNames]);
 
   const applySize = () => {
     setAppliedW(stdW);
@@ -106,24 +119,28 @@ export default function Deficit() {
         {(stdW !== appliedW || stdH !== appliedH) && (
           <button className="btn btn-primary" onClick={applySize} style={{ padding: '2px 8px', fontSize: 11 }}>Применить</button>
         )}
-        <span style={{ fontSize: 12, color: '#64748b', marginLeft: 12 }}>Заказчик:</span>
-        <div style={{ position: 'relative' }}>
-          <span onClick={(e) => { e.stopPropagation(); setShowFilter(showFilter === 'customer' ? null : 'customer'); }}
-            style={{ cursor: 'pointer', fontSize: 12, padding: '2px 8px', border: '1px solid var(--border)', borderRadius: 3, background: hasCF ? '#dbeafe' : '#fff' }}>
-            {hasCF ? (filterCustomer.length <= 2 ? filterCustomer.join(', ') : `${filterCustomer[0]} +${filterCustomer.length - 1}`) : 'Все'} ▾
-          </span>
-          {showFilter === 'customer' && (
-            <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 160, maxHeight: 200, overflowY: 'auto', padding: 4 }}>
-              {allCustomers.map(c => (
-                <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, background: filterCustomer.includes(c) ? '#eff6ff' : 'transparent' }}>
-                  <input type="checkbox" checked={filterCustomer.includes(c)} onChange={() => toggleFilter(setFilterCustomer, c)} style={{ margin: 0 }} />
-                  {c}
-                </label>
-              ))}
-              {hasCF && <div onClick={() => setFilterCustomer([])} style={{ padding: '2px 6px', fontSize: 10, color: '#ef4444', cursor: 'pointer', borderTop: '1px solid var(--border)', marginTop: 2, textAlign: 'center' }}>Сбросить</div>}
+        {!isCustomer && (
+          <>
+            <span style={{ fontSize: 12, color: '#64748b', marginLeft: 12 }}>Заказчик:</span>
+            <div style={{ position: 'relative' }}>
+              <span onClick={(e) => { e.stopPropagation(); setShowFilter(showFilter === 'customer' ? null : 'customer'); }}
+                style={{ cursor: 'pointer', fontSize: 12, padding: '2px 8px', border: '1px solid var(--border)', borderRadius: 3, background: hasCF ? '#dbeafe' : '#fff' }}>
+                {hasCF ? (filterCustomer.length <= 2 ? filterCustomer.join(', ') : `${filterCustomer[0]} +${filterCustomer.length - 1}`) : 'Все'} ▾
+              </span>
+              {showFilter === 'customer' && (
+                <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 160, maxHeight: 200, overflowY: 'auto', padding: 4 }}>
+                  {allCustomers.map(c => (
+                    <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, background: filterCustomer.includes(c) ? '#eff6ff' : 'transparent' }}>
+                      <input type="checkbox" checked={filterCustomer.includes(c)} onChange={() => toggleFilter(setFilterCustomer, c)} style={{ margin: 0 }} />
+                      {c}
+                    </label>
+                  ))}
+                  {hasCF && <div onClick={() => setFilterCustomer([])} style={{ padding: '2px 6px', fontSize: 10, color: '#ef4444', cursor: 'pointer', borderTop: '1px solid var(--border)', marginTop: 2, textAlign: 'center' }}>Сбросить</div>}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
         <button className="btn" onClick={exportExcel} style={{ marginLeft: 'auto', padding: '3px 10px', fontSize: 11 }}>📥 Excel</button>
       </div>
 
@@ -201,13 +218,12 @@ export default function Deficit() {
         const sCusts = hasCF
           ? Object.entries(row.stock_by_customer || {}).filter(([n]) => filterCustomer.includes(n))
           : Object.entries(row.stock_by_customer || {});
-        const allArticles = sCusts.flatMap(([, v]) => v.articles || []);
         return (
-          <div className="modal-overlay active" onClick={() => setModalRow(null)}>
+          <div className="modal-overlay active" onClick={() => { setModalRow(null); setExpandedOrder(null); setSelectedArticle(null); }}>
             <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
               <div className="modal-header">
                 <h3 style={{ fontSize: 14 }}>{row.grade || '—'} {row.thickness ? `${row.thickness}мм` : ''}</h3>
-                <button className="close-btn" onClick={() => setModalRow(null)}>✕</button>
+                <button className="close-btn" onClick={() => { setModalRow(null); setExpandedOrder(null); setSelectedArticle(null); }}>✕</button>
               </div>
               <div className="modal-body">
                 <div style={{ display: 'flex', gap: 16 }}>
@@ -217,9 +233,27 @@ export default function Deficit() {
                     {dCusts.length === 0 ? (
                       <div style={{ color: '#9ca3b8', fontSize: 12 }}>Нет активных заказов</div>
                     ) : dCusts.map(([name, v]) => (
-                      <div key={name} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #e0edff', fontSize: 12 }}>
-                        <span>{name}</span>
-                        <span style={{ color: '#64748b', whiteSpace: 'nowrap', marginLeft: 8 }}>{v.sheets_std} л · {(v.area / 1000000).toFixed(1)} м²</span>
+                      <div key={name} style={{ borderBottom: '1px solid #e0edff' }}>
+                        <div
+                          onClick={() => setExpandedOrder(expandedOrder === name ? null : name)}
+                          style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', cursor: 'pointer', fontSize: 12 }}
+                        >
+                          <span>{name}</span>
+                          <span style={{ color: '#64748b', whiteSpace: 'nowrap', marginLeft: 8 }}>{v.sheets_std} л · {(v.area / 1000000).toFixed(1)} м² {v.layouts && v.layouts.length > 0 ? '▾' : ''}</span>
+                        </div>
+                        {expandedOrder === name && v.layouts && v.layouts.length > 0 && (
+                          <div style={{ padding: '4px 0 4px 12px', fontSize: 11, color: '#64748b' }}>
+                            {v.layouts.map((l, i) => {
+                              const area = ((l.sheet_w || 0) * (l.sheet_h || 0) / 1000000).toFixed(2);
+                              const code = l.layout_code || '001';
+                              return (
+                                <div key={i} style={{ padding: '2px 0' }}>
+                                  #{l.order_name}.{code}, {l.sheet_w}×{l.sheet_h}, {area}м², {l.sheet_count} лист
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     ))}
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontWeight: 700, fontSize: 13, borderTop: '2px solid #bfdbfe', marginTop: 4 }}>
@@ -240,20 +274,49 @@ export default function Deficit() {
                         </div>
                         {v.articles && v.articles.length > 0 && (
                           <div style={{ fontSize: 10, color: '#6366f1', fontFamily: 'monospace', marginTop: 2 }}>
-                            {v.articles.join(', ')}
+                            {v.articles.map((art, i) => (
+                              <span
+                                key={i}
+                                onClick={(e) => { e.stopPropagation(); setSelectedArticle(selectedArticle === art ? null : art); }}
+                                style={{ cursor: 'pointer', background: selectedArticle === art ? '#e0e7ff' : 'transparent', padding: '0 2px', borderRadius: 2 }}
+                              >
+                                {i > 0 ? ', ' : ''}{art}
+                              </span>
+                            ))}
                           </div>
                         )}
+                        {selectedArticle && v.items && v.items.filter(it => it.article === selectedArticle).map((it, i) => {
+                          const W = it.sheet_w || 0, H = it.sheet_h || 0;
+                          const vertices = it.vertices;
+                          const scale = Math.min(80 / Math.max(W, 1), 150 / Math.max(H, 1));
+                          const svgW = W * scale, svgH = H * scale;
+                          const polyPoints = vertices && vertices.length >= 3
+                            ? vertices.map(v => `${v[0] * scale},${v[1] * scale}`).join(' ')
+                            : null;
+                          const area = (W * H / 1000000).toFixed(2);
+                          return (
+                            <div key={i} style={{ marginTop: 4, padding: 6, background: '#f0fdf4', borderRadius: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
+                              <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ border: '1.5px solid #333', background: '#f8f8f8', flexShrink: 0 }}>
+                                {polyPoints ? (
+                                  <polygon points={polyPoints} fill="#dcfce7" fillOpacity="0.5" stroke="#333" strokeWidth="1.5" />
+                                ) : (
+                                  <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="1.5" />
+                                )}
+                              </svg>
+                              <div style={{ fontSize: 11, lineHeight: 1.6 }}>
+                                <div style={{ fontWeight: 600, fontFamily: 'monospace' }}>{it.article}</div>
+                                <div>{W}×{H} мм · {area} м²</div>
+                                <div>{it.sheet_count} лист</div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     ))}
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontWeight: 700, fontSize: 13, borderTop: '2px solid #bbf7d0', marginTop: 4 }}>
                       <span>Итого</span>
                       <span>{sS} л · {(sA / 1000000).toFixed(1)} м²</span>
                     </div>
-                    {allArticles.length > 0 && (
-                      <div style={{ fontSize: 10, color: '#6366f1', fontFamily: 'monospace', marginTop: 4 }}>
-                        Артикулы: {allArticles.join(', ')}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
