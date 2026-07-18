@@ -8,51 +8,100 @@ import WarehouseReturnModal from './WarehouseReturnModal';
 import WarehouseMovementHistory from './WarehouseMovementHistory';
 import RemnantEditor from './RemnantEditor';
 
+function polyEdgeLengths(vertices) {
+  if (!vertices || vertices.length < 2) return [];
+  const edges = [];
+  for (let i = 0; i < vertices.length; i++) {
+    const a = vertices[i], b = vertices[(i + 1) % vertices.length];
+    const len = Math.round(Math.sqrt((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2));
+    if (len > 0) edges.push(len);
+  }
+  return edges;
+}
+
+function EdgeLabels({ vertices, scale, offset = -12, fontSize = 10 }) {
+  if (!vertices || vertices.length < 2) return null;
+  return vertices.map((v, i) => {
+    const a = vertices[i], b = vertices[(i + 1) % vertices.length];
+    const len = Math.round(Math.sqrt((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2));
+    if (len === 0) return null;
+    const mx = (a[0] + b[0]) / 2 * scale;
+    const my = (a[1] + b[1]) / 2 * scale;
+    const angle = Math.atan2((b[1] - a[1]) * scale, (b[0] - a[0]) * scale) * 180 / Math.PI;
+    // Normal direction (perpendicular to edge, pointing outward)
+    const dx = (b[0] - a[0]) * scale, dy = (b[1] - a[1]) * scale;
+    const lenPx = Math.sqrt(dx * dx + dy * dy);
+    const nx = -dy / lenPx * offset, ny = dx / lenPx * offset;
+    const rot = angle > 90 || angle < -90 ? angle + 180 : angle;
+    return (
+      <text key={i} x={mx + nx} y={my + ny} textAnchor="middle" dominantBaseline="middle"
+        fontSize={fontSize} fill="#dc2626" fontWeight="600"
+        transform={`rotate(${rot}, ${mx + nx}, ${my + ny})`}
+        style={{ pointerEvents: 'none' }}>
+        {len}
+      </text>
+    );
+  });
+}
+
 function SheetPreview({ item, onClose }) {
   if (!item || !item.sheet_w || !item.sheet_h) return null;
   const W = item.sheet_w, H = item.sheet_h;
-  const vertices = item.vertices;
+  let vertices = item.vertices;
+  // Parse vertices if they're a string
+  if (typeof vertices === 'string') {
+    try { vertices = JSON.parse(vertices); } catch { vertices = null; }
+  }
+  const isPoly = vertices && Array.isArray(vertices) && vertices.length >= 3;
+  const edges = isPoly ? polyEdgeLengths(vertices) : [];
+  const isRect = edges.length === 4;
   const scale = Math.min(120 / W, 300 / H);
   const svgW = W * scale, svgH = H * scale;
-  const polyPoints = vertices && vertices.length >= 3
+  const polyPoints = isPoly
     ? vertices.map(v => `${v[0] * scale},${v[1] * scale}`).join(' ')
     : null;
   const area = item.area ? (item.area / 1000000).toFixed(2) : (W * H / 1000000).toFixed(2);
   const weight = item.weight ? parseFloat(item.weight).toFixed(1) : null;
   return (
     <div className="modal-overlay active" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, padding: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 900, width: '90vw', height: '75vh', padding: 16, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexShrink: 0 }}>
           <strong style={{ fontSize: 13 }}>{item.article || `#${item.id}`} — {item.metal} {item.grade || ''} {item.thickness ? item.thickness + 'мм' : ''}</strong>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8 }}>
-          <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ border: '2px solid #333', background: '#f8f8f8', flexShrink: 0 }}>
-            {Array.from({ length: Math.floor(W / 500) + 1 }, (_, i) => (
-              <line key={`v${i}`} x1={i * 500 * scale} y1={0} x2={i * 500 * scale} y2={svgH} stroke="#e5e7eb" strokeWidth="0.5" />
-            ))}
-            {Array.from({ length: Math.floor(H / 500) + 1 }, (_, i) => (
-              <line key={`h${i}`} x1={0} y1={i * 500 * scale} x2={svgW} y2={i * 500 * scale} stroke="#e5e7eb" strokeWidth="0.5" />
-            ))}
-            {polyPoints ? (
-              <>
-                <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#e5e7eb" strokeWidth="1" />
-                <polygon points={polyPoints} fill="#dcfce7" fillOpacity="0.5" stroke="#333" strokeWidth="2" />
-              </>
-            ) : (
-              <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="2" />
-            )}
-          </svg>
-          <div style={{ fontSize: 12, lineHeight: 1.8, color: '#333', whiteSpace: 'nowrap' }}>
-            <div><strong>{W}x{H}</strong> мм</div>
-            <div>{area} м²</div>
-            <div>{item.sheet_count} лист(ов)</div>
-            {weight && <div>{weight} кг</div>}
+        <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
+            <svg viewBox={`0 0 ${svgW} ${svgH}`} preserveAspectRatio="xMidYMid meet"
+              style={{ width: '100%', height: '100%', border: '2px solid #333', background: '#f8f8f8', maxHeight: 'calc(75vh - 100px)' }}>
+              {Array.from({ length: Math.floor(W / 500) + 1 }, (_, i) => (
+                <line key={`v${i}`} x1={i * 500 * scale} y1={0} x2={i * 500 * scale} y2={svgH} stroke="#e5e7eb" strokeWidth="0.5" />
+              ))}
+              {Array.from({ length: Math.floor(H / 500) + 1 }, (_, i) => (
+                <line key={`h${i}`} x1={0} y1={i * 500 * scale} x2={svgW} y2={i * 500 * scale} stroke="#e5e7eb" strokeWidth="0.5" />
+              ))}
+              {polyPoints ? (
+                <>
+                  <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#e5e7eb" strokeWidth="1" />
+                  <polygon points={polyPoints} fill="#dcfce7" fillOpacity="0.5" stroke="#333" strokeWidth="2" />
+                  <EdgeLabels vertices={vertices} scale={scale} />
+                </>
+              ) : (
+                <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="2" />
+              )}
+            </svg>
           </div>
-        </div>
-        <div style={{ fontSize: 12, color: '#64748b' }}>
-          {item.owner && <div>Владелец: {item.owner}</div>}
-          {item.note && <div>Примечание: {item.note}</div>}
+          <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
+            <div style={{ fontSize: 13, lineHeight: 1.8, color: '#333' }}>
+              <div><strong>{W}x{H}</strong> мм</div>
+              <div>{area} м²</div>
+              <div>{item.sheet_count} лист(ов)</div>
+              {weight && <div>{weight} кг</div>}
+            </div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 'auto' }}>
+              {item.owner && <div>Владелец: {item.owner}</div>}
+              {item.note && <div>Примечание: {item.note}</div>}
+            </div>
+          </div>
         </div>
       </div>
     </div>
