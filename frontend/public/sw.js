@@ -1,4 +1,4 @@
-const CACHE_VERSION = '2026-07-19-v1';
+const CACHE_VERSION = '2026-07-19-v2';
 const CACHE_NAME = `lasercut-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/',
@@ -48,7 +48,7 @@ self.addEventListener('fetch', event => {
         });
         return response;
       }).catch(() => {
-        return caches.match(event.request);
+        return caches.match(event.request).then(r => r || new Response('Offline', { status: 503 }));
       })
     );
     return;
@@ -67,7 +67,7 @@ self.addEventListener('fetch', event => {
         }
         return response;
       }).catch(() => {
-        return caches.match(event.request);
+        return caches.match(event.request).then(r => r || new Response('Offline', { status: 503 }));
       })
     );
     return;
@@ -86,7 +86,7 @@ self.addEventListener('fetch', event => {
             });
           }
           return fetchResponse;
-        }).catch(() => caches.match(event.request));
+        }).catch(() => new Response('Offline', { status: 503 }));
       })
     );
   }
