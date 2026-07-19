@@ -144,6 +144,7 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
     const runs = Array.isArray(currentLayout.completed_runs) ? currentLayout.completed_runs : [];
     const doneCount = runs.filter(Boolean).length;
     const layoutTotal = currentLayout.sheet_count || 1;
+    const isDisabled = currentLayout.replaced || currentLayout.status === 'merge_cancelled';
 
     return (
       <div className="modal-overlay active" onClick={() => setActiveLayout(null)}>
@@ -478,11 +479,14 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
                         <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                           {Array.from({ length: layoutTotal }, (_, i) => {
                             const done = runs[i] || false;
+                            const bindings = layout.warehouse_bindings || {};
+                            const hasBinding = bindings[i] != null;
                             return (
                               <div key={i} style={{
                                 width: 18, height: 18, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: 9, fontWeight: 600, background: done ? '#22c55e' : '#e2e8f0',
-                                color: done ? '#fff' : '#64748b',
+                                fontSize: 9, fontWeight: 600,
+                                background: done ? '#22c55e' : hasBinding ? '#3b82f6' : '#e2e8f0',
+                                color: done || hasBinding ? '#fff' : '#64748b',
                               }}>
                                 {i + 1}
                               </div>

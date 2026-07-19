@@ -1,4 +1,4 @@
-const CACHE_VERSION = '2026-07-19-v2';
+const CACHE_VERSION = '2026-07-19-v3';
 const CACHE_NAME = `lasercut-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/',
@@ -73,8 +73,8 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Cache-first for other static assets (images, icons, fonts)
-  if (event.request.method === 'GET') {
+  // Cache-first for other static assets (images, icons, fonts) — skip navigation
+  if (event.request.method === 'GET' && event.request.mode !== 'navigate') {
     event.respondWith(
       caches.match(event.request).then(response => {
         if (response) return response;

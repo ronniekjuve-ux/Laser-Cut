@@ -744,9 +744,13 @@ export default function OrdersList({ initialTab }) {
                             </button>
                           ) : col.key === 'actions' ? (
                             <div style={{ display: 'flex', gap: 4 }}>
-                              <button className="btn" onClick={(e) => { e.stopPropagation(); setReuploadModal(app); }} title="Перезагрузить файлы" style={{ padding: '4px 8px', fontSize: 11 }}>📤</button>
-                              <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{ padding: '4px 8px', fontSize: 11 }}>✏️</button>
-                              <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{ padding: '4px 8px', fontSize: 11 }}>🗑️</button>
+                              {(user?.role === 'admin' || user?.role === 'director') && (
+                                <>
+                                  <button className="btn" onClick={(e) => { e.stopPropagation(); setReuploadModal(app); }} title="Перезагрузить файлы" style={{ padding: '4px 8px', fontSize: 11 }}>📤</button>
+                                  <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{ padding: '4px 8px', fontSize: 11 }}>✏️</button>
+                                  <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{ padding: '4px 8px', fontSize: 11 }}>🗑️</button>
+                                </>
+                              )}
                             </div>
                           ) : (
                             highlightText(getRowData(app)[col.key], search)

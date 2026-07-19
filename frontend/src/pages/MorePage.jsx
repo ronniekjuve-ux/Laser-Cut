@@ -40,8 +40,13 @@ export default function MorePage() {
           <button onClick={toggleForceMobile} style={{
             width: '100%', padding: '10px 0', borderRadius: 8, border: '1px solid var(--border)',
             background: '#f1f5f9', color: '#334155', fontSize: 14, fontWeight: 500, cursor: 'pointer', marginBottom: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           }}>
             📱 Переключить на мобильную версию
+            <span style={{
+              display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+              background: '#22c55e', border: '2px solid #16a34a', flexShrink: 0,
+            }} title="Текущая версия: десктоп" />
           </button>
           <button onClick={handleLogout} style={{
             width: '100%', padding: '10px 0', borderRadius: 8, border: '1px solid #fee2e2',
@@ -81,8 +86,13 @@ export default function MorePage() {
         <button onClick={toggleForceMobile} style={{
           width: '100%', padding: '10px 0', borderRadius: 8, border: '1px solid var(--border)',
           background: '#f1f5f9', color: '#334155', fontSize: 14, fontWeight: 500, cursor: 'pointer', marginBottom: 8,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
           🖥️ Переключить на компьютерную версию
+          <span style={{
+            display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+            background: '#22c55e', border: '2px solid #16a34a', flexShrink: 0,
+          }} title="Текущая версия: мобильная" />
         </button>
         <button onClick={handleLogout} style={{
           width: '100%', padding: '10px 0', borderRadius: 8, border: '1px solid #fee2e2',
