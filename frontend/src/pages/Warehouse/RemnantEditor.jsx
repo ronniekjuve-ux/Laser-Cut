@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import client from '../../api/client';
+import useIsMobile from '../../hooks/useIsMobile';
 
 const EDGE_SNAP = 30;
 const PAD = 20; // padding around sheet in mm
@@ -109,6 +110,7 @@ function parseVertices(v) {
 }
 
 export default function RemnantEditor({ item, onClose, onSuccess }) {
+  const isMobile = useIsMobile();
   const svgRef = useRef(null);
   const [cutRect, setCutRect] = useState(null);
   const [result, setResult] = useState(null);
@@ -288,7 +290,7 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
   return (
     <div className="modal-overlay active" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}
-        style={{ maxWidth: 900, width: '90vw', height: '75vh', display: 'flex', flexDirection: 'column' }}>
+        style={{ maxWidth: isMobile ? '100vw' : 900, width: isMobile ? '100vw' : '90vw', height: isMobile ? '85vh' : '75vh', display: 'flex', flexDirection: 'column' }}>
         <div className="modal-header" style={{ padding: '6px 14px', flexShrink: 0 }}>
           <h3 style={{ fontSize: 14, margin: 0 }}>
             Резка — {item.metal} {item.grade || ''} {W}x{H}
@@ -296,9 +298,9 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
           </h3>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
-        <div className="modal-body" style={{ padding: '4px 14px 8px', display: 'flex', gap: 10, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div className="modal-body" style={{ padding: isMobile ? '4px 8px 8px' : '4px 14px 8px', display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 6 : 10, flex: 1, minHeight: 0, overflow: 'hidden' }}>
           {/* SVG Sheet — left */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', ...(isMobile ? { flex: 'none', height: '55vh' } : {}) }}>
             <svg ref={svgRef} viewBox={`0 0 ${vbW} ${vbH}`} preserveAspectRatio="xMidYMid meet"
               style={{ width: '100%', height: '100%', border: '2px solid #333', background: '#f8f8f8',
                 cursor: placing ? 'crosshair' : (cutRect && !result ? 'grab' : 'default'), touchAction: 'none' }}
@@ -362,7 +364,7 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
           </div>
 
           {/* Controls — right */}
-          <div style={{ width: 270, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto' }}>
+          <div style={{ width: isMobile ? '100%' : 270, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto' }}>
             <div style={{ padding: '8px 10px', background: '#f8fafc', borderRadius: 6 }}>
               <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Размер вырезки</div>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 6 }}>

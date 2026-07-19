@@ -1,4 +1,4 @@
-const CACHE_VERSION = '2026-07-14-v1';
+const CACHE_VERSION = '2026-07-19-v1';
 const CACHE_NAME = `lasercut-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/',
@@ -86,7 +86,7 @@ self.addEventListener('fetch', event => {
             });
           }
           return fetchResponse;
-        });
+        }).catch(() => caches.match(event.request));
       })
     );
   }

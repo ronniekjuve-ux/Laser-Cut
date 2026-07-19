@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from datetime import datetime, timezone
 from sqlalchemy import select
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends, HTTPException, status
@@ -44,7 +45,7 @@ async def get_current_user(token: HTTPAuthorizationCredentials = Depends(oauth2_
         if not user or user.status != UserStatus.ACTIVE:
             raise HTTPException(status_code=403, detail="Account inactive")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         user.last_active = now
         db.add(UserActivity(user_id=user.id, timestamp=now, action_type="api_call"))
         await db.flush()

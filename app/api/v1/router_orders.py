@@ -7,7 +7,8 @@ from pathlib import Path
 import os
 
 from app.db.base import get_db
-from app.db.models import Customer, Object, Order, FileVersion, OrderLayout, OrderPart
+from app.db.models import Customer, Object, Order, FileVersion, OrderLayout, OrderPart, User
+from app.core.deps import get_current_user
 from app.services.cypcut_parser import CypcutData, CypcutParser
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -48,7 +49,8 @@ async def upload_layout(
         object_name: Optional[str] = Form(None),
         order_number: Optional[str] = Form(None),
         steel_grade: str = Form("St3"),
-        db: AsyncSession = Depends(get_db)
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
 ):
     """Загрузка файла раскладки CYPCUT"""
 
@@ -175,7 +177,8 @@ async def upload_layout(
 async def list_orders(
         search: Optional[str] = None,
         status: Optional[str] = None,
-        db: AsyncSession = Depends(get_db)
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
 ):
     """Список всех заявок с фильтрацией"""
     query = select(Order).join(Customer).outerjoin(Object)

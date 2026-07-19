@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -12,21 +13,30 @@ from app.api.v1.router_feedback import router as feedback_router
 from jose import JWTError, jwt
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
+is_prod = settings.ENVIRONMENT == "prod"
 
 app = FastAPI(
     title="LaserCut Core",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url=None if is_prod else "/docs",
+    redoc_url=None if is_prod else "/redoc",
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.exception("Unhandled exception: %s", exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 # CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.FRONTEND_URL],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 class ConnectionManager:
@@ -79,6 +89,22 @@ async def websocket_notifications(websocket: WebSocket):
         await websocket.close(code=4001)
         return
 
+    # Check if token is revoked
+    try:
+        from app.db.base import async_session_factory
+        from sqlalchemy import text
+        async with async_session_factory() as session:
+            result = await session.execute(
+                text("SELECT is_revoked FROM sessions WHERE token = :token LIMIT 1"),
+                {"token": token}
+            )
+            row = result.fetchone()
+            if row and row[0]:
+                await websocket.close(code=4001)
+                return
+    except Exception:
+        pass
+
     await manager.connect(websocket, user_id)
     try:
         while True:
@@ -112,7 +138,7 @@ async def health():
 
     try:
         import redis.asyncio as aioredis
-        r = aioredis.from_url(settings.REDIS_URL)
+        r = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
         await r.ping()
         await r.aclose()
         checks["redis"] = "ok"

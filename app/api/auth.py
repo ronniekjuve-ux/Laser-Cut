@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from app.db.base import get_db
@@ -9,7 +10,6 @@ from app.schemas.auth import LoginRequest, TokenResponse, QRLoginRequest
 from app.core.security import verify_password, create_token, get_password_hash
 from app.core.deps import get_current_user
 import uuid
-import datetime
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -26,14 +26,14 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
     if user.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=403, detail="Account inactive")
 
-    expires = datetime.timedelta(minutes=43200 if req.remember_me else 60)
+    expires = timedelta(minutes=43200 if req.remember_me else 60)
     token = create_token({"sub": user.id, "role": user.role.value}, expires)
 
     jti = str(uuid.uuid4())
     session = Session(
         user_id=user.id,
         token_jti=jti,
-        expires_at=datetime.datetime.utcnow() + expires
+        expires_at=datetime.now(timezone.utc) + expires
     )
     db.add(session)
 
@@ -58,13 +58,13 @@ async def login_qr(req: QRLoginRequest, db: AsyncSession = Depends(get_db)):
 
     token = create_token(
         {"sub": user.id, "role": user.role.value},
-        datetime.timedelta(minutes=5)
+        timedelta(minutes=5)
     )
     jti = str(uuid.uuid4())
     db.add(Session(
         user_id=user.id,
         token_jti=jti,
-        expires_at=datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
     ))
     await db.commit()
 
@@ -81,6 +81,6 @@ async def logout(current_user: User = Depends(get_current_user), db: AsyncSessio
     )
     last_login = result.scalar_one_or_none()
     if last_login:
-        last_login.logout_at = datetime.datetime.utcnow()
+        last_login.logout_at = datetime.now(timezone.utc)
     await db.commit()
     return {"detail": "Logged out"}

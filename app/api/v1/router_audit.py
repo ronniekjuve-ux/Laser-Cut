@@ -388,7 +388,7 @@ async def upsert_override(
         from app.main import manager
         await manager.broadcast({
             "type": "notification",
-            "message": f"Смена на {date} изменена"
+            "message": f"Смена на {data.date} изменена"
         })
     except Exception:
         pass
@@ -556,3 +556,152 @@ async def list_customers(
     result = await db.execute(select(Customer).order_by(Customer.name))
     customers = result.scalars().all()
     return [{"id": c.id, "name": c.name} for c in customers]
+
+
+def parse_time_seconds(time_str: str) -> float:
+    """Parse 'MM:SS' or 'HH:MM:SS' to seconds."""
+    if not time_str or time_str == "00:00":
+        return 0.0
+    parts = time_str.strip().split(":")
+    try:
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + int(parts[1])
+        elif len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    except (ValueError, IndexError):
+        pass
+    return 0.0
+
+
+@router.get("/machines")
+async def audit_machines(
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        status: Optional[str] = None,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    """Aggregated machine utilization data for the machines dashboard."""
+    # Get all layouts with their applications
+    query = (
+        select(ApplicationLayout, Application)
+        .join(Application, ApplicationLayout.application_id == Application.id)
+        .where(ApplicationLayout.status.in_(["active", None]))
+        .where(~Application.order_name.like("Слияние%"))
+    )
+    if date_from:
+        query = query.where(Application.created_at >= datetime.fromisoformat(date_from))
+    if date_to:
+        query = query.where(Application.created_at < datetime.fromisoformat(date_to) + timedelta(days=1))
+    if status == "unfinished":
+        query = query.where(Application.status.notin_(["cut", "rejected"]))
+    elif status == "completed":
+        query = query.where(Application.status.in_(["cut"]))
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    # Aggregate by machine_type
+    machines = {}
+    daily = {}
+    by_material = {}
+
+    for layout, app in rows:
+        mt = (layout.machine_type or "UNKNOWN").upper()
+        # Normalize machine names
+        if "CNF" in mt:
+            machine_name = "Станок 1 (CNF)"
+        elif "FNF" in mt:
+            machine_name = "Станок 2 (FNF)"
+        else:
+            machine_name = mt or "Неизвестный"
+
+        sc = layout.sheet_count or 1
+        cut_secs = parse_time_seconds(layout.cut_time) * sc
+        move_secs = parse_time_seconds(layout.move_time) * sc
+        pierce_secs = parse_time_seconds(layout.pierce_time) * sc
+        total_secs = cut_secs + move_secs + pierce_secs
+        cut_len = (layout.cut_length or 0) * sc
+        pierces = (layout.pierces or 0) * sc
+        sheets = sc
+        weight = (layout.sheet_weight or 0) * sc
+
+        if machine_name not in machines:
+            machines[machine_name] = {
+                "name": machine_name,
+                "layouts_count": 0,
+                "sheets_count": 0,
+                "cut_time_seconds": 0,
+                "move_time_seconds": 0,
+                "pierce_time_seconds": 0,
+                "total_time_seconds": 0,
+                "cut_length": 0,
+                "pierces": 0,
+                "weight": 0,
+                "applications_count": set(),
+            }
+        m = machines[machine_name]
+        m["layouts_count"] += 1
+        m["sheets_count"] += sheets
+        m["cut_time_seconds"] += cut_secs
+        m["move_time_seconds"] += move_secs
+        m["pierce_time_seconds"] += pierce_secs
+        m["total_time_seconds"] += total_secs
+        m["cut_length"] += cut_len
+        m["pierces"] += pierces
+        m["weight"] += weight
+        m["applications_count"].add(app.id)
+
+        # Daily breakdown
+        day = app.created_at.strftime("%Y-%m-%d") if app.created_at else "unknown"
+        if day not in daily:
+            daily[day] = {}
+        if machine_name not in daily[day]:
+            daily[day][machine_name] = {"cut_seconds": 0, "sheets": 0, "cut_length": 0}
+        daily[day][machine_name]["cut_seconds"] += cut_secs
+        daily[day][machine_name]["sheets"] += sheets
+        daily[day][machine_name]["cut_length"] += cut_len
+
+        # By material
+        mat_key = f"{app.thickness or 0}мм {app.steel_grade or ''}".strip()
+        if mat_key not in by_material:
+            by_material[mat_key] = {}
+        if machine_name not in by_material[mat_key]:
+            by_material[mat_key][machine_name] = {"cut_seconds": 0, "sheets": 0, "layouts": 0}
+        by_material[mat_key][machine_name]["cut_seconds"] += cut_secs
+        by_material[mat_key][machine_name]["sheets"] += sheets
+        by_material[mat_key][machine_name]["layouts"] += 1
+
+    # Serialize
+    result_machines = []
+    for name, m in machines.items():
+        result_machines.append({
+            "name": name,
+            "layouts_count": m["layouts_count"],
+            "sheets_count": m["sheets_count"],
+            "cut_time_seconds": round(m["cut_time_seconds"], 1),
+            "move_time_seconds": round(m["move_time_seconds"], 1),
+            "pierce_time_seconds": round(m["pierce_time_seconds"], 1),
+            "total_time_seconds": round(m["total_time_seconds"], 1),
+            "cut_time_hms": f"{int(m['total_time_seconds']//3600):02d}:{int((m['total_time_seconds']%3600)//60):02d}:{int(m['total_time_seconds']%60):02d}",
+            "cut_length": round(m["cut_length"], 1),
+            "pierces": m["pierces"],
+            "weight": round(m["weight"], 1),
+            "applications_count": len(m["applications_count"]),
+        })
+
+    # Sort daily data
+    daily_sorted = {}
+    for day in sorted(daily.keys()):
+        daily_sorted[day] = daily[day]
+
+    # Sort material data by thickness
+    material_sorted = {}
+    for mk in sorted(by_material.keys(), key=lambda x: float(x.split("мм")[0]) if "мм" in x else 0):
+        material_sorted[mk] = by_material[mk]
+
+    return {
+        "machines": result_machines,
+        "daily": daily_sorted,
+        "by_material": material_sorted,
+    }

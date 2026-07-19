@@ -309,7 +309,9 @@ async def debug_extract_from_uploads(filename: str):
     """
     Debug эндпоинт для тестирования извлечения из уже загруженного файла.
     """
-    file_path = UPLOAD_DIR / filename
+    file_path = (UPLOAD_DIR / filename).resolve()
+    if not file_path.is_relative_to(UPLOAD_DIR.resolve()):
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Файл не найден: {filename}")
 
@@ -369,7 +371,9 @@ async def debug_extract_from_uploads(filename: str):
 @router.get("/{full_path:path}")
 async def get_image(full_path: str):
     """Получить изображение по полному пути от images/"""
-    file_path = IMAGES_DIR / full_path
+    file_path = (IMAGES_DIR / full_path).resolve()
+    if not file_path.is_relative_to(IMAGES_DIR.resolve()):
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Изображение не найдено")

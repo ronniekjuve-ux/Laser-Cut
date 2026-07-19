@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import client from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import CostCalculator from '../Applications/CostCalculator';
+import MachinesTab from './MachinesTab';
+import { useAuth } from '../../context/AuthContext';
 
 const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
@@ -656,6 +658,8 @@ function OperatorsTab() {
 
 export default function AuditProduction() {
   const [tab, setTab] = useState('applications');
+  const { user } = useAuth();
+  const isOperator = user?.role === 'operator';
 
   return (
     <div>
@@ -674,10 +678,20 @@ export default function AuditProduction() {
             borderRadius:'8px 8px 0 0', cursor:'pointer', background: tab === 'operators' ? '#eff6ff' : 'transparent'}}>
           Операторы
         </button>
+        {!isOperator && (
+          <button
+            onClick={() => setTab('machines')}
+            style={{padding:'10px 20px', fontSize:14, fontWeight: tab === 'machines' ? 600 : 400,
+              border:'1px solid var(--border)', borderBottom: tab === 'machines' ? '2px solid #3b82f6' : '1px solid var(--border)',
+              borderRadius:'8px 8px 0 0', cursor:'pointer', background: tab === 'machines' ? '#eff6ff' : 'transparent'}}>
+            Станки
+          </button>
+        )}
       </div>
 
       {tab === 'applications' && <ApplicationsTab />}
       {tab === 'operators' && <OperatorsTab />}
+      {tab === 'machines' && <MachinesTab />}
     </div>
   );
 }

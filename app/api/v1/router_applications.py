@@ -3,7 +3,7 @@ import json
 import glob
 import re
 import shutil
-import time
+import asyncio
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
@@ -216,7 +216,7 @@ async def upload_layout(
                 finally:
                     word.Quit()
 
-                time.sleep(0.5)
+                await asyncio.sleep(0.5)
 
                 # Find GIF in _files folder or root
                 IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.emf', '.wmf'}
@@ -249,33 +249,28 @@ async def upload_layout(
         # 2. Try local converter (.exe running on Windows host)
         if not layout_image_path:
             try:
-                import urllib.request
-                # Check if local converter is running
-                req = urllib.request.Request("http://host.docker.internal:8001/health", method='GET')
-                urllib.request.urlopen(req, timeout=2)
-                # Convert via local converter
-                convert_data = json.dumps({"path": file_path}).encode('utf-8')
-                req = urllib.request.Request(
-                    "http://host.docker.internal:8001/convert",
-                    data=convert_data,
-                    headers={'Content-Type': 'application/json'},
-                    method='POST'
-                )
-                resp = urllib.request.urlopen(req, timeout=30)
-                result = json.loads(resp.read().decode('utf-8'))
-                if result.get('images'):
-                    # Find the layout image in the result
-                    for img in result['images']:
-                        if img.get('name', '').endswith(('.gif', '.png', '.jpg')):
-                            # Copy to layouts directory
-                            src = IMAGE_DIR / img['name']
-                            if src.exists():
-                                dest_name = img['name']
-                                dest = dest_dir / dest_name
-                                shutil.copy2(src, dest)
-                                layout_image_path = f"/api/v1/images/layouts/{app.order_name}_{layout_code}/{dest_name}"
-                                print(f"LOCAL_CONVERTER_OK: {layout_image_path}")
-                                break
+                import httpx
+                async with httpx.AsyncClient(timeout=5) as client:
+                    # Check if local converter is running
+                    health_resp = await client.get("http://host.docker.internal:8001/health")
+                    health_resp.raise_for_status()
+                    # Convert via local converter
+                    convert_resp = await client.post(
+                        "http://host.docker.internal:8001/convert",
+                        json={"path": file_path},
+                        timeout=30
+                    )
+                    result = convert_resp.json()
+                    if result.get('images'):
+                        for img in result['images']:
+                            if img.get('name', '').endswith(('.gif', '.png', '.jpg')):
+                                src = IMAGE_DIR / img['name']
+                                if src.exists():
+                                    dest_name = img['name']
+                                    dest = dest_dir / dest_name
+                                    shutil.copy2(src, dest)
+                                    layout_image_path = f"/api/v1/images/layouts/{app.order_name}_{layout_code}/{dest_name}"
+                                    break
             except Exception:
                 pass  # Local converter not available, continue
 
@@ -674,13 +669,13 @@ async def reupload_application(
         return {
             "status": "success",
             "message": "Файлы обновлены",
-            "placed_parts": data.placed_parts_count if data else None,
-            "ordered_parts": data.ordered_parts_count if data else None,
+            "placed_parts": app_data.placed_parts_count if app_data else None,
+            "ordered_parts": app_data.ordered_parts_count if app_data else None,
             "parts_warning": (
-                f"Размещено {data.placed_parts_count} деталей, заказано {data.ordered_parts_count} деталей. "
+                f"Размещено {app_data.placed_parts_count} деталей, заказано {app_data.ordered_parts_count} деталей. "
                 "Количество не совпадает!"
-            ) if (data and data.placed_parts_count is not None and data.ordered_parts_count is not None
-                   and data.placed_parts_count != data.ordered_parts_count) else None
+            ) if (app_data and app_data.placed_parts_count is not None and app_data.ordered_parts_count is not None
+                   and app_data.placed_parts_count != app_data.ordered_parts_count) else None
         }
 
     except HTTPException:
@@ -771,8 +766,16 @@ async def list_applications(
     if priority:
         query = query.where(Application.priority == priority)
     if machine:
+        # Convert display names to DB values: "станок 1" → "CNF", "станок 2" → "FNF"
+        machine_upper = machine.upper()
+        if "СТАНОК 1" in machine_upper or "CNF" in machine_upper:
+            machine_db = "CNF"
+        elif "СТАНОК 2" in machine_upper or "FNF" in machine_upper:
+            machine_db = "FNF"
+        else:
+            machine_db = machine
         machine_subq = select(ApplicationLayout.application_id).where(
-            ApplicationLayout.machine_type.ilike(f"%{machine}%")
+            ApplicationLayout.machine_type.ilike(f"%{machine_db}%")
         ).distinct().subquery()
         query = query.where(Application.id.in_(select(machine_subq.c.application_id)))
     if status:
@@ -920,8 +923,6 @@ async def list_applications(
         "pages": (total + limit - 1) // limit if total > 0 else 0,
         "filter_values": filter_values,
     }
-
-    return response
 
 
 @router.get("/export")
@@ -1809,6 +1810,7 @@ async def update_priority(
     if not app:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
+    old_priority = app.priority
     app.priority = priority
 
     priority_labels = {"low": "Низкий", "medium": "Средний", "high": "Высокий", "urgent": "Срочно"}
@@ -1822,7 +1824,7 @@ async def update_priority(
         user_id=user.id, user_name=user.username,
         change_type="priority", resource="application", resource_id=app.id,
         description=f"{app.order_name}{cust_name} | {order_date}",
-        old_value=priority_labels.get(app.priority, app.priority),
+        old_value=priority_labels.get(old_priority, old_priority or "Нет"),
         new_value=priority_labels.get(priority, priority)
     ))
 

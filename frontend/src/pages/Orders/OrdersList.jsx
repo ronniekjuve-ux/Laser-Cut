@@ -110,7 +110,13 @@ export default function OrdersList({ initialTab }) {
       const tabParam = activeTab === 'applications' ? 'applications' : 'orders';
       const params = { tab: tabParam, limit: 1000 };
       if (filters.customer) params.customer_name = filters.customer[0];
-      if (filters.machine) params.machine = filters.machine[0];
+      if (filters.machine) {
+        // Convert display names "станок 1"/"станок 2" to DB values "CNF"/"FNF"
+        const mv = filters.machine[0] || '';
+        if (/станок\s*1/i.test(mv) || mv === 'CNF') params.machine = 'CNF';
+        else if (/станок\s*2/i.test(mv) || mv === 'FNF') params.machine = 'FNF';
+        else params.machine = mv;
+      }
       if (filters.material) params.material = filters.material[0];
       if (filters.thickness) params.thickness = filters.thickness[0];
       if (filters.supply_material) params.supply_material = filters.supply_material[0] === 'Да' ? 'true' : 'false';

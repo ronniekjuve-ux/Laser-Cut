@@ -134,7 +134,9 @@ async def upload_feedback_image(
 
 @router.get("/file/{filename:path}")
 async def get_feedback_file(filename: str):
-    file_path = UPLOAD_DIR / filename
+    file_path = (UPLOAD_DIR / filename).resolve()
+    if not file_path.is_relative_to(UPLOAD_DIR.resolve()):
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Файл не найден")
     content_type = {
