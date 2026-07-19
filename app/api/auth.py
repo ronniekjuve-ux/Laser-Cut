@@ -33,7 +33,7 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
     session = Session(
         user_id=user.id,
         token_jti=jti,
-        expires_at=datetime.now(timezone.utc) + expires
+        expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + expires
     )
     db.add(session)
 
@@ -64,7 +64,7 @@ async def login_qr(req: QRLoginRequest, db: AsyncSession = Depends(get_db)):
     db.add(Session(
         user_id=user.id,
         token_jti=jti,
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
+        expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=5)
     ))
     await db.commit()
 
@@ -81,6 +81,6 @@ async def logout(current_user: User = Depends(get_current_user), db: AsyncSessio
     )
     last_login = result.scalar_one_or_none()
     if last_login:
-        last_login.logout_at = datetime.now(timezone.utc)
+        last_login.logout_at = datetime.now(timezone.utc).replace(tzinfo=None)
     await db.commit()
     return {"detail": "Logged out"}
