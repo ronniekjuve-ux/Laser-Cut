@@ -1,13 +1,13 @@
 FROM python:3.11-slim
 
 # Устанавливаем LibreOffice (для конвертации .doc -> .docx)
-# Это займет время при сборке, но оно того стоит!
-RUN apt-get update && apt-get install -y \
+# --no-install-recommends ускоряет установку, беря только необходимые пакеты
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-writer \
-    libreoffice-core \
     fonts-liberation \
     poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/*
 
 WORKDIR /app
 
