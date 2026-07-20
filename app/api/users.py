@@ -74,7 +74,6 @@ async def create_user(
         username=payload.username,
         email=payload.email,
         password_hash=get_password_hash(payload.password),
-        password_plain=payload.password,
         role=role,
         status=UserStatus.ACTIVE
     )

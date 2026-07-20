@@ -9,16 +9,12 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
     let cutLength = 0;
     let pierces = 0;
     let sheetWeight = 0;
-    let sheetW = 0;
-    let sheetH = 0;
     for (const l of (layouts || [])) {
       cutLength += l.cut_length || 0;
       pierces += l.pierces || 0;
-      if (!sheetWeight) sheetWeight = l.sheet_weight || l.parts_weight || 0;
-      if (!sheetW && l.sheet_w) sheetW = l.sheet_w;
-      if (!sheetH && l.sheet_h) sheetH = l.sheet_h;
+      sheetWeight += (l.sheet_weight || l.parts_weight || 0) * (l.sheet_count || 1);
     }
-    return { cutLength, pierces, sheetWeight, sheetW, sheetH };
+    return { cutLength, pierces, sheetWeight };
   }, [layouts]);
 
   const cutLengthDisplay = showMeters ? totals.cutLength / 1000 : totals.cutLength;
@@ -88,8 +84,7 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
           <div style={{ color: '#64748b' }}>
             {steel_grade && <span>Марка: <b>{steel_grade}</b> · </span>}
             {thickness && <span>Толщина: <b>{thickness} мм</b> · </span>}
-            {totals.sheetW > 0 && totals.sheetH > 0 && <span>Лист: <b>{totals.sheetW}×{totals.sheetH} мм</b> · </span>}
-            <span>Вес листа: <b>{fmt(totals.sheetWeight)} кг</b></span>
+            <span>Общий вес: <b>{fmt(totals.sheetWeight)} кг</b></span>
           </div>
         </div>
       )}

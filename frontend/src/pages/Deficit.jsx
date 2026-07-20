@@ -19,6 +19,7 @@ export default function Deficit() {
   const [filterThickness, setFilterThickness] = useState([]);
   const [filterCustomer, setFilterCustomer] = useState([]);
   const [showFilter, setShowFilter] = useState(null);
+  const [searchArticle, setSearchArticle] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -74,6 +75,28 @@ export default function Deficit() {
   const filtered = deficit
     .filter(r => filterGrade.length === 0 || filterGrade.includes(r.grade || '—'))
     .filter(r => filterThickness.length === 0 || filterThickness.includes(r.thickness ? `${r.thickness}мм` : '—'))
+    .filter(r => {
+      if (!searchArticle) return true;
+      const q = searchArticle.toLowerCase();
+      // Search in grade, metal, order names, layout codes, and warehouse articles
+      if ((r.grade || '').toLowerCase().includes(q)) return true;
+      if ((r.metal || '').toLowerCase().includes(q)) return true;
+      for (const cust of Object.values(r.demand_by_customer || {})) {
+        if (cust.layouts) {
+          for (const l of cust.layouts) {
+            if ((l.order_name || '').toLowerCase().includes(q) || (l.layout_code || '').toLowerCase().includes(q)) return true;
+          }
+        }
+      }
+      for (const cust of Object.values(r.stock_by_customer || {})) {
+        if (cust.articles) {
+          for (const a of cust.articles) {
+            if ((a.article || '').toLowerCase().includes(q)) return true;
+          }
+        }
+      }
+      return false;
+    })
     .map(r => {
       if (!hasCF) return r;
       let cDemand = 0, cStock = 0, cStockArea = 0;
@@ -142,32 +165,43 @@ export default function Deficit() {
           </>
         )}
         <button className="btn" onClick={exportExcel} style={{ marginLeft: 'auto', padding: '3px 10px', fontSize: 11 }}>📥 Excel</button>
+        <input
+          type="text"
+          value={searchArticle}
+          onChange={e => setSearchArticle(e.target.value)}
+          placeholder="Поиск по артикулу..."
+          style={{ width: 180, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12 }}
+        />
       </div>
 
       {/* Table */}
       <div style={{ border: '1px solid #d1d5db', borderRadius: 6, overflow: 'hidden' }}>
         <table style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }}>
           <colgroup>
-            <col style={{ width: '22%' }} />
-            <col style={{ width: '14%' }} />
-            <col style={{ width: '22%' }} />
-            <col style={{ width: '22%' }} />
-            <col style={{ width: '16%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '10%' }} />
             <col style={{ width: '4%' }} />
           </colgroup>
           <thead>
             <tr style={{ borderBottom: '2px solid #9ca3af' }}>
               <DD col="grade" values={uniqueGrades} selected={filterGrade} setter={setFilterGrade} label="Марка" />
               <DD col="thickness" values={uniqueThicknesses} selected={filterThickness} setter={setFilterThickness} label="Толщ." align="center" />
-              <th style={{ padding: '6px 10px', fontSize: 12, fontWeight: 600, textAlign: 'center', background: '#dbeafe', borderRight: '1px solid #93c5fd', color: '#1e40af' }}>Заказы</th>
-              <th style={{ padding: '6px 10px', fontSize: 12, fontWeight: 600, textAlign: 'center', background: '#dcfce7', borderRight: '1px solid #86efac', color: '#166534' }}>Склад</th>
+              <th style={{ padding: '6px 6px', fontSize: 11, fontWeight: 600, textAlign: 'center', background: '#dbeafe', borderRight: '1px solid #93c5fd', color: '#1e40af' }}>Заказ, листы</th>
+              <th style={{ padding: '6px 6px', fontSize: 11, fontWeight: 600, textAlign: 'center', background: '#dbeafe', borderRight: '1px solid #93c5fd', color: '#1e40af' }}>Заказ, м²</th>
+              <th style={{ padding: '6px 6px', fontSize: 11, fontWeight: 600, textAlign: 'center', background: '#dcfce7', borderRight: '1px solid #86efac', color: '#166534' }}>Склад, листы</th>
+              <th style={{ padding: '6px 6px', fontSize: 11, fontWeight: 600, textAlign: 'center', background: '#dcfce7', borderRight: '1px solid #86efac', color: '#166534' }}>Склад, м²</th>
               <th style={{ padding: '6px 10px', fontSize: 12, fontWeight: 700, textAlign: 'center', background: '#f8fafc', borderRight: '1px solid #d1d5db' }}>Баланс</th>
               <th style={{ width: '4%', background: '#f8fafc', fontSize: 10 }}></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, color: '#64748b' }}>Нет данных</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 16, color: '#64748b' }}>Нет данных</td></tr>
             ) : filtered.map((row) => {
               const key = `${row.grade}|${row.thickness}`;
               const dS = hasCF ? row._ds : row.demand_sheets_std;
@@ -180,13 +214,17 @@ export default function Deficit() {
                 <tr key={key} onClick={() => toggle(key)} style={{ cursor: 'pointer', borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '6px 8px', fontWeight: 600, borderRight: '1px solid #e5e7eb', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.grade || '—'}</td>
                   <td style={{ padding: '6px 6px', textAlign: 'center', borderRight: '1px solid #e5e7eb', fontSize: 12 }}>{row.thickness ? `${row.thickness}мм` : '—'}</td>
+                  <td style={{ padding: '6px 6px', textAlign: 'center', background: '#eff6ff', borderRight: '1px solid #bfdbfe', fontSize: 12, fontWeight: 600 }}>
+                    {dS ? (typeof dS === 'number' ? dS.toFixed(1) : dS) : '0'}
+                  </td>
                   <td style={{ padding: '6px 6px', textAlign: 'center', background: '#eff6ff', borderRight: '1px solid #bfdbfe', fontSize: 12 }}>
-                    <span style={{ fontWeight: 600 }}>{dS ? (typeof dS === 'number' ? dS.toFixed(1) : dS) : '0'}</span>
-                    <span style={{ fontSize: 9, color: '#6b7280', marginLeft: 2 }}>{(dA / 1000000).toFixed(1)}м²</span>
+                    <span style={{ fontSize: 10, color: '#6b7280' }}>{(dA / 1000000).toFixed(1)}м²</span>
+                  </td>
+                  <td style={{ padding: '6px 6px', textAlign: 'center', background: '#f0fdf4', borderRight: '1px solid #bbf7d0', fontSize: 12, fontWeight: 600 }}>
+                    {sS}
                   </td>
                   <td style={{ padding: '6px 6px', textAlign: 'center', background: '#f0fdf4', borderRight: '1px solid #bbf7d0', fontSize: 12 }}>
-                    <span style={{ fontWeight: 600 }}>{sS}</span>
-                    <span style={{ fontSize: 9, color: '#6b7280', marginLeft: 2 }}>{(sA / 1000000).toFixed(1)}м²</span>
+                    <span style={{ fontSize: 10, color: '#6b7280' }}>{(sA / 1000000).toFixed(1)}м²</span>
                   </td>
                   <td style={{ padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
                     <span style={{

@@ -161,14 +161,18 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
   const clientToSheet = (clientX, clientY) => {
     const svg = svgRef.current;
     if (!svg) return null;
-    const pt = svg.createSVGPoint();
-    pt.x = clientX;
-    pt.y = clientY;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return null;
-    const svgPt = pt.matrixTransform(ctm.inverse());
-    // Offset by padding (sheet starts at PAD, PAD in SVG coords)
-    return { x: (svgPt.x / S) - PAD, y: (svgPt.y / S) - PAD };
+    try {
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return null;
+      const pt = svg.createSVGPoint();
+      pt.x = clientX;
+      pt.y = clientY;
+      const svgPt = pt.matrixTransform(ctm.inverse());
+      if (!isFinite(svgPt.x) || !isFinite(svgPt.y)) return null;
+      return { x: (svgPt.x / S) - PAD, y: (svgPt.y / S) - PAD };
+    } catch {
+      return null;
+    }
   };
 
   // Global mouse/touch handlers
@@ -208,7 +212,7 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
 
     const onMouseMove = (e) => handleMove(e.clientX, e.clientY);
     const onMouseUp = () => { draggingRef.current = false; };
-    const onTouchMove = (e) => { e.preventDefault(); handleMove(e.touches[0].clientX, e.touches[0].clientY); };
+    const onTouchMove = (e) => { try { e.preventDefault(); } catch {} handleMove(e.touches[0].clientX, e.touches[0].clientY); };
     const onTouchEnd = () => { draggingRef.current = false; };
 
     window.addEventListener('mousemove', onMouseMove);
@@ -290,7 +294,7 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
   return (
     <div className="modal-overlay active" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}
-        style={{ maxWidth: isMobile ? '100vw' : 900, width: isMobile ? '100vw' : '90vw', height: isMobile ? '85vh' : '75vh', display: 'flex', flexDirection: 'column' }}>
+        style={{ maxWidth: isMobile ? '100vw' : 900, width: isMobile ? '100vw' : '90vw', height: isMobile ? '100dvh' : '75vh', display: 'flex', flexDirection: 'column' }}>
         <div className="modal-header" style={{ padding: '6px 14px', flexShrink: 0 }}>
           <h3 style={{ fontSize: 14, margin: 0 }}>
             Резка — {item.metal} {item.grade || ''} {W}x{H}
@@ -300,7 +304,7 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
         </div>
         <div className="modal-body" style={{ padding: isMobile ? '4px 8px 8px' : '4px 14px 8px', display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 6 : 10, flex: 1, minHeight: 0, overflow: 'hidden' }}>
           {/* SVG Sheet — left */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', ...(isMobile ? { flex: 'none', height: '55vh' } : {}) }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', ...(isMobile ? { flex: 'none', height: '45vh', minHeight: 200 } : {}) }}>
             <svg ref={svgRef} viewBox={`0 0 ${vbW} ${vbH}`} preserveAspectRatio="xMidYMid meet"
               style={{ width: '100%', height: '100%', border: '2px solid #333', background: '#f8f8f8',
                 cursor: placing ? 'crosshair' : (cutRect && !result ? 'grab' : 'default'), touchAction: 'none' }}
@@ -364,7 +368,7 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
           </div>
 
           {/* Controls — right */}
-          <div style={{ width: isMobile ? '100%' : 270, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto' }}>
+          <div style={{ width: isMobile ? '100%' : 270, flex: isMobile ? 1 : 'none', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto', minHeight: 0 }}>
             <div style={{ padding: '8px 10px', background: '#f8fafc', borderRadius: 6 }}>
               <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Размер вырезки</div>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 6 }}>

@@ -94,8 +94,9 @@ async def list_warehouse(
     result = await db.execute(query)
     items = result.scalars().all()
 
-    # Build binding map: warehouse_item_id → list of layout codes
+    # Build binding map: warehouse_item_id → list of layout codes + weight info
     bindings_map = {}
+    weight_map = {}  # warehouse_item_id → {layout_sheet_weight, parts_weight}
     layouts_result = await db.execute(
         select(ApplicationLayout).where(
             ApplicationLayout.status == "active",
@@ -109,6 +110,22 @@ async def list_warehouse(
                 if bid not in bindings_map:
                     bindings_map[bid] = []
                 bindings_map[bid].append(f"{layout.application_id}.{layout.layout_code}")
+                # Collect weight data
+                if bid not in weight_map:
+                    weight_map[bid] = {"layout_sheet_weight": 0, "parts_weight": 0}
+                weight_map[bid]["layout_sheet_weight"] += (layout.sheet_weight or 0) * (layout.sheet_count or 1)
+                # Calculate parts weight from layout parts
+                parts_weight = 0
+                try:
+                    from app.db.models import ApplicationLayoutPart
+                    parts_res = await db.execute(
+                        select(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == layout.id)
+                    )
+                    for p in parts_res.scalars().all():
+                        parts_weight += (p.weight or 0) * (p.quantity or 0)
+                except Exception:
+                    pass
+                weight_map[bid]["parts_weight"] += parts_weight
         except Exception:
             pass
 
@@ -130,6 +147,9 @@ async def list_warehouse(
     for i in items:
         d = _item_to_dict(i)
         d["bound_to"] = bindings_map.get(i.id, [])
+        if i.id in weight_map:
+            d["layout_sheet_weight"] = weight_map[i.id]["layout_sheet_weight"]
+            d["parts_weight"] = weight_map[i.id]["parts_weight"]
         if (i.sheet_count or 0) == 0 and i.id in original_qty_map:
             d["original_sheet_count"] = original_qty_map[i.id]
         enriched.append(d)
@@ -245,51 +265,43 @@ async def create_warehouse_item(
             next_num += 1
         article = f"{base}/{next_num}"
 
-    item = WarehouseItem(
-        metal=body.metal,
-        grade=body.grade,
-        thickness=body.thickness,
-        size=size,
-        sheet_w=body.sheet_w,
-        sheet_h=body.sheet_h,
-        sheet_count=body.sheet_count,
-        weight=body.weight,
-        article=article,
-        item_type=body.item_type,
-        owner=body.owner,
-        note=body.note,
-        created_by=user.id,
-    )
-
     # Auto-calculate weight from thickness if not provided
-    if not item.weight and item.thickness and item.sheet_w and item.sheet_h:
-        item.weight = round(item.thickness * item.sheet_w * item.sheet_h * 7.85 / 1_000_000, 2)
+    calc_weight = body.weight
+    if not calc_weight and body.thickness and body.sheet_w and body.sheet_h:
+        calc_weight = round(body.thickness * body.sheet_w * body.sheet_h * 7.85 / 1_000_000, 2)
 
-    db.add(item)
-    await db.flush()
-
-    if body.sheet_count > 0:
+    # Create individual items for each sheet (quantity always = 1)
+    created_items = []
+    for i in range(body.sheet_count):
+        sheet_article = f"{article}/{i + 1}" if body.sheet_count > 1 else article
+        sheet_item = WarehouseItem(
+            metal=body.metal, grade=body.grade, thickness=body.thickness,
+            size=size, sheet_w=body.sheet_w, sheet_h=body.sheet_h,
+            sheet_count=1, weight=calc_weight, article=sheet_article,
+            item_type=body.item_type, owner=body.owner, note=body.note,
+            created_by=user.id,
+        )
+        db.add(sheet_item)
+        await db.flush()
         db.add(WarehouseMovement(
-            warehouse_item_id=item.id,
-            quantity_change=body.sheet_count,
-            movement_type="initial",
-            reason="Создание записи на складе",
+            warehouse_item_id=sheet_item.id, quantity_change=1,
+            movement_type="initial", reason="Создание записи на складе",
             created_by=user.id,
         ))
+        created_items.append(sheet_item)
 
     await db.commit()
-    await db.refresh(item)
 
     try:
         from app.main import manager
         await manager.broadcast({
             "type": "notification",
-            "message": f"Склад: добавлен {body.metal} (арт. {article})"
+            "message": f"Склад: добавлено {body.sheet_count} лист(ов) {body.metal} (арт. {article})"
         })
     except Exception:
         pass
 
-    return _item_to_dict(item)
+    return _item_to_dict(created_items[0]) if created_items else _item_to_dict(item)
 
 
 @router.patch("/{item_id}")

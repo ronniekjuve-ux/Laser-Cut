@@ -285,6 +285,9 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
   const placedParts = data.placed_parts;
   const orderedParts = data.ordered_parts;
   const partsMismatch = placedParts != null && orderedParts != null && placedParts !== orderedParts;
+  const totalPartsWeight = layouts.reduce((sum, l) => {
+    return sum + (l.parts || []).reduce((ps, p) => ps + (p.weight || 0) * (p.quantity || 0), 0);
+  }, 0);
 
   return (
     <div className="modal-overlay active" onClick={activeLayout !== null ? () => setActiveLayout(null) : onClose}>
@@ -310,6 +313,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                     <div><span style={{fontWeight: 600}}>Материал:</span> {data.material || data.steel_grade || '-'}</div>
                     <div><span style={{fontWeight: 600}}>Толщина:</span> {data.thickness != null && data.thickness !== '' ? data.thickness + ' мм' : '-'}</div>
                     <div><span style={{fontWeight: 600}}>Вес:</span> {data.total_weight != null && data.total_weight !== '' ? data.total_weight + ' кг' : '-'}</div>
+                    {totalPartsWeight > 0 && <div><span style={{fontWeight: 600}}>Вес деталей:</span> {totalPartsWeight.toFixed(2)} кг</div>}
                     <div><span style={{fontWeight: 600}}>Раскладок:</span> {layouts.length}</div>
                     <div><span style={{fontWeight: 600}}>Видов деталей:</span> {uniquePartTypes}</div>
                     <div><span style={{fontWeight: 600}}>Всего деталей:</span> {totalPartsQty}</div>

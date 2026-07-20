@@ -159,7 +159,7 @@ function MobileWarehouseCard({ item, onEdit, onDelete, onDeduct, onReturn, onCut
   );
 }
 
-function WarehouseTable({ items, title, color, editingId, editForm, setEditForm, sortCol, sortDir, onSort, filterOwner, filterGrade, filterThickness, filterMaterial, setFilterOwner, setFilterGrade, setFilterThickness, setFilterMaterial, showFilters, setShowFilters, onEdit, onSave, onCancel, onDelete, onDeduct, onReturn, onCut, onMerge, onNotes, onPreview }) {
+function WarehouseTable({ items, title, color, editingId, editForm, setEditForm, sortCol, sortDir, onSort, filterOwner, filterGrade, filterThickness, filterMaterial, setFilterOwner, setFilterGrade, setFilterThickness, setFilterMaterial, showFilters, setShowFilters, searchArticle, onEdit, onSave, onCancel, onDelete, onDeduct, onReturn, onCut, onMerge, onNotes, onPreview }) {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 15;
 
@@ -167,6 +167,7 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
   useEffect(() => { setPage(1); }, [items.length]);
 
   const filtered = items
+    .filter(i => !searchArticle || (i.article || '').toLowerCase().includes(searchArticle.toLowerCase()))
     .filter(i => filterOwner.length === 0 || filterOwner.includes(i.owner || '-'))
     .filter(i => filterGrade.length === 0 || filterGrade.includes(i.grade || '-'))
     .filter(i => filterThickness.length === 0 || filterThickness.includes(String(i.thickness || '-')))
@@ -238,15 +239,17 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
               <DD col="metal" label="Материал" />
               <DD col="thickness" label="Толщ." />
               <th>Размер</th>
-              <th>Кол-во</th>
               <th>Закреплено</th>
+              <th style={{ fontSize: 10, color: '#6b7280' }}>Вес листа</th>
+              <th style={{ fontSize: 10, color: '#6b7280' }}>Вес раск.</th>
+              <th style={{ fontSize: 10, color: '#6b7280' }}>Вес деталей</th>
               <TH col="created_at" label="Дата" />
               <th></th>
             </tr>
           </thead>
           <tbody>
             {paged.length === 0 ? (
-              <tr><td colSpan={9} style={{ textAlign: 'center', padding: 12, color: '#64748b', fontSize: 13 }}>Пусто</td></tr>
+              <tr><td colSpan={11} style={{ textAlign: 'center', padding: 12, color: '#64748b', fontSize: 13 }}>Пусто</td></tr>
             ) : paged.map(item => (
               <tr key={item.id} style={editingId === item.id ? { background: '#f0f9ff' } : { cursor: 'pointer' }}
                 onClick={(e) => { if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return; if (editingId === item.id) return; if (item.sheet_w > 0 && item.sheet_h > 0) onPreview(item); }}>
@@ -262,7 +265,8 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
                     </td>
                     <td><input value={editForm.thickness} onChange={e => setEditForm({...editForm, thickness: e.target.value})} style={{ width: 45, padding: '2px 4px', fontSize: 12 }} /></td>
                     <td><div style={{ display: 'flex', gap: 2 }}><input value={editForm.sheet_w} onChange={e => setEditForm({...editForm, sheet_w: e.target.value})} style={{ width: 45, padding: '2px 4px', fontSize: 12 }} /><span style={{ fontSize: 12, alignSelf: 'center' }}>x</span><input value={editForm.sheet_h} onChange={e => setEditForm({...editForm, sheet_h: e.target.value})} style={{ width: 45, padding: '2px 4px', fontSize: 12 }} /></div></td>
-                    <td><input value={editForm.sheet_count} onChange={e => setEditForm({...editForm, sheet_count: e.target.value})} style={{ width: 50, padding: '2px 4px', fontSize: 12 }} /></td>
+                    <td></td>
+                    <td></td>
                     <td></td>
                     <td></td>
                     <td><div style={{ display: 'flex', gap: 4 }}><button className="btn btn-primary" onClick={(e) => { e.stopPropagation(); onSave(item.id); }} style={{ padding: '3px 8px', fontSize: 11 }}>OK</button><button className="btn" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ padding: '3px 8px', fontSize: 11 }}>Отмена</button></div></td>
@@ -274,11 +278,17 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
                     <td style={{ fontWeight: 600 }}>{item.metal}{item.grade ? ` ${item.grade}` : ''}</td>
                     <td>{item.thickness ? `${item.thickness}мм` : '-'}</td>
                     <td>{sizeLabel(item)}</td>
-                    <td style={{ fontWeight: 600, color: item.sheet_count <= (item.min_quantity || 0) ? '#dc2626' : undefined }}>
-                      {(item.sheet_count || 0) > 0 ? item.sheet_count : (item.original_sheet_count || 0)}
-                    </td>
                     <td style={{ fontSize: 11, color: '#6366f1' }}>
                       {(item.bound_to || []).length > 0 ? item.bound_to.join(', ') : '-'}
+                    </td>
+                    <td style={{ fontSize: 11, color: '#6b7280' }}>
+                      {item.weight ? `${parseFloat(item.weight).toFixed(1)} кг` : '-'}
+                    </td>
+                    <td style={{ fontSize: 11, color: '#6b7280' }}>
+                      {item.layout_sheet_weight ? `${item.layout_sheet_weight.toFixed(1)} кг` : '-'}
+                    </td>
+                    <td style={{ fontSize: 11, color: '#6b7280' }}>
+                      {item.parts_weight ? `${item.parts_weight.toFixed(1)} кг` : '-'}
                     </td>
                     <td style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>{item.created_at ? new Date(item.created_at).toLocaleDateString('ru-RU') : '-'}</td>
                     <td>
@@ -426,6 +436,7 @@ export default function Warehouse() {
   const [activeTab, setActiveTab] = useState('stock');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(null);
   const [mergeItem, setMergeItem] = useState(null);
+  const [searchArticle, setSearchArticle] = useState('');
   const isMobile = useIsMobile();
   const isRealMobile = isMobile && window.innerWidth <= 768;
 
@@ -470,12 +481,19 @@ export default function Warehouse() {
 
   if (loading) return <div className="loading">Загрузка...</div>;
 
-  const shared = { editingId, editForm, setEditForm, sortCol, sortDir, onSort: handleSort, filterOwner, filterGrade, filterThickness, filterMaterial, setFilterOwner, setFilterGrade, setFilterThickness, setFilterMaterial, showFilters, setShowFilters, onEdit: startEdit, onSave: saveEdit, onCancel: () => setEditingId(null), onDelete: (id) => setConfirmDelete(id), onDeduct: setDeductItem, onReturn: setReturnItem, onCut: setRemnantEditorItem, onMerge: setMergeItem, onNotes: setNotesChat, onPreview: setPreviewItem };
+  const shared = { editingId, editForm, setEditForm, sortCol, sortDir, onSort: handleSort, filterOwner, filterGrade, filterThickness, filterMaterial, setFilterOwner, setFilterGrade, setFilterThickness, setFilterMaterial, showFilters, setShowFilters, searchArticle, onEdit: startEdit, onSave: saveEdit, onCancel: () => setEditingId(null), onDelete: (id) => setConfirmDelete(id), onDeduct: setDeductItem, onReturn: setReturnItem, onCut: setRemnantEditorItem, onMerge: setMergeItem, onNotes: setNotesChat, onPreview: setPreviewItem };
 
   return (
     <div>
-      <div className="toolbar">
+      <div className="toolbar" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>{showForm ? 'Отмена' : '+ Добавить на склад'}</button>
+        <input
+          type="text"
+          value={searchArticle}
+          onChange={e => setSearchArticle(e.target.value)}
+          placeholder="Поиск по артикулу..."
+          style={{ flex: '1 1 200px', minWidth: 150, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
+        />
       </div>
 
       {showForm && (

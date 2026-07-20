@@ -1943,50 +1943,6 @@ async def toggle_layout_run(
 
     layout.completed_runs = json.dumps(completed)
 
-    # Per-run warehouse deduction: deduct 1 sheet when marking as cut, return when unmarking
-    from datetime import datetime, timezone
-
-    # Parse per-run bindings
-    run_bindings = {}
-    if layout.warehouse_bindings:
-        try:
-            run_bindings = json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else layout.warehouse_bindings
-        except Exception:
-            run_bindings = {}
-
-    bound_wh_id = run_bindings.get(str(run_index))
-    if bound_wh_id:
-        wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == bound_wh_id))
-        wh_item = wh_result.scalar_one_or_none()
-        if wh_item:
-            if not was_checked and completed[run_index]:
-                # Marking sheet as cut — deduct from warehouse
-                if wh_item.sheet_count >= 1:
-                    wh_item.sheet_count -= 1
-                    wh_item.last_deducted_at = datetime.now(timezone.utc)
-                    db.add(WarehouseMovement(
-                        warehouse_item_id=wh_item.id,
-                        application_id=layout.application_id,
-                        quantity_change=-1,
-                        movement_type="deduction",
-                        reason=f"Списание при резке раскладки {layout.layout_code} (рез #{run_index+1})",
-                        created_by=user.id,
-                    ))
-                    # Remove binding after deduction
-                    run_bindings.pop(str(run_index), None)
-                    layout.warehouse_bindings = json.dumps(run_bindings) if run_bindings else None
-            elif was_checked and not completed[run_index]:
-                # Unmarking — return sheet to warehouse
-                wh_item.sheet_count += 1
-                db.add(WarehouseMovement(
-                    warehouse_item_id=wh_item.id,
-                    application_id=layout.application_id,
-                    quantity_change=1,
-                    movement_type="return",
-                    reason=f"Возврат при отмене резки раскладки {layout.layout_code} (рез #{run_index+1})",
-                    created_by=user.id,
-                ))
-
     await db.flush()
 
     all_layouts_result = await db.execute(
@@ -2022,6 +1978,99 @@ async def toggle_layout_run(
         if new_status != app.status:
             app.status = new_status
 
+            # Автосписание при автоматической смене статуса на "cut"
+            if new_status == 'cut':
+                from datetime import datetime, timezone
+                app.cut_at = datetime.now(timezone.utc)
+                app.cut_by = user.id if user.role == UserRole.OPERATOR else None
+
+                # Списание привязанных листов (привязки остаются)
+                # Legacy per-layout warehouse_item_id
+                if app.warehouse_item_id and not app.warehouse_deducted:
+                    wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == app.warehouse_item_id))
+                    wh_item = wh_result.scalar_one_or_none()
+                    if wh_item and (wh_item.sheet_count or 0) >= (app.sheets_used or 1):
+                        wh_item.sheet_count -= (app.sheets_used or 1)
+                        wh_item.last_deducted_at = datetime.now(timezone.utc)
+                        db.add(WarehouseMovement(
+                            warehouse_item_id=wh_item.id, application_id=app.id,
+                            quantity_change=-(app.sheets_used or 1), movement_type="deduction",
+                            reason=f"Списание при завершении резки: заказ #{app.id} «{app.order_name}»",
+                            created_by=user.id,
+                        ))
+                        app.warehouse_deducted = True
+
+                # Per-run warehouse_bindings: deduct bound sheets
+                for bl in all_layouts:
+                    if not bl.warehouse_bindings:
+                        continue
+                    try:
+                        bl_bindings = json.loads(bl.warehouse_bindings) if isinstance(bl.warehouse_bindings, str) else bl.warehouse_bindings
+                    except Exception:
+                        continue
+                    for ri, bid in bl_bindings.items():
+                        wh_res = await db.execute(select(WarehouseItem).where(WarehouseItem.id == bid))
+                        wh_it = wh_res.scalar_one_or_none()
+                        if wh_it and (wh_it.sheet_count or 0) >= 1:
+                            wh_it.sheet_count -= 1
+                            wh_it.last_deducted_at = datetime.now(timezone.utc)
+                            # Create a separate entry in "Списано" for the deducted sheet
+                            deducted_item = WarehouseItem(
+                                metal=wh_it.metal, grade=wh_it.grade, thickness=wh_it.thickness,
+                                sheet_w=wh_it.sheet_w, sheet_h=wh_it.sheet_h, size=wh_it.size,
+                                sheet_count=0, weight=wh_it.weight,
+                                article=f"{wh_it.article}-списано" if wh_it.article else None,
+                                parent_article=wh_it.article,
+                                parent_sheet_w=wh_it.sheet_w, parent_sheet_h=wh_it.sheet_h,
+                                owner=wh_it.owner, item_type="deducted", created_by=user.id,
+                            )
+                            db.add(deducted_item)
+
+            # Автовозврат при откате с "cut"
+            elif app.status == 'cut' and new_status != 'cut':
+                if app.warehouse_item_id and app.warehouse_deducted:
+                    wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == app.warehouse_item_id))
+                    wh_item = wh_result.scalar_one_or_none()
+                    if wh_item:
+                        wh_item.sheet_count += (app.sheets_used or 1)
+                        db.add(WarehouseMovement(
+                            warehouse_item_id=wh_item.id, application_id=app.id,
+                            quantity_change=(app.sheets_used or 1), movement_type="return",
+                            reason=f"Возврат при отмене резки: заказ #{app.id} «{app.order_name}»",
+                            created_by=user.id,
+                        ))
+                        app.warehouse_deducted = False
+
+                for bl in all_layouts:
+                    if not bl.warehouse_bindings:
+                        continue
+                    try:
+                        bl_bindings = json.loads(bl.warehouse_bindings) if isinstance(bl.warehouse_bindings, str) else bl.warehouse_bindings
+                    except Exception:
+                        continue
+                    for ri, bid in bl_bindings.items():
+                        wh_res = await db.execute(select(WarehouseItem).where(WarehouseItem.id == bid))
+                        wh_it = wh_res.scalar_one_or_none()
+                        if wh_it:
+                            wh_it.sheet_count += 1
+                            # Remove the deducted entry from "Списано" (only this specific article)
+                            deducted_article = f"{wh_it.article}-списано"
+                            ded_res = await db.execute(
+                                select(WarehouseItem).where(
+                                    WarehouseItem.article == deducted_article,
+                                    WarehouseItem.item_type == "deducted",
+                                ).limit(1)
+                            )
+                            ded = ded_res.scalar_one_or_none()
+                            if ded:
+                                await db.delete(ded)
+                            db.add(WarehouseMovement(
+                                warehouse_item_id=wh_it.id, application_id=app.id,
+                                quantity_change=1, movement_type="return",
+                                reason=f"Возврат при отмене резки: {bl.layout_code} (рез #{int(ri)+1})",
+                                created_by=user.id,
+                            ))
+
     await db.commit()
     return {"status": "success", "completed_runs": completed, "app_status": app.status if app else None}
 
@@ -2050,48 +2099,25 @@ async def update_application_status(
         app.cut_at = datetime.now(timezone.utc)
         app.cut_by = user.id if user.role == UserRole.OPERATOR else None
 
-        # Автосписание со склада при завершении резки
+        # Списание привязанных листов со склада (привязки остаются)
         # 1. Legacy per-layout warehouse_item_id
         if app.warehouse_item_id and not app.warehouse_deducted:
             wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == app.warehouse_item_id))
             wh_item = wh_result.scalar_one_or_none()
-            if wh_item:
-                layouts_result = await db.execute(
-                    select(ApplicationLayout).where(
-                        ApplicationLayout.application_id == app.id,
-                        ApplicationLayout.status == "active",
-                    )
-                )
-                active_layouts = layouts_result.scalars().all()
+            if wh_item and (wh_item.sheet_count or 0) >= (app.sheets_used or 1):
+                wh_item.sheet_count -= (app.sheets_used or 1)
+                wh_item.last_deducted_at = datetime.now(timezone.utc)
+                db.add(WarehouseMovement(
+                    warehouse_item_id=wh_item.id,
+                    application_id=app.id,
+                    quantity_change=-(app.sheets_used or 1),
+                    movement_type="deduction",
+                    reason=f"Списание при завершении резки: заказ #{app.id} «{app.order_name}»",
+                    created_by=user.id,
+                ))
+                app.warehouse_deducted = True
 
-                sheets_to_deduct = 0
-                if active_layouts and wh_item.sheet_w and wh_item.sheet_h:
-                    wh_area = wh_item.sheet_w * wh_item.sheet_h
-                    if wh_area > 0:
-                        import math
-                        total_layout_area = sum(
-                            (l.sheet_w or 0) * (l.sheet_h or 0) * (l.sheet_count or 1)
-                            for l in active_layouts
-                        )
-                        sheets_to_deduct = math.ceil(total_layout_area / wh_area)
-                elif app.sheets_used:
-                    sheets_to_deduct = app.sheets_used
-
-                if sheets_to_deduct > 0 and wh_item.sheet_count >= sheets_to_deduct:
-                    wh_item.sheet_count -= sheets_to_deduct
-                    wh_item.last_deducted_at = datetime.now(timezone.utc)
-                    db.add(WarehouseMovement(
-                        warehouse_item_id=wh_item.id,
-                        application_id=app.id,
-                        quantity_change=-sheets_to_deduct,
-                        movement_type="deduction",
-                        reason=f"Автосписание при завершении резки: заказ #{app.id} «{app.order_name}»",
-                        created_by=user.id,
-                    ))
-                    app.sheets_used = sheets_to_deduct
-                    app.warehouse_deducted = True
-
-        # 2. Per-run warehouse_bindings: deduct bound sheets
+        # 2. Per-run warehouse_bindings: deduct bound sheets (bindings stay!)
         layouts_result = await db.execute(
             select(ApplicationLayout).where(
                 ApplicationLayout.application_id == app.id,
@@ -2103,49 +2129,86 @@ async def update_application_status(
                 continue
             try:
                 bindings = json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else layout.warehouse_bindings
-                runs = json.loads(layout.completed_runs) if layout.completed_runs else []
             except Exception:
                 continue
             for ri, bid in bindings.items():
-                ri_int = int(ri)
-                # Only deduct if run is marked as cut
-                if ri_int < len(runs) and runs[ri_int]:
-                    wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == bid))
-                    wh_item = wh_result.scalar_one_or_none()
-                    if wh_item and (wh_item.sheet_count or 0) >= 1:
-                        wh_item.sheet_count -= 1
-                        wh_item.last_deducted_at = datetime.now(timezone.utc)
-                        db.add(WarehouseMovement(
-                            warehouse_item_id=wh_item.id,
-                            application_id=app.id,
-                            quantity_change=-1,
-                            movement_type="deduction",
-                            reason=f"Автосписание при завершении резки: {layout.layout_code} (рез #{ri_int+1})",
-                            created_by=user.id,
-                        ))
-            # Clear bindings after deduction
-            layout.warehouse_bindings = None
+                wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == bid))
+                wh_item = wh_result.scalar_one_or_none()
+                if wh_item and (wh_item.sheet_count or 0) >= 1:
+                    wh_item.sheet_count -= 1
+                    wh_item.last_deducted_at = datetime.now(timezone.utc)
+                    # Create a separate entry in "Списано" for the deducted sheet
+                    deducted_item = WarehouseItem(
+                        metal=wh_item.metal, grade=wh_item.grade, thickness=wh_item.thickness,
+                        sheet_w=wh_item.sheet_w, sheet_h=wh_item.sheet_h, size=wh_item.size,
+                        sheet_count=0, weight=wh_item.weight,
+                        article=f"{wh_item.article}-списано" if wh_item.article else None,
+                        parent_article=wh_item.article,
+                        parent_sheet_w=wh_item.sheet_w, parent_sheet_h=wh_item.sheet_h,
+                        owner=wh_item.owner, item_type="deducted", created_by=user.id,
+                    )
+                    db.add(deducted_item)
+            # НЕ очищаем warehouse_bindings — привязка остаётся навсегда
+
     elif status != "cut" and old_status == "cut":
         app.cut_at = None
         app.cut_by = None
 
-        # Автовозврат на склад при отмене статуса "cut"
-        if app.warehouse_item_id and app.sheets_used and app.warehouse_deducted:
+        # Возврат на склад при отмене статуса "cut"
+        # 1. Legacy
+        if app.warehouse_item_id and app.warehouse_deducted:
             wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == app.warehouse_item_id))
             wh_item = wh_result.scalar_one_or_none()
             if wh_item:
-                wh_item.sheet_count += app.sheets_used
+                wh_item.sheet_count += (app.sheets_used or 1)
                 db.add(WarehouseMovement(
                     warehouse_item_id=wh_item.id,
                     application_id=app.id,
-                    quantity_change=app.sheets_used,
+                    quantity_change=(app.sheets_used or 1),
                     movement_type="return",
-                    reason=f"Автовозврат при отмене резки: заказ #{app.id} «{app.order_name}»",
+                    reason=f"Возврат при отмене резки: заказ #{app.id} «{app.order_name}»",
                     created_by=user.id,
                 ))
                 app.warehouse_deducted = False
-                app.sheets_used = None
-                app.warehouse_item_id = None
+
+        # 2. Per-run: вернуть листы по привязкам
+        layouts_result = await db.execute(
+            select(ApplicationLayout).where(
+                ApplicationLayout.application_id == app.id,
+                ApplicationLayout.status == "active",
+            )
+        )
+        for layout in layouts_result.scalars().all():
+            if not layout.warehouse_bindings:
+                continue
+            try:
+                bindings = json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else layout.warehouse_bindings
+            except Exception:
+                continue
+            for ri, bid in bindings.items():
+                wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == bid))
+                wh_item = wh_result.scalar_one_or_none()
+                if wh_item:
+                    wh_item.sheet_count += 1
+                    # Remove the deducted entry from "Списано" (only this specific article)
+                    deducted_article = f"{wh_item.article}-списано"
+                    ded_res = await db.execute(
+                        select(WarehouseItem).where(
+                            WarehouseItem.article == deducted_article,
+                            WarehouseItem.item_type == "deducted",
+                        ).limit(1)
+                    )
+                    ded = ded_res.scalar_one_or_none()
+                    if ded:
+                        await db.delete(ded)
+                    db.add(WarehouseMovement(
+                        warehouse_item_id=wh_item.id,
+                        application_id=app.id,
+                        quantity_change=1,
+                        movement_type="return",
+                        reason=f"Возврат при отмене резки: {layout.layout_code} (рез #{int(ri)+1})",
+                        created_by=user.id,
+                    ))
 
     # Sync completed_runs with status change
     if old_status != status:
