@@ -841,7 +841,7 @@ async def list_applications(
                 "sheet_count": al.sheet_count or 1,
                 "completed_runs": json.loads(al.completed_runs) if al.completed_runs else [],
                 "warehouse_item_id": al.warehouse_item_id,
-                "warehouse_bindings": json.loads(al.warehouse_bindings) if al.warehouse_bindings else {},
+                "warehouse_bindings": json.loads(al.warehouse_bindings) if isinstance(al.warehouse_bindings, str) else (al.warehouse_bindings or {}),
             })
 
         enriched.append({
@@ -1731,7 +1731,7 @@ async def get_application_details(
             "cnc_path": layout.cnc_path,
             "layout_image": layout.layout_image,
             "warehouse_item_id": layout.warehouse_item_id,
-            "warehouse_bindings": json.loads(layout.warehouse_bindings) if layout.warehouse_bindings else {},
+            "warehouse_bindings": json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else (layout.warehouse_bindings or {}),
             "parts_count": len(parts),
             "parts": [
                 {
