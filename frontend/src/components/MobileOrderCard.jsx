@@ -291,6 +291,11 @@ export default function MobileOrderCard({ app, showProgress = true }) {
                 📊 {cutSheetsAll}/{totalSheetsAll}
               </span>
             )}
+            {app.created_at && (
+              <span style={{ fontSize: 10, color: '#94a3b8' }}>
+                {new Date(app.created_at).toLocaleDateString('ru-RU')}
+              </span>
+            )}
             <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>
               #{app.id}
             </span>

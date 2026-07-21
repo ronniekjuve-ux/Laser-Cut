@@ -727,6 +727,10 @@ async def split_remnant(
     remain_item = None
     rw, rh = rectBounds(remaining) if remaining else (0, 0)
     if rw >= 10 and rh >= 10:
+        # Normalize vertices to start at (0,0) so frontend viewBox matches
+        min_x = min(v[0] for v in remaining) if remaining else 0
+        min_y = min(v[1] for v in remaining) if remaining else 0
+        normalized = [[v[0] - min_x, v[1] - min_y] for v in remaining] if remaining else []
         remain_item = WarehouseItem(
             metal=wh_item.metal if wh_item else "Сталь",
             grade=wh_item.grade,
@@ -740,8 +744,8 @@ async def split_remnant(
             parent_article=parent_article,
             parent_sheet_w=wh_item.sheet_w if wh_item else None,
             parent_sheet_h=wh_item.sheet_h if wh_item else None,
-            is_rectangular=isRectangle(remaining),
-            vertices=remaining,
+            is_rectangular=isRectangle(normalized),
+            vertices=normalized,
             item_type="standard",
             owner=wh_item.owner if wh_item else None,
             created_by=user.id,
@@ -778,6 +782,12 @@ async def split_remnant(
         "cut_item": _item_to_dict(cut_item),
         "remain_item": _item_to_dict(remain_item) if remain_item else None,
     }
+
+    # Override remain_item vertices with original (non-normalized) coordinates
+    # for correct positioning on the original sheet in the result view.
+    # Normalized vertices are stored in DB for standalone sheet preview.
+    if remain_item and remaining:
+        result["remain_item"]["vertices"] = remaining
 
     return result
 
