@@ -970,6 +970,30 @@ def _subtract_rect(polygon: list, rx: float, ry: float, rw: float, rh: float) ->
             return []
         tl, tr = x1 == 0, x2 == W
         tt, tb = y1 == 0, y2 == H
+        # Full-width cut — remaining is top or bottom rectangle
+        if tl and tr:
+            if tt:
+                return [[0, y2], [W, y2], [W, H], [0, H]]
+            if tb:
+                return [[0, 0], [W, 0], [W, y1], [0, y1]]
+            top_area = W * y1
+            bot_area = W * (H - y2)
+            if top_area >= bot_area:
+                return [[0, 0], [W, 0], [W, y1], [0, y1]]
+            else:
+                return [[0, y2], [W, y2], [W, H], [0, H]]
+        # Full-height cut — remaining is left or right rectangle
+        if tt and tb:
+            if tl:
+                return [[x2, 0], [W, 0], [W, H], [x2, H]]
+            if tr:
+                return [[0, 0], [x1, 0], [x1, H], [0, H]]
+            left_area = x1 * H
+            right_area = (W - x2) * H
+            if left_area >= right_area:
+                return [[0, 0], [x1, 0], [x1, H], [0, H]]
+            else:
+                return [[x2, 0], [W, 0], [W, H], [x2, H]]
         if tl and tt: return [[x2, 0], [W, 0], [W, H], [0, H], [0, y2], [x2, y2]]
         if tr and tt: return [[0, 0], [x1, 0], [x1, y2], [W, y2], [W, H], [0, H]]
         if tl and tb: return [[0, 0], [W, 0], [W, H], [x2, H], [x2, y1], [0, y1]]
