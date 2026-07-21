@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import MobileLayoutCarousel from './MobileLayoutCarousel';
 import LayoutPreviewModal from './LayoutPreviewModal';
 import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 const STATUS_CONFIG = {
   approved: { label: 'В очереди', bg: '#dbeafe', color: '#1d4ed8' },
@@ -94,11 +95,14 @@ function ProgressPopup({ allLayouts, onClose }) {
 }
 
 export default function MobileOrderCard({ app, showProgress = true }) {
+  const { user } = useAuth();
   const [previewLayout, setPreviewLayout] = useState(null);
   const [activeLayoutIndex, setActiveLayoutIndex] = useState(0);
   const [showProgressPopup, setShowProgressPopup] = useState(false);
   const [priorityDropdown, setPriorityDropdown] = useState(false);
+  const [statusDropdown, setStatusDropdown] = useState(false);
   const status = STATUS_CONFIG[app.status] || STATUS_CONFIG.approved;
+  const canChangeStatus = user?.role === 'admin' || user?.role === 'operator';
   const material = app.steel_grade || app.material || '-';
   const priority = app.priority || 'medium';
   const layouts = app.layouts || [];
@@ -133,6 +137,17 @@ export default function MobileOrderCard({ app, showProgress = true }) {
     }
   };
 
+  const changeStatus = async (e, newStatus) => {
+    e.stopPropagation();
+    setStatusDropdown(false);
+    try {
+      await client.patch('/api/v1/applications/' + app.id + '/status?status=' + newStatus);
+      app.status = newStatus;
+    } catch {
+      alert('Ошибка');
+    }
+  };
+
   const priorityConf = PRIORITY_OPTIONS.find(p => p.key === priority) || PRIORITY_OPTIONS[1];
 
   return (
@@ -162,14 +177,50 @@ export default function MobileOrderCard({ app, showProgress = true }) {
             </div>
           )}
           <div className="order-card-footer">
-            <span
-              style={{
-                padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
-                background: status.bg, color: status.color,
-              }}
-            >
-              {status.label}
-            </span>
+            {canChangeStatus ? (
+              <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                <span
+                  onClick={() => setStatusDropdown(!statusDropdown)}
+                  style={{
+                    padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    background: status.bg, color: status.color,
+                  }}
+                >
+                  {status.label} ▾
+                </span>
+                {statusDropdown && (
+                  <div style={{
+                    position: 'absolute', bottom: '100%', left: 0, zIndex: 100, marginBottom: 4,
+                    background: '#fff', border: '1px solid var(--border)', borderRadius: 8,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.15)', minWidth: 160, overflow: 'hidden',
+                  }}>
+                    {Object.entries(STATUS_CONFIG).map(([key, conf]) => (
+                      <div
+                        key={key}
+                        onClick={(e) => changeStatus(e, key)}
+                        style={{
+                          padding: '8px 12px', fontSize: 12, cursor: 'pointer',
+                          fontWeight: app.status === key ? 600 : 400,
+                          background: app.status === key ? conf.bg : '#fff',
+                          color: app.status === key ? conf.color : '#334155',
+                        }}
+                      >
+                        {conf.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span
+                style={{
+                  padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+                  background: status.bg, color: status.color,
+                }}
+              >
+                {status.label}
+              </span>
+            )}
             {/* Priority selector (admin/director only) */}
             <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
               <span

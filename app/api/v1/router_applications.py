@@ -1915,7 +1915,7 @@ async def toggle_layout_run(
         layout_id: int,
         run_index: int = Query(...),
         db: AsyncSession = Depends(get_db),
-        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
 ):
     result = await db.execute(select(ApplicationLayout).where(ApplicationLayout.id == layout_id))
     layout = result.scalar_one_or_none()

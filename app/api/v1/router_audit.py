@@ -324,7 +324,7 @@ async def list_overrides(
         db: AsyncSession = Depends(get_db),
         user: User = Depends(get_current_user)
 ):
-    if user.role not in (UserRole.ADMIN, UserRole.DIRECTOR):
+    if user.role not in (UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR):
         raise HTTPException(status_code=403, detail="Нет доступа")
 
     year, mon = map(int, month.split("-"))
