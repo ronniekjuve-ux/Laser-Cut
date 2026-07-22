@@ -333,7 +333,7 @@ export default function OrdersList({ initialTab }) {
   if (loading) return <div className="loading">Загрузка...</div>;
 
   return (
-    <div>
+    <div style={isMobile ? { margin: '-12px -12px 0 -12px' } : {}}>
       <div className="toolbar">
         {(user?.role === 'admin' || user?.role === 'director') && (
           <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
@@ -390,7 +390,7 @@ export default function OrdersList({ initialTab }) {
         </div>
       )}
 
-      {isMobile && (<div style={{ marginBottom: 12 }}>
+      {isMobile && (<div style={{ marginBottom: 12, position: 'sticky', top: -12, zIndex: 10, background: '#fff', paddingTop: 16, paddingBottom: 4 }}>
           {/* Tab bar */}
           <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--border)', marginBottom: 10 }}>
             {(user?.role === 'operator' ? [
@@ -474,7 +474,7 @@ export default function OrdersList({ initialTab }) {
       )}
 
       {isMobile ? (
-        <div className="order-cards">
+        <div className="order-cards" style={{ paddingBottom: totalPages > 1 ? 52 : 0 }}>
           {pageItems.map(app => (
             <MobileOrderCard
               key={app.id}
@@ -791,7 +791,14 @@ export default function OrdersList({ initialTab }) {
       )}
 
       {totalPages > 1 && (
-        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center' }}>
+        <div style={{
+          display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center',
+          ...(isMobile ? {
+            position: 'fixed', bottom: 56, left: 0, right: 0, zIndex: 50,
+            background: '#fff', borderTop: '1px solid var(--border)',
+            padding: '8px 0', margin: 0,
+          } : { marginTop: 16 }),
+        }}>
           <button className="btn" onClick={() => setPage(1)} disabled={page <= 1} style={{ fontSize: 12 }}>
             «
           </button>

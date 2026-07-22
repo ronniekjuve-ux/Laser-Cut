@@ -140,7 +140,7 @@ export default function Schedule() {
         const date = new Date(year, month, d);
         const { pair, isVovaOn } = getShiftForDate(date, overrides);
         const worksDay = pair[0] === op || pair[1] === op;
-        const worksNight = isVovaOn && op === 'Vova';
+        const worksNight = isVovaOn && op === 'Ulad';
         if (!worksDay && !worksNight) continue;
 
         if (date <= todayDate) workedDays++;
@@ -258,7 +258,7 @@ export default function Schedule() {
               const isSelected = date.toDateString() === selectedDate.toDateString();
 
               const hasOp = selectedOps.length === 0 || selectedOps.some(op =>
-                shift.pair[0] === op || shift.pair[1] === op || (shift.isVovaOn && op === 'Vova')
+                shift.pair[0] === op || shift.pair[1] === op || (shift.isVovaOn && op === 'Ulad')
               );
 
               return (
@@ -282,7 +282,7 @@ export default function Schedule() {
                     <div className={'sched-op' + (shift.isOverride ? ' override' : '')}>
                       St2: {shift.pair[1] || '—'}
                     </div>
-                    {shift.isVovaOn && <div className="sched-op sched-night">N: Vova</div>}
+                    {shift.isVovaOn && <div className="sched-op sched-night">N: Ulad</div>}
                   </div>
                 </div>
               );
@@ -305,7 +305,7 @@ export default function Schedule() {
                     <div style={{fontSize: 12, color: '#64748b', lineHeight: 1.8}}>
                       <div>Станок 1: <b>{s.st1}</b> дн ({s.st1 * HOURS_PER_SHIFT}ч)</div>
                       <div>Станок 2: <b>{s.st2}</b> дн ({s.st2 * HOURS_PER_SHIFT}ч)</div>
-                      {op === 'Vova' && <div>Ночь: <b>{s.night}</b> дн ({s.night * HOURS_PER_SHIFT}ч)</div>}
+                      {op === 'Ulad' && <div>Ночь: <b>{s.night}</b> дн ({s.night * HOURS_PER_SHIFT}ч)</div>}
                       <div style={{borderTop: '1px solid #e2e8f0', marginTop: 4, paddingTop: 4}}>
                         Всего: <b>{s.totalDays}</b> дн / <b>{s.totalHours}</b>ч
                       </div>
@@ -391,7 +391,7 @@ export default function Schedule() {
               </div>
               <div className="operator-block" style={{background: '#f3e8ff', border: '1px solid #c084fc'}}>
                 <div className="label">Ночь (20:00-08:00)</div>
-                <div className="value">{selectedShift.isVovaOn ? 'Vova' : 'Выходной'}</div>
+                <div className="value">{selectedShift.isVovaOn ? 'Ulad' : 'Выходной'}</div>
               </div>
               {selectedShift.isOverride && (
                 <div style={{marginTop: 8, padding: '6px 8px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 4, fontSize: 12, color: '#92400e'}}>

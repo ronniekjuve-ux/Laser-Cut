@@ -292,7 +292,7 @@ export default function MobileOrderCard({ app, showProgress = true }) {
               </span>
             )}
             {app.created_at && (
-              <span style={{ fontSize: 10, color: '#94a3b8' }}>
+              <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
                 {new Date(app.created_at).toLocaleDateString('ru-RU')}
               </span>
             )}

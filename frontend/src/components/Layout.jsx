@@ -16,7 +16,7 @@ function getActiveOps(overrides) {
   if (h >= 8 && h < 20) {
     return pair[0] + ' (St1) | ' + pair[1] + ' (St2)';
   }
-  return isVovaOn ? 'Vova (Night)' : 'Night (Off)';
+  return isVovaOn ? 'Ulad (Night)' : 'Night (Off)';
 }
 
 const NAV_ITEMS = [

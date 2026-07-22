@@ -352,8 +352,8 @@ export default function ApplicationsList() {
   if (loading) return <div className="loading">{'\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430...'}</div>;
 
   return (
-    <div>
-      <div className="toolbar">
+    <div style={isRealMobile ? { margin: '-12px -12px 0 -12px' } : {}}>
+      <div className="toolbar" style={isRealMobile ? { position: 'sticky', top: 0, zIndex: 10, background: '#fff' } : {}}>
         <input
           type="text"
           placeholder={'\u041f\u043e\u0438\u0441\u043a \u043f\u043e \u0437\u0430\u043a\u0430\u0437\u0447\u0438\u043a\u0443, \u0441\u0442\u0430\u043b\u0438, \u0434\u0435\u0442\u0430\u043b\u044f\u043c...'}
@@ -409,7 +409,7 @@ export default function ApplicationsList() {
       )}
 
       {isRealMobile ? (
-        <div className="order-cards">
+        <div className="order-cards" style={{ paddingBottom: totalPages > 1 ? 52 : 0 }}>
           {activeApps.map(app => (
             <MobileOrderCard
               key={app.id}
@@ -675,7 +675,14 @@ export default function ApplicationsList() {
       )}
 
       {totalPages > 1 && (
-        <div style={{display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center'}}>
+        <div style={{
+          display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center',
+          ...(isRealMobile ? {
+            position: 'fixed', bottom: 56, left: 0, right: 0, zIndex: 50,
+            background: '#fff', borderTop: '1px solid var(--border)',
+            padding: '8px 0', margin: 0,
+          } : { marginTop: 16 }),
+        }}>
           <button className="btn" onClick={() => { setPage(1); fetchApplications(search, 1); }} disabled={page <= 1} style={{fontSize: 12}}>
             «
           </button>

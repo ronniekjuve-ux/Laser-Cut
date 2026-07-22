@@ -9,7 +9,7 @@ export const ANCHOR_DATE = new Date(2026, 5, 19);
 export const ANCHOR_DAY_INDEX = 0;
 export const ANCHOR_NIGHT_INDEX = 0;
 
-export const ALL_OPERATORS = ['Yura', 'Denis', 'Andrey', 'Dima', 'Vova'];
+export const ALL_OPERATORS = ['Yura', 'Denis', 'Andrey', 'Dima', 'Ulad'];
 
 export function dateToKey(date) {
   const y = date.getFullYear();
@@ -35,7 +35,7 @@ export function getShiftForDate(date, overrides = {}) {
     const o = overrides[key];
     return {
       pair: [o.st1 || '', o.st2 || ''],
-      isVovaOn: o.night === 'Vova',
+      isVovaOn: o.night === 'Ulad',
       isOverride: true,
     };
   }
@@ -89,7 +89,7 @@ export function getOperatorDaysInMonth(year, month, overrides = {}) {
     const { pair, isVovaOn } = getShiftForDate(date, overrides);
     if (pair[0] && result[pair[0]]) result[pair[0]].st1++;
     if (pair[1] && result[pair[1]]) result[pair[1]].st2++;
-    if (isVovaOn && result['Vova']) result['Vova'].night++;
+    if (isVovaOn && result['Ulad']) result['Ulad'].night++;
   }
   return result;
 }
@@ -125,7 +125,7 @@ export function computeMonthShifts(year, month, overrides = {}) {
     }
     if (isVovaOn) {
       shifts.push({
-        username: 'Vova',
+        username: 'Ulad',
         date: dateStr,
         shift_type: 'night',
         hours: ov.night_hours ?? 12,
