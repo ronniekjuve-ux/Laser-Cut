@@ -4,7 +4,12 @@ from sqlalchemy import select, func, desc, text
 from datetime import datetime, timedelta, timezone
 from app.db.base import get_db
 from app.models.user import User, UserRole, UserStatus
-from app.db.models import AuditLog, ChangeLog, UserActivity, LoginHistory, user_customers, Customer
+from app.db.models import (
+    AuditLog, ChangeLog, UserActivity, LoginHistory, user_customers, Customer,
+    Session, Notification, OperatorShift, OperatorMonthlyStats,
+    Feedback, ItemNote, WarehouseMovement, WarehouseRemnant, DeficitRequest,
+    Application, WarehouseItem,
+)
 from app.schemas.user import UserCreate, UserUpdate, UserOut
 from app.core.deps import require_role, log_audit
 from app.core.security import get_password_hash
@@ -210,6 +215,32 @@ async def delete_user(
         raise HTTPException(status_code=404, detail="User not found")
     if user.id == admin.id:
         raise HTTPException(status_code=400, detail="Нельзя удалить себя")
+
+    # Clean up related records before deleting user
+    for model, fk_col in [
+        (Session, Session.user_id),
+        (Notification, Notification.user_id),
+        (ChangeLog, ChangeLog.user_id),
+        (UserActivity, UserActivity.user_id),
+        (LoginHistory, LoginHistory.user_id),
+        (OperatorShift, OperatorShift.user_id),
+        (OperatorMonthlyStats, OperatorMonthlyStats.user_id),
+        (Feedback, Feedback.user_id),
+        (ItemNote, ItemNote.user_id),
+        (DeficitRequest, DeficitRequest.created_by),
+        (WarehouseMovement, WarehouseMovement.created_by),
+        (WarehouseRemnant, WarehouseRemnant.created_by),
+        (AuditLog, AuditLog.user_id),
+    ]:
+        await db.execute(model.__table__.delete().where(fk_col == user_id))
+    await db.execute(user_customers.delete().where(user_customers.c.user_id == user_id))
+
+    # Null out FK references (don't delete business data)
+    from sqlalchemy import update
+    await db.execute(update(Application).where(Application.updated_by == user_id).values(updated_by=None))
+    await db.execute(update(Application).where(Application.cut_by == user_id).values(cut_by=None))
+    await db.execute(update(WarehouseItem).where(WarehouseItem.created_by == user_id).values(created_by=None))
+
     await db.delete(user)
     await db.commit()
     await log_audit(admin, "DELETE", "user", user_id, f"Deleted user {user.username}", db)
