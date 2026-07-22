@@ -223,17 +223,33 @@ export default function OrdersList({ initialTab }) {
   };
 
   const filtered = allOrders.filter(app => {
-    if (!search) return true;
-    const q = search.toLowerCase();
+    if (search) {
+      const q = search.toLowerCase();
+      const rd = getRowData(app);
+      const matchSearch = (
+        String(rd.customer).toLowerCase().includes(q) ||
+        String(rd.number).includes(q) ||
+        String(app.order_name || '').toLowerCase().includes(q) ||
+        String(rd.material).toLowerCase().includes(q) ||
+        String(rd.notes).toLowerCase().includes(q) ||
+        String(rd.group).toLowerCase().includes(q)
+      );
+      if (!matchSearch) return false;
+    }
     const rd = getRowData(app);
-    return (
-      String(rd.customer).toLowerCase().includes(q) ||
-      String(rd.number).includes(q) ||
-      String(app.order_name || '').toLowerCase().includes(q) ||
-      String(rd.material).toLowerCase().includes(q) ||
-      String(rd.notes).toLowerCase().includes(q) ||
-      String(rd.group).toLowerCase().includes(q)
-    );
+    // Apply active filters
+    for (const [key, values] of Object.entries(filters)) {
+      if (!values || values.length === 0) continue;
+      if (key === 'status') {
+        const STATUS_LABEL_TO_KEY = { 'В очереди': 'approved', 'В резке': 'in_progress', 'Частично вырезано': 'partially_cut', 'Вырезано': 'cut' };
+        const match = values.some(v => app.status === (STATUS_LABEL_TO_KEY[v] || v));
+        if (!match) return false;
+      } else {
+        const match = values.some(v => String(rd[key] || '').trim() === String(v).trim());
+        if (!match) return false;
+      }
+    }
+    return true;
   }).sort((a, b) => {
     const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
     const getPriorityVal = (app) => {
