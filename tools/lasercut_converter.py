@@ -22,6 +22,8 @@ import shutil
 import hashlib
 import tempfile
 import threading
+import urllib.request
+import urllib.parse
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
@@ -33,19 +35,26 @@ except ImportError:
     print("ERROR: pywin32 not installed. Run: pip install pywin32")
     sys.exit(1)
 
-# Find project root (same directory as exe or script)
+# Find project root
 if getattr(sys, 'frozen', False):
-    # Running as exe
-    PROJECT_ROOT = Path(sys.executable).parent
+    # Running as exe — exe lives in dist/, project root is one level up
+    EXE_DIR = Path(sys.executable).parent
+    PROJECT_ROOT = EXE_DIR.parent
+    # If parent doesn't look like a project (no app/ folder), stay in exe dir
+    if not (PROJECT_ROOT / "app").is_dir():
+        PROJECT_ROOT = EXE_DIR
 else:
-    # Running as script
-    PROJECT_ROOT = Path(__file__).parent
+    # Running as script — script is in tools/
+    PROJECT_ROOT = Path(__file__).parent.parent
 
 DATA_DIR = PROJECT_ROOT / "data"
 UPLOADS_DIR = DATA_DIR / "uploads"
 IMAGES_DIR = DATA_DIR / "images"
 LOG_FILE = PROJECT_ROOT / "converter.log"
 PORT = 8001
+
+# Remote server URL for uploading images (set via config or CLI arg)
+SERVER_URL = os.environ.get("LASERCUT_SERVER_URL", "")
 
 IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.emf', '.wmf'}
 
@@ -61,9 +70,64 @@ def log(msg):
         pass
 
 
+def upload_to_server(file_path: Path, server_url: str, token: str = "") -> bool:
+    """Upload a file to the remote server via multipart/form-data."""
+    if not server_url:
+        return False
+    try:
+        url = f"{server_url.rstrip('/')}/api/v1/images/upload"
+        boundary = hashlib.md5(str(time.time()).encode()).hexdigest()
+
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+
+        body = (
+            f'--{boundary}\r\n'
+            f'Content-Disposition: form-data; name="file"; filename="{file_path.name}"\r\n'
+            f'Content-Type: application/octet-stream\r\n\r\n'
+        ).encode() + file_data + f'\r\n--{boundary}--\r\n'.encode()
+
+        headers = {
+            'Content-Type': f'multipart/form-data; boundary={boundary}',
+            'Content-Length': str(len(body)),
+        }
+        if token:
+            headers['Authorization'] = f'Bearer {token}'
+
+        req = urllib.request.Request(url, data=body, headers=headers)
+        resp = urllib.request.urlopen(req, timeout=30)
+        result = json.loads(resp.read().decode())
+        if result.get('ok'):
+            log(f"  Uploaded to server: {file_path.name}")
+            return True
+        else:
+            log(f"  Server rejected: {result}")
+            return False
+    except Exception as e:
+        log(f"  Upload failed: {e}")
+        return False
+
+
 def convert_doc_to_gif(doc_path: Path) -> dict:
     """Convert DOC to HTML using Word, extract GIF images."""
     log(f"Converting: {doc_path.name}")
+
+    # Translate Linux Docker paths to Windows paths
+    doc_str = str(doc_path)
+    if doc_str.startswith('/app/data/'):
+        # Docker maps ./data/ -> /app/data/
+        local_part = doc_str[len('/app/data/'):]
+        doc_path = DATA_DIR / local_part
+        log(f"  Path translated: {doc_str} -> {doc_path}")
+    elif doc_str.startswith('/app/'):
+        # Fallback: try to map any /app/ path
+        local_part = doc_str[len('/app/'):]
+        doc_path = PROJECT_ROOT / local_part
+        log(f"  Path translated: {doc_str} -> {doc_path}")
+
+    if not doc_path.exists():
+        log(f"  File not found: {doc_path}")
+        return {"error": f"File not found: {doc_path}"}
 
     pythoncom.CoInitialize()
     try:
@@ -120,6 +184,15 @@ def convert_doc_to_gif(doc_path: Path) -> dict:
                 log(f"  Saved: {dest_name} ({dest.stat().st_size} bytes)")
 
             log(f"Converted: {doc_path.name} -> {len(saved)} images")
+
+            # Upload to remote server if configured
+            if SERVER_URL:
+                log(f"Uploading to server: {SERVER_URL}")
+                for item in saved:
+                    local_path = IMAGES_DIR / item["name"]
+                    if local_path.exists():
+                        upload_to_server(local_path, SERVER_URL)
+
             return {"images": saved, "count": len(saved)}
     finally:
         pythoncom.CoUninitialize()
@@ -199,10 +272,23 @@ class ConverterHandler(BaseHTTPRequestHandler):
 
 
 def main():
+    global SERVER_URL
+
+    # Parse command-line args
+    for i, arg in enumerate(sys.argv[1:], 1):
+        if arg in ('--server', '-s') and i < len(sys.argv) - 1:
+            SERVER_URL = sys.argv[i + 1]
+        elif arg.startswith('--server=') or arg.startswith('-s='):
+            SERVER_URL = arg.split('=', 1)[1]
+
     log("=" * 50)
-    log("LaserCut Local Converter v1.0")
+    log("LaserCut Local Converter v1.1")
     log(f"Data directory: {DATA_DIR}")
     log(f"Images directory: {IMAGES_DIR}")
+    if SERVER_URL:
+        log(f"Remote server: {SERVER_URL}")
+    else:
+        log("Remote server: not configured (use --server URL)")
     log("=" * 50)
 
     # Create directories

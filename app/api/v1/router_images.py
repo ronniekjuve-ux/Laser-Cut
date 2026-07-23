@@ -3,6 +3,7 @@ import re
 import tempfile
 import subprocess
 import shutil
+import time
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pathlib import Path
@@ -11,6 +12,11 @@ router = APIRouter(prefix="/images", tags=["Images"])
 
 IMAGES_DIR = Path("/app/data/images")
 UPLOAD_DIR = Path("/app/data/uploads")
+
+
+def log(msg):
+    ts = time.strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}", flush=True)
 
 
 @router.post("/debug/extract")
@@ -365,6 +371,30 @@ async def debug_extract_from_uploads(filename: str):
             "img_tags_in_html": len(img_tags),
             "img_tag_srcs": img_tags[:20]
         }
+
+
+@router.post("/upload")
+async def upload_layout_image(file: UploadFile = File(...)):
+    """
+    Upload an image from the local converter.
+    Used when the converter runs on a remote computer and uploads to this server.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="filename is required")
+
+    # Sanitize filename
+    safe_name = Path(file.filename).name
+    safe_name = safe_name.replace(" ", "_").replace(".", "_") + Path(file.filename).suffix.lower()
+
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    dest = IMAGES_DIR / safe_name
+
+    with open(dest, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    log(f"Uploaded: {safe_name} ({len(content)} bytes)")
+    return {"ok": True, "name": safe_name, "url": f"/api/v1/images/{safe_name}"}
 
 
 # IMPORTANT: catch-all route MUST be last
