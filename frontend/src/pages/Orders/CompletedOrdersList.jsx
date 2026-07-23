@@ -63,7 +63,15 @@ export default function CompletedOrdersList() {
     if (filters.customer?.length) list = list.filter(app => filters.customer.includes(app.customer));
     if (filters.machine?.length) list = list.filter(app => filters.machine.includes(app.machine));
     if (filters.material?.length) list = list.filter(app => filters.material.includes(app.steel_grade || app.material));
-    if (filters.thickness?.length) list = list.filter(app => filters.thickness.includes(String(app.thickness)));
+    if (filters.thickness?.length) list = list.filter(app => {
+      const appThickness = String(app.thickness || '');
+      return filters.thickness.some(v => {
+        const rowNum = parseFloat(appThickness);
+        const filterNum = parseFloat(String(v));
+        if (!isNaN(rowNum) && !isNaN(filterNum)) return rowNum === filterNum;
+        return appThickness === String(v);
+      });
+    });
 
     // Sort
     list = [...list].sort((a, b) => {

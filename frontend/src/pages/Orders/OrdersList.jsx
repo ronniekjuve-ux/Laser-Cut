@@ -236,18 +236,13 @@ export default function OrdersList({ initialTab }) {
       );
       if (!matchSearch) return false;
     }
-    const rd = getRowData(app);
-    // Apply active filters
-    for (const [key, values] of Object.entries(filters)) {
-      if (!values || values.length === 0) continue;
-      if (key === 'status') {
-        const STATUS_LABEL_TO_KEY = { 'В очереди': 'approved', 'В резке': 'in_progress', 'Частично вырезано': 'partially_cut', 'Вырезано': 'cut' };
-        const match = values.some(v => app.status === (STATUS_LABEL_TO_KEY[v] || v));
-        if (!match) return false;
-      } else {
-        const match = values.some(v => String(rd[key] || '').trim() === String(v).trim());
-        if (!match) return false;
-      }
+    // Column filters (thickness, material, customer, machine, etc.) are
+    // handled server-side via fetchOrders params — no client-side re-filtering.
+    // Only status needs client-side filtering (not sent to server).
+    if (filters.status?.length) {
+      const STATUS_LABEL_TO_KEY = { 'В очереди': 'approved', 'В резке': 'in_progress', 'Частично вырезано': 'partially_cut', 'Вырезано': 'cut' };
+      const match = filters.status.some(v => app.status === (STATUS_LABEL_TO_KEY[v] || v));
+      if (!match) return false;
     }
     return true;
   }).sort((a, b) => {
