@@ -735,13 +735,13 @@ def extract_images(filepath: str, output_dir: str, prefix: str = "", filter_dft:
             all_images = {}
             html_name = Path(filepath).stem
 
-            # 1. Ищем в ВСЕХ папках *_files (LibreOffice может создавать разные имена)
-            for img_dir in Path(tmpdir).glob("*_files"):
-                if img_dir.is_dir():
+            # 1. Ищем в ВСЕХ папках *.files/*_files (Word создает *.files, LibreOffice - *_files)
+            for img_dir in Path(tmpdir).iterdir():
+                if img_dir.is_dir() and (img_dir.name.endswith('.files') or img_dir.name.endswith('_files')):
                     for img_file in img_dir.iterdir():
                         if img_file.is_file() and img_file.suffix.lower() in IMG_EXTS:
                             all_images[img_file.name] = img_file
-                            print(f"DEBUG extract_images: found in _files: {img_file.name}", flush=True)
+                            print(f"DEBUG extract_images: found in {img_dir.name}: {img_file.name}", flush=True)
 
             # 2. Ищем в корне tmpdir (LibreOffice может класть GIF рядом с HTML)
             for img_file in Path(tmpdir).iterdir():

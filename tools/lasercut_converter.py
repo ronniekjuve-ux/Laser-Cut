@@ -112,19 +112,6 @@ def convert_doc_to_gif(doc_path: Path) -> dict:
     """Convert DOC to HTML using Word, extract GIF images."""
     log(f"Converting: {doc_path.name}")
 
-    # Translate Linux Docker paths to Windows paths
-    doc_str = str(doc_path)
-    if doc_str.startswith('/app/data/'):
-        # Docker maps ./data/ -> /app/data/
-        local_part = doc_str[len('/app/data/'):]
-        doc_path = DATA_DIR / local_part
-        log(f"  Path translated: {doc_str} -> {doc_path}")
-    elif doc_str.startswith('/app/'):
-        # Fallback: try to map any /app/ path
-        local_part = doc_str[len('/app/'):]
-        doc_path = PROJECT_ROOT / local_part
-        log(f"  Path translated: {doc_str} -> {doc_path}")
-
     if not doc_path.exists():
         log(f"  File not found: {doc_path}")
         return {"error": f"File not found: {doc_path}"}
@@ -151,10 +138,10 @@ def convert_doc_to_gif(doc_path: Path) -> dict:
 
             time.sleep(0.5)
 
-            # Find all images
+            # Find all images (Word creates *.files or *_files directories)
             all_images = {}
-            for d in tmpdir.glob("*_files"):
-                if d.is_dir():
+            for d in tmpdir.iterdir():
+                if d.is_dir() and (d.name.endswith('.files') or d.name.endswith('_files')):
                     for f in d.iterdir():
                         if f.is_file() and f.suffix.lower() in IMG_EXTS:
                             all_images[f.name] = f
@@ -205,14 +192,26 @@ class ConverterHandler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
 
             try:
-                data = json.loads(post_data)
-                doc_path = data.get('path')
+                data = json.loads(post_data.decode("utf-8"))
+                doc_path_str = data.get('path')
 
-                if not doc_path:
+                if not doc_path_str:
                     self.send_json(400, {"error": "path is required"})
                     return
 
-                doc_path = Path(doc_path)
+                # Translate Linux Docker paths to Windows paths BEFORE Path()
+                doc_str = doc_path_str.replace("\\", "/")
+                if doc_str.startswith("/app/data/"):
+                    local_part = doc_str[len("/app/data/"):]
+                    doc_path = DATA_DIR / local_part
+                    log(f"  Path translated: {doc_str} -> {doc_path}")
+                elif doc_str.startswith("/app/"):
+                    local_part = doc_str[len("/app/"):]
+                    doc_path = PROJECT_ROOT / local_part
+                    log(f"  Path translated: {doc_str} -> {doc_path}")
+                else:
+                    doc_path = Path(doc_path_str)
+
                 if not doc_path.exists():
                     self.send_json(404, {"error": f"File not found: {doc_path}"})
                     return

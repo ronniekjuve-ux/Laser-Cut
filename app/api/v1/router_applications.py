@@ -218,11 +218,11 @@ async def upload_layout(
 
                 await asyncio.sleep(0.5)
 
-                # Find GIF in _files folder or root
+                # Find GIF in .files/_files folder or root
                 IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.emf', '.wmf'}
                 all_images = {}
-                for d in tmpdir.glob("*_files"):
-                    if d.is_dir():
+                for d in tmpdir.iterdir():
+                    if d.is_dir() and (d.name.endswith('.files') or d.name.endswith('_files')):
                         for f in d.iterdir():
                             if f.is_file() and f.suffix.lower() in IMG_EXTS:
                                 all_images[f.name] = f
@@ -609,10 +609,39 @@ async def reupload_application(
                 layout_text = extract_text(file_path)
                 layout_data = parse_layout_text(layout_text, lf.filename)
 
-                # Extract layout image (high quality DOC→PDF→PNG)
-                layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+                # Extract layout image — try local converter first (preserves curves)
+                layout_image_path = None
+                dest_dir = IMAGE_DIR / f"layouts/{app.order_name}_{layout_code}"
+                dest_dir.mkdir(parents=True, exist_ok=True)
+
+                try:
+                    import httpx
+                    async with httpx.AsyncClient(timeout=5) as client:
+                        health_resp = await client.get("http://host.docker.internal:8001/health")
+                        health_resp.raise_for_status()
+                        convert_resp = await client.post(
+                            "http://host.docker.internal:8001/convert",
+                            json={"path": file_path},
+                            timeout=30
+                        )
+                        result = convert_resp.json()
+                        if result.get('images'):
+                            for img in result['images']:
+                                if img.get('name', '').endswith(('.gif', '.png', '.jpg')):
+                                    src = IMAGE_DIR / img['name']
+                                    if src.exists():
+                                        dest_name = img['name']
+                                        dest = dest_dir / dest_name
+                                        shutil.copy2(src, dest)
+                                        layout_image_path = f"/api/v1/images/layouts/{app.order_name}_{layout_code}/{dest_name}"
+                                        break
+                except Exception:
+                    pass
+
+                # Fallback to LibreOffice (known to lose curves)
                 if not layout_image_path:
-                    # Fallback на старый метод (HTML)
+                    layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+                if not layout_image_path:
                     layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
                     layout_image_path = layout_images[0] if layout_images else None
 
