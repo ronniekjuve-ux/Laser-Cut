@@ -184,7 +184,7 @@ async def upload_layout(
     code_match = re.search(r'(\d{3})', file.filename)
     layout_code = code_match.group(1) if code_match else "001"
 
-    file_path = save_uploaded_file(file, f"{app.order_name}_layout_{layout_code}")
+    file_path = save_uploaded_file(file, f"{app_id}_layout_{layout_code}")
 
     try:
         text = extract_text(file_path)
@@ -1816,8 +1816,27 @@ async def delete_application(
     if not app:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
+    # Load layouts to get warehouse_item_ids before cascade delete
+    from app.db.models import ApplicationLayout, WarehouseMovement, WarehouseItem
+    layouts_result = await db.execute(
+        select(ApplicationLayout).where(ApplicationLayout.application_id == app_id)
+    )
+    layout_warehouse_ids = [l.warehouse_item_id for l in layouts_result.scalars().all() if l.warehouse_item_id]
+
     await db.execute(delete(DeficitRequest).where(DeficitRequest.application_id == app_id))
     await db.execute(delete(Notification).where(Notification.related_app_id == app_id))
+
+    # Delete warehouse movements that reference this application
+    await db.execute(
+        delete(WarehouseMovement).where(WarehouseMovement.application_id == app_id)
+    )
+
+    # Delete warehouse movements that reference warehouse items used by this application's layouts
+    if layout_warehouse_ids:
+        await db.execute(
+            delete(WarehouseMovement).where(WarehouseMovement.warehouse_item_id.in_(layout_warehouse_ids))
+        )
+
     await db.delete(app)
     await db.commit()
 
@@ -1946,6 +1965,7 @@ async def toggle_layout_run(
         db: AsyncSession = Depends(get_db),
         user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR, UserRole.OPERATOR))
 ):
+    from datetime import datetime, timezone
     result = await db.execute(select(ApplicationLayout).where(ApplicationLayout.id == layout_id))
     layout = result.scalar_one_or_none()
     if not layout:
@@ -1968,7 +1988,10 @@ async def toggle_layout_run(
             for j in range(run_index, len(completed)):
                 completed[j] = False
         else:
-            completed[run_index] = True
+            completed[run_index] = {
+                "cut_by": user.username if user else None,
+                "cut_at": datetime.utcnow().isoformat(),
+            }
 
     layout.completed_runs = json.dumps(completed)
 
@@ -2184,60 +2207,65 @@ async def update_application_status(
         app.cut_by = None
 
         # Возврат на склад при отмене статуса "cut"
-        # 1. Legacy
-        if app.warehouse_item_id and app.warehouse_deducted:
-            wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == app.warehouse_item_id))
-            wh_item = wh_result.scalar_one_or_none()
-            if wh_item:
-                wh_item.sheet_count += (app.sheets_used or 1)
-                db.add(WarehouseMovement(
-                    warehouse_item_id=wh_item.id,
-                    application_id=app.id,
-                    quantity_change=(app.sheets_used or 1),
-                    movement_type="return",
-                    reason=f"Возврат при отмене резки: заказ #{app.id} «{app.order_name}»",
-                    created_by=user.id,
-                ))
-                app.warehouse_deducted = False
-
-        # 2. Per-run: вернуть листы по привязкам
-        layouts_result = await db.execute(
-            select(ApplicationLayout).where(
-                ApplicationLayout.application_id == app.id,
-                ApplicationLayout.status == "active",
-            )
-        )
-        for layout in layouts_result.scalars().all():
-            if not layout.warehouse_bindings:
-                continue
-            try:
-                bindings = json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else layout.warehouse_bindings
-            except Exception:
-                continue
-            for ri, bid in bindings.items():
-                wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == bid))
+        with db.no_autoflush:
+            # 1. Legacy
+            if app.warehouse_item_id and app.warehouse_deducted:
+                wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == app.warehouse_item_id))
                 wh_item = wh_result.scalar_one_or_none()
                 if wh_item:
-                    wh_item.sheet_count += 1
-                    # Remove the deducted entry from "Списано" (only this specific article)
-                    deducted_article = f"{wh_item.article}-списано"
-                    ded_res = await db.execute(
-                        select(WarehouseItem).where(
-                            WarehouseItem.article == deducted_article,
-                            WarehouseItem.item_type == "deducted",
-                        ).limit(1)
-                    )
-                    ded = ded_res.scalar_one_or_none()
-                    if ded:
-                        await db.delete(ded)
+                    wh_item.sheet_count += (app.sheets_used or 1)
                     db.add(WarehouseMovement(
                         warehouse_item_id=wh_item.id,
                         application_id=app.id,
-                        quantity_change=1,
+                        quantity_change=(app.sheets_used or 1),
                         movement_type="return",
-                        reason=f"Возврат при отмене резки: {layout.layout_code} (рез #{int(ri)+1})",
+                        reason=f"Возврат при отмене резки: заказ #{app.id} «{app.order_name}»",
                         created_by=user.id,
                     ))
+                    app.warehouse_deducted = False
+
+            # 2. Per-run: вернуть листы по привязкам
+            layouts_result = await db.execute(
+                select(ApplicationLayout).where(
+                    ApplicationLayout.application_id == app.id,
+                    ApplicationLayout.status == "active",
+                )
+            )
+            for layout in layouts_result.scalars().all():
+                if not layout.warehouse_bindings:
+                    continue
+                try:
+                    bindings = json.loads(layout.warehouse_bindings) if isinstance(layout.warehouse_bindings, str) else layout.warehouse_bindings
+                except Exception:
+                    continue
+                for ri, bid in bindings.items():
+                    # First delete movements that reference this warehouse item
+                    await db.execute(
+                        delete(WarehouseMovement).where(WarehouseMovement.warehouse_item_id == bid)
+                    )
+                    wh_result = await db.execute(select(WarehouseItem).where(WarehouseItem.id == bid))
+                    wh_item = wh_result.scalar_one_or_none()
+                    if wh_item:
+                        wh_item.sheet_count += 1
+                        # Remove the deducted entry from "Списано" (only this specific article)
+                        deducted_article = f"{wh_item.article}-списано"
+                        ded_res = await db.execute(
+                            select(WarehouseItem).where(
+                                WarehouseItem.article == deducted_article,
+                                WarehouseItem.item_type == "deducted",
+                            ).limit(1)
+                        )
+                        ded = ded_res.scalar_one_or_none()
+                        if ded:
+                            await db.delete(ded)
+                        db.add(WarehouseMovement(
+                            warehouse_item_id=wh_item.id,
+                            application_id=app.id,
+                            quantity_change=1,
+                            movement_type="return",
+                            reason=f"Возврат при отмене резки: {layout.layout_code} (рез #{int(ri)+1})",
+                            created_by=user.id,
+                        ))
 
     # Sync completed_runs with status change
     if old_status != status:
@@ -2257,7 +2285,9 @@ async def update_application_status(
                 runs.append(False)
 
             if status == "cut":
-                runs = [True] * layout.sheet_count
+                from datetime import datetime, timezone
+                now = datetime.now(timezone.utc).isoformat()
+                runs = [{"cut_by": user.username if user else None, "cut_at": now}] * layout.sheet_count
             elif status == "approved":
                 runs = [False] * layout.sheet_count
             elif status == "partially_cut":
@@ -2445,11 +2475,16 @@ async def bind_warehouse(
     if warehouse_item_id is None:
         app.warehouse_item_id = None
         app.sheets_used = None
-        # Clear layout bindings too
+        # Clear layout bindings and delete associated movements
         layouts_result = await db.execute(
             select(ApplicationLayout).where(ApplicationLayout.application_id == app_id)
         )
         for layout in layouts_result.scalars().all():
+            # Delete movements that reference this layout's warehouse item
+            if layout.warehouse_item_id:
+                await db.execute(
+                    delete(WarehouseMovement).where(WarehouseMovement.warehouse_item_id == layout.warehouse_item_id)
+                )
             layout.warehouse_item_id = None
             layout.layout_sheets_used = None
         await db.commit()
@@ -2511,6 +2546,19 @@ async def cancel_deduct(
                 reason=f"Ручной возврат: заказ #{app.id} «{app.order_name}»",
                 created_by=user.id,
             ))
+
+    # Clear layout warehouse bindings
+    layouts_result = await db.execute(
+        select(ApplicationLayout).where(ApplicationLayout.application_id == app_id)
+    )
+    for layout in layouts_result.scalars().all():
+        if layout.warehouse_item_id:
+            # Delete movements for this layout's warehouse item
+            await db.execute(
+                delete(WarehouseMovement).where(WarehouseMovement.warehouse_item_id == layout.warehouse_item_id)
+            )
+        layout.warehouse_item_id = None
+        layout.layout_sheets_used = None
 
     app.warehouse_deducted = False
     app.sheets_used = None

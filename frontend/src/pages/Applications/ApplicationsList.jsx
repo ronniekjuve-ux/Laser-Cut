@@ -4,6 +4,7 @@ import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import useIsMobile, { getForceMobile } from '../../hooks/useIsMobile';
 import MobileOrderCard from '../../components/MobileOrderCard';
+import { ViewToggle, ApplicationCard } from '../../components/DesktopCards';
 import ApplicationDetail from './ApplicationDetail';
 import NewOrderModal from './NewOrderModal';
 import CostCalculator from './CostCalculator';
@@ -159,7 +160,10 @@ export default function ApplicationsList() {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [editModal, setEditModal] = useState(null);
   const [reuploadModal, setReuploadModal] = useState(null);
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('viewMode_applications') || 'table');
   const [page, setPage] = useState(1);
+
+  useEffect(() => { localStorage.setItem('viewMode_applications', viewMode); }, [viewMode]);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const filterRef = useRef(null);
@@ -212,7 +216,7 @@ export default function ApplicationsList() {
 
   useEffect(() => {
     const handleClick = (e) => {
-      if (filterRef.current && !filterRef.current.contains(e.target) && !e.target.closest('.filter-icon')) {
+      if (filterRef.current && !filterRef.current.contains(e.target) && !e.target.closest('.filter-icon') && !e.target.closest('.filter-chip')) {
         setOpenFilter(null);
       }
       if (!e.target.closest('[id^="supply-dropdown-"]') && !e.target.closest('button')) {
@@ -375,6 +379,7 @@ export default function ApplicationsList() {
             📁 Создать группу ({selectedApps.length})
           </button>
         )}
+        {!isRealMobile && <ViewToggle mode={viewMode} onChange={setViewMode} />}
         <span style={{marginLeft: 'auto', fontSize: 13, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center'}}>
           Всего: {total} заявок | Стр. {page} из {totalPages || 1}
           <button className="btn" onClick={async () => {
@@ -421,6 +426,45 @@ export default function ApplicationsList() {
             <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Нет заявок</div>
           )}
         </div>
+      ) : viewMode === 'cards' ? (
+        <>
+        {/* Desktop card filters */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {[
+            { key: 'customer', label: 'Заказчик' },
+            { key: 'material', label: 'Материал' },
+            { key: 'thickness', label: 'Толщина' },
+            { key: 'supply_material', label: 'Дав. мат' },
+          ].map(chip => (
+            <div
+              key={chip.key}
+              className="filter-chip"
+              onClick={(e) => {
+                if (filters[chip.key]) { clearFilter(chip.key); return; }
+                const rect = e.currentTarget.getBoundingClientRect();
+                setFilterPos({ top: rect.bottom + 4, left: rect.left });
+                if (openFilter === chip.key) { setOpenFilter(null); } else { setOpenFilter(chip.key); setFilterSearch(''); }
+              }}
+              style={{
+                padding: '5px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+                background: filters[chip.key] ? '#dbeafe' : '#f1f5f9',
+                color: filters[chip.key] ? '#1d4ed8' : '#64748b',
+                border: '1px solid ' + (filters[chip.key] ? '#93c5fd' : 'var(--border)'),
+              }}
+            >
+              {chip.label} {filters[chip.key] ? '✕' : '▾'}
+            </div>
+          ))}
+        </div>
+        <div className="desktop-cards">
+          {activeApps.map(app => (
+            <ApplicationCard key={app.id} app={app} onClick={setSelectedApp} />
+          ))}
+          {activeApps.length === 0 && (
+            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 20, color: '#64748b' }}>Нет заявок</div>
+          )}
+        </div>
+        </>
       ) : (
       <div className="table-container">
         <table>

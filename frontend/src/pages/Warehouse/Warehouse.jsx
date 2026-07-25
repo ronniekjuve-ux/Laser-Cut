@@ -7,6 +7,7 @@ import WarehouseDeductModal from './WarehouseDeductModal';
 import WarehouseReturnModal from './WarehouseReturnModal';
 import WarehouseMovementHistory from './WarehouseMovementHistory';
 import RemnantEditor from './RemnantEditor';
+import { ViewToggle, WarehouseCard } from '../../components/DesktopCards';
 
 function polyEdgeLengths(vertices) {
   if (!vertices || vertices.length < 2) return [];
@@ -82,11 +83,13 @@ function SheetPreview({ item, onClose }) {
               {polyPoints ? (
                 <>
                   <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#e5e7eb" strokeWidth="1" />
-                  <polygon points={polyPoints} fill="#dcfce7" fillOpacity="0.5" stroke="#333" strokeWidth="2" />
+                  <polygon points={polyPoints} fill="#b0b8c4" fillOpacity="0.7" stroke="#333" strokeWidth="2" />
                   <EdgeLabels vertices={vertices} scale={scale} />
                 </>
               ) : (
-                <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="2" />
+                <>
+                  <rect x={0} y={0} width={svgW} height={svgH} fill="#b0b8c4" fillOpacity="0.7" stroke="#333" strokeWidth="2" />
+                </>
               )}
             </svg>
           </div>
@@ -127,7 +130,7 @@ function MobileWarehouseCard({ item, onEdit, onDelete, onDeduct, onReturn, onCut
           <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}
             style={{ border: '1px solid #333', background: '#f8f8f8', flexShrink: 0 }}>
             {hasShape ? (
-              <polygon points={polyPoints} fill="#dcfce7" fillOpacity="0.5" stroke="#333" strokeWidth="1.5" />
+              <polygon points={polyPoints} fill="#b0b8c4" fillOpacity="0.7" stroke="#333" strokeWidth="1.5" />
             ) : (
               <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="1.5" />
             )}
@@ -159,7 +162,7 @@ function MobileWarehouseCard({ item, onEdit, onDelete, onDeduct, onReturn, onCut
   );
 }
 
-function WarehouseTable({ items, title, color, editingId, editForm, setEditForm, sortCol, sortDir, onSort, filterOwner, filterGrade, filterThickness, filterMaterial, setFilterOwner, setFilterGrade, setFilterThickness, setFilterMaterial, showFilters, setShowFilters, searchArticle, onEdit, onSave, onCancel, onDelete, onDeduct, onReturn, onCut, onMerge, onNotes, onPreview }) {
+function WarehouseTable({ items, title, color, editingId, editForm, setEditForm, sortCol, sortDir, onSort, filterOwner, filterGrade, filterThickness, filterMaterial, setFilterOwner, setFilterGrade, setFilterThickness, setFilterMaterial, showFilters, setShowFilters, searchArticle, onEdit, onSave, onCancel, onDelete, onDeduct, onReturn, onCut, onMerge, onNotes, onPreview, viewMode, onStartModalEdit, combinedMaterial, normalizeMaterial, vals }) {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 15;
 
@@ -169,9 +172,8 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
   const filtered = items
     .filter(i => !searchArticle || (i.article || '').toLowerCase().includes(searchArticle.toLowerCase()))
     .filter(i => filterOwner.length === 0 || filterOwner.includes(i.owner || '-'))
-    .filter(i => filterGrade.length === 0 || filterGrade.includes(i.grade || '-'))
+    .filter(i => filterMaterial.length === 0 || filterMaterial.some(f => normalizeMaterial(f) === normalizeMaterial(combinedMaterial(i))))
     .filter(i => filterThickness.length === 0 || filterThickness.includes(String(i.thickness || '-')))
-    .filter(i => filterMaterial.length === 0 || filterMaterial.includes(i.metal || '-'))
     .sort((a, b) => {
       let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
       if (sortCol === 'thickness' || sortCol === 'sheet_count') { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; return sortDir === 'asc' ? va - vb : vb - va; }
@@ -183,23 +185,19 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const vals = (col) => [...new Set(items.map(i => col === 'thickness' ? String(i[col] || '-') : (i[col] || '-')))];
-
   const getFilterState = (col) => {
     if (col === 'owner') return filterOwner;
-    if (col === 'grade') return filterGrade;
+    if (col === 'material_combined') return filterMaterial;
     if (col === 'thickness') return filterThickness;
-    if (col === 'metal') return filterMaterial;
     return [];
   };
   const setFilterState = (col) => {
     if (col === 'owner') return setFilterOwner;
-    if (col === 'grade') return setFilterGrade;
+    if (col === 'material_combined') return setFilterMaterial;
     if (col === 'thickness') return setFilterThickness;
-    if (col === 'metal') return setFilterMaterial;
     return () => {};
   };
-  const hasActiveFilters = filterOwner.length + filterGrade.length + filterThickness.length + filterMaterial.length > 0;
+  const hasActiveFilters = filterOwner.length + filterMaterial.length + filterThickness.length > 0;
 
   const DD = ({ col, label }) => (
     <th style={{ position: 'relative', whiteSpace: 'nowrap' }}>
@@ -208,9 +206,9 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
       </span>
       {showFilters === col && (
         <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 120, maxHeight: 200, overflowY: 'auto', padding: 4 }}>
-          {vals(col).map(v => (
-            <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', fontSize: 12, cursor: 'pointer', borderRadius: 3, background: getFilterState(col).includes(v) ? '#eff6ff' : 'transparent' }}>
-              <input type="checkbox" checked={getFilterState(col).includes(v)} onChange={() => { const setter = setFilterState(col); setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]); }} style={{ margin: 0 }} />
+          {vals(col, items).map(v => (
+            <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', fontSize: 12, cursor: 'pointer', borderRadius: 3, background: col === 'material_combined' ? (getFilterState(col).some(f => normalizeMaterial(f) === normalizeMaterial(v)) ? '#eff6ff' : 'transparent') : (getFilterState(col).includes(v) ? '#eff6ff' : 'transparent') }}>
+              <input type="checkbox" checked={col === 'material_combined' ? getFilterState(col).some(f => normalizeMaterial(f) === normalizeMaterial(v)) : getFilterState(col).includes(v)} onChange={() => { const setter = setFilterState(col); if (col === 'material_combined') { const nv = normalizeMaterial(v); setter(p => p.some(f => normalizeMaterial(f) === nv) ? p.filter(x => normalizeMaterial(x) !== nv) : [...p, v]); } else { setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]); } }} style={{ margin: 0 }} />
               {v}
             </label>
           ))}
@@ -230,13 +228,32 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
   return (
     <div style={{ marginBottom: 20 }}>
       <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color }}>{title} ({filtered.length})</div>
+      {viewMode === 'cards' || (typeof window !== 'undefined' && window.innerWidth <= 768) ? (
+        <div className="desktop-cards">
+          {paged.map(item => (
+            <WarehouseCard
+              key={item.id}
+              item={item}
+              onClick={() => onPreview(item)}
+              onEdit={() => onStartModalEdit(item)}
+              onDeduct={item.sheet_count > 0 ? () => onDeduct(item) : undefined}
+              onCut={item.sheet_count > 0 && item.sheet_w && item.sheet_h ? () => onCut(item) : undefined}
+              onMerge={item.sheet_count > 0 && item.parent_article ? () => onMerge(item) : undefined}
+              onDelete={() => onDelete(item.id)}
+            />
+          ))}
+          {paged.length === 0 && (
+            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 20, color: '#64748b' }}>Пусто</div>
+          )}
+        </div>
+      ) : (
       <div className="table-container">
         <table>
           <thead>
             <tr>
               <TH col="article" label="Артикул" />
               <DD col="owner" label="Владелец" />
-              <DD col="metal" label="Материал" />
+              <DD col="material_combined" label="Материал" />
               <DD col="thickness" label="Толщ." />
               <th>Размер</th>
               <th>Закреплено</th>
@@ -316,6 +333,7 @@ function WarehouseTable({ items, title, color, editingId, editForm, setEditForm,
           </tbody>
         </table>
       </div>
+      )}
       {totalPages > 1 && (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 8, alignItems: 'center' }}>
           <button className="btn" onClick={() => setPage(1)} disabled={page <= 1} style={{ fontSize: 11, padding: '2px 6px' }}>«</button>
@@ -419,6 +437,7 @@ export default function Warehouse() {
   const [form, setForm] = useState({ material: '', thickness: '', sheet_w: '', sheet_h: '', sheet_count: '', owner: '', note: '' });
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [modalEditItem, setModalEditItem] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [notesChat, setNotesChat] = useState(null);
   const [deductItem, setDeductItem] = useState(null);
@@ -432,6 +451,25 @@ export default function Warehouse() {
   const [filterGrade, setFilterGrade] = useState([]);
   const [filterThickness, setFilterThickness] = useState([]);
   const [filterMaterial, setFilterMaterial] = useState([]);
+  const combinedMaterial = (i) => {
+    const parts = [i.metal, i.grade].filter(Boolean);
+    if (parts.length === 0) return '—';
+    return parts.join(' ');
+  };
+  const normalizeMaterial = (s) => (s || '').toLowerCase().trim();
+  const vals = (col, itemsList) => {
+    if (col === 'material_combined') {
+      const seen = new Set();
+      return itemsList.map(combinedMaterial).filter(v => { const n = normalizeMaterial(v); if (seen.has(n)) return false; seen.add(n); return true; }).sort();
+    }
+    if (col === 'owner') return [...new Set(itemsList.map(i => i.owner || '-'))].sort();
+    if (col === 'thickness') return [...new Set(itemsList.map(i => String(i.thickness || '-')))].sort();
+    return [];
+  };
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('viewMode_warehouse') || 'table');
+  const [filterChipPos, setFilterChipPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => { localStorage.setItem('viewMode_warehouse', viewMode); }, [viewMode]);
   const [showFilters, setShowFilters] = useState(null);
   const [activeTab, setActiveTab] = useState('stock');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(null);
@@ -449,7 +487,6 @@ export default function Warehouse() {
   }, []);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
-  useEffect(() => { const h = () => setShowFilters(null); if (showFilters) document.addEventListener('click', h); return () => document.removeEventListener('click', h); }, [showFilters]);
 
   const inStock = items.filter(i => (i.sheet_count || 0) > 0);
   const deducted = items.filter(i => (i.sheet_count || 0) <= 0);
@@ -476,12 +513,13 @@ export default function Warehouse() {
 
   const confirmDeleteAction = async () => { const id = confirmDelete; setConfirmDelete(null); try { await client.delete('/api/v1/warehouse/' + id); fetchItems(); } catch (err) { alert('Ошибка'); } };
   const startEdit = (item) => { setEditingId(item.id); setEditForm({ metal: item.metal || '', grade: item.grade || '', thickness: item.thickness || '', sheet_w: item.sheet_w || '', sheet_h: item.sheet_h || '', sheet_count: item.sheet_count || '', owner: item.owner || '', note: item.note || '' }); };
+  const startModalEdit = (item) => { setModalEditItem(item); setEditForm({ metal: item.metal || '', grade: item.grade || '', thickness: item.thickness || '', sheet_w: item.sheet_w || '', sheet_h: item.sheet_h || '', sheet_count: item.sheet_count || '', owner: item.owner || '', note: item.note || '' }); };
   const saveEdit = async (id) => { try { await client.patch('/api/v1/warehouse/' + id, { metal: editForm.metal, grade: editForm.grade || null, thickness: editForm.thickness ? parseFloat(editForm.thickness) : null, sheet_w: editForm.sheet_w ? parseFloat(editForm.sheet_w) : null, sheet_h: editForm.sheet_h ? parseFloat(editForm.sheet_h) : null, sheet_count: editForm.sheet_count ? parseInt(editForm.sheet_count) : 0, owner: editForm.owner || null, note: editForm.note || null }); setEditingId(null); fetchItems(); } catch (err) { alert('Ошибка: ' + (err.response?.data?.detail || err.message)); } };
   const handleSort = (col) => { if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortCol(col); setSortDir('asc'); } };
 
   if (loading) return <div className="loading">Загрузка...</div>;
 
-  const shared = { editingId, editForm, setEditForm, sortCol, sortDir, onSort: handleSort, filterOwner, filterGrade, filterThickness, filterMaterial, setFilterOwner, setFilterGrade, setFilterThickness, setFilterMaterial, showFilters, setShowFilters, searchArticle, onEdit: startEdit, onSave: saveEdit, onCancel: () => setEditingId(null), onDelete: (id) => setConfirmDelete(id), onDeduct: setDeductItem, onReturn: setReturnItem, onCut: setRemnantEditorItem, onMerge: setMergeItem, onNotes: setNotesChat, onPreview: setPreviewItem };
+  const shared = { editingId, editForm, setEditForm, sortCol, sortDir, onSort: handleSort, filterOwner, filterGrade, filterThickness, filterMaterial, setFilterOwner, setFilterGrade, setFilterThickness, setFilterMaterial, showFilters, setShowFilters, searchArticle, onEdit: startEdit, onSave: saveEdit, onCancel: () => setEditingId(null), onDelete: (id) => setConfirmDelete(id), onDeduct: setDeductItem, onReturn: setReturnItem, onCut: setRemnantEditorItem, onMerge: setMergeItem, onNotes: setNotesChat, onPreview: setPreviewItem, viewMode, onStartModalEdit: startModalEdit, combinedMaterial, normalizeMaterial, vals };
 
   return (
     <div>
@@ -494,7 +532,57 @@ export default function Warehouse() {
           placeholder="Поиск по артикулу..."
           style={{ flex: '1 1 200px', minWidth: 150, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
         />
+        {!isRealMobile && <ViewToggle mode={viewMode} onChange={setViewMode} />}
       </div>
+
+      {/* Filter chips for desktop */}
+      {!isRealMobile && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center', position: 'relative' }}>
+          {[
+            { key: 'owner', label: 'Владелец', sel: filterOwner, set: setFilterOwner },
+            { key: 'material_combined', label: 'Материал', sel: filterMaterial, set: setFilterMaterial },
+            { key: 'thickness', label: 'Толщина', sel: filterThickness, set: setFilterThickness },
+          ].map(chip => (
+            <div
+              key={chip.key}
+              className="filter-chip"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (chip.sel.length) { chip.set([]); return; }
+                const rect = e.currentTarget.getBoundingClientRect();
+                setFilterChipPos({ top: rect.bottom + 4, left: rect.left });
+                setShowFilters(showFilters === chip.key ? null : chip.key);
+              }}
+              style={{
+                padding: '5px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+                background: chip.sel.length ? '#dbeafe' : '#f1f5f9',
+                color: chip.sel.length ? '#1d4ed8' : '#64748b',
+                border: '1px solid ' + (chip.sel.length ? '#93c5fd' : 'var(--border)'),
+              }}
+            >
+              {chip.label} {chip.sel.length ? '✕' : '▾'}
+            </div>
+          ))}
+          {showFilters && (
+            <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', top: filterChipPos.top, left: filterChipPos.left, zIndex: 1000, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 130, maxHeight: 200, overflowY: 'auto', padding: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
+                <strong style={{ fontSize: 12 }}>{showFilters === 'owner' ? 'Владелец' : showFilters === 'material_combined' ? 'Материал' : 'Толщина'}</strong>
+                <span onClick={() => setShowFilters(null)} style={{ cursor: 'pointer', fontSize: 12, color: '#94a3b8' }}>✕</span>
+              </div>
+              {vals(showFilters, items).map(v => {
+                const sel = showFilters === 'owner' ? filterOwner : showFilters === 'material_combined' ? filterMaterial : filterThickness;
+                const setSel = showFilters === 'owner' ? setFilterOwner : showFilters === 'material_combined' ? setFilterMaterial : setFilterThickness;
+                return (
+                  <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', fontSize: 12, cursor: 'pointer', borderRadius: 3, background: (showFilters === 'material_combined' ? sel.some(f => normalizeMaterial(f) === normalizeMaterial(v)) : sel.includes(v)) ? '#eff6ff' : 'transparent' }}>
+                    <input type="checkbox" checked={showFilters === 'material_combined' ? sel.some(f => normalizeMaterial(f) === normalizeMaterial(v)) : sel.includes(v)} onChange={() => { if (showFilters === 'material_combined') { const nv = normalizeMaterial(v); setSel(p => p.some(f => normalizeMaterial(f) === nv) ? p.filter(x => normalizeMaterial(x) !== nv) : [...p, v]); } else { setSel(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]); } }} style={{ margin: 0 }} />
+                    {v}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {showForm && (
         <div className="card" style={{ marginBottom: 15 }}>
@@ -667,6 +755,32 @@ export default function Warehouse() {
       {remnantEditorItem && <RemnantEditor item={remnantEditorItem} onClose={() => setRemnantEditorItem(null)} onSuccess={() => fetchItems()} />}
       {previewItem && <SheetPreview item={previewItem} onClose={() => setPreviewItem(null)} />}
       {mergeItem && <MergeCutModal items={items} item={mergeItem} onClose={() => setMergeItem(null)} onSuccess={() => { setMergeItem(null); fetchItems(); }} />}
+      {modalEditItem && (
+        <div className="modal-overlay active" onClick={() => setModalEditItem(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="modal-header">
+              <h3>Редактирование — {modalEditItem.article || `#${modalEditItem.id}`}</h3>
+              <button className="close-btn" onClick={() => setModalEditItem(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-grid">
+                <div className="form-group"><label>Материал</label><input value={editForm.metal} onChange={e => setEditForm({...editForm, metal: e.target.value})} /></div>
+                <div className="form-group"><label>Марка</label><input value={editForm.grade} onChange={e => setEditForm({...editForm, grade: e.target.value})} /></div>
+                <div className="form-group"><label>Толщина</label><input type="number" step="0.1" value={editForm.thickness} onChange={e => setEditForm({...editForm, thickness: e.target.value})} /></div>
+                <div className="form-group"><label>Ширина</label><input type="number" value={editForm.sheet_w} onChange={e => setEditForm({...editForm, sheet_w: e.target.value})} /></div>
+                <div className="form-group"><label>Длина</label><input type="number" value={editForm.sheet_h} onChange={e => setEditForm({...editForm, sheet_h: e.target.value})} /></div>
+                <div className="form-group"><label>Кол-во</label><input type="number" value={editForm.sheet_count} onChange={e => setEditForm({...editForm, sheet_count: e.target.value})} /></div>
+                <div className="form-group"><label>Владелец</label><input value={editForm.owner} onChange={e => setEditForm({...editForm, owner: e.target.value})} /></div>
+                <div className="form-group"><label>Примечание</label><input value={editForm.note} onChange={e => setEditForm({...editForm, note: e.target.value})} /></div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={async () => { await saveEdit(modalEditItem.id); setModalEditItem(null); }}>Сохранить</button>
+              <button className="btn" onClick={() => setModalEditItem(null)}>Отмена</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import useIsMobile, { getForceMobile } from '../../hooks/useIsMobile';
 import ApplicationDetail from '../Applications/ApplicationDetail';
 import MobileOrderCard from '../../components/MobileOrderCard';
 import MobileOrderDetail from '../../components/MobileOrderDetail';
+import { ViewToggle, CompletedCard } from '../../components/DesktopCards';
 
 export default function CompletedOrdersList() {
   const [applications, setApplications] = useState([]);
@@ -15,7 +16,12 @@ export default function CompletedOrdersList() {
   const [sortDir, setSortDir] = useState('desc');
   const [filters, setFilters] = useState({});
   const [showFilter, setShowFilter] = useState(null);
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('viewMode_completed') || 'table');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const isMobile = useIsMobile();
+
+  useEffect(() => { localStorage.setItem('viewMode_completed', viewMode); }, [viewMode]);
   const isRealMobile = isMobile && window.innerWidth <= 768;
   const PAGE_SIZE = 15;
 
@@ -73,6 +79,17 @@ export default function CompletedOrdersList() {
       });
     });
 
+    // Date filter
+    if (dateFrom || dateTo) {
+      list = list.filter(app => {
+        if (!app.cut_at) return false;
+        const cutDate = new Date(app.cut_at).toLocaleDateString('sv-SE');
+        if (dateFrom && cutDate < dateFrom) return false;
+        if (dateTo && cutDate > dateTo) return false;
+        return true;
+      });
+    }
+
     // Sort
     list = [...list].sort((a, b) => {
       let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
@@ -87,12 +104,21 @@ export default function CompletedOrdersList() {
     });
 
     return list;
-  }, [applications, search, sortCol, sortDir, filters]);
+  }, [applications, search, sortCol, sortDir, filters, dateFrom, dateTo]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   useEffect(() => { setPage(1); }, [search, sortCol, sortDir, filters]);
+
+  useEffect(() => {
+    if (!showFilter) return;
+    const handler = (e) => {
+      if (!e.target.closest('.filter-chip')) setShowFilter(null);
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [showFilter]);
 
   const handleSort = (col) => {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -141,6 +167,26 @@ export default function CompletedOrdersList() {
           placeholder="Поиск по №, заказчику, материалу..."
           style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, width: 220 }}
         />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 12, color: '#64748b' }}>Дата:</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            style={{ padding: '3px 6px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12 }}
+          />
+          <span style={{ fontSize: 12, color: '#64748b' }}>—</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            style={{ padding: '3px 6px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12 }}
+          />
+          {(dateFrom || dateTo) && (
+            <span onClick={() => { setDateFrom(''); setDateTo(''); }} style={{ cursor: 'pointer', fontSize: 12, color: '#ef4444' }}>✕</span>
+          )}
+        </div>
+        {!isRealMobile && <ViewToggle mode={viewMode} onChange={setViewMode} />}
       </div>
 
       {isRealMobile ? (
@@ -165,6 +211,55 @@ export default function CompletedOrdersList() {
             <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Нет выполненных заказов</div>
           )}
         </div>
+      ) : viewMode === 'cards' ? (
+        <>
+        {/* Desktop card filters */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {[
+            { key: 'customer', label: 'Заказчик' },
+            { key: 'machine', label: 'Станок' },
+            { key: 'material', label: 'Материал' },
+            { key: 'thickness', label: 'Толщина' },
+          ].map(chip => (
+            <div
+              key={chip.key}
+              className="filter-chip"
+              onClick={(e) => {
+                if (filters[chip.key]?.length) { setFilters(f => ({ ...f, [chip.key]: undefined })); return; }
+                const rect = e.currentTarget.getBoundingClientRect();
+                setShowFilter(showFilter === chip.key ? null : chip.key);
+              }}
+              style={{
+                padding: '5px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+                background: filters[chip.key]?.length ? '#dbeafe' : '#f1f5f9',
+                color: filters[chip.key]?.length ? '#1d4ed8' : '#64748b',
+                border: '1px solid ' + (filters[chip.key]?.length ? '#93c5fd' : 'var(--border)'),
+                position: 'relative',
+              }}
+            >
+              {chip.label} {filters[chip.key]?.length ? '✕' : '▾'}
+              {showFilter === chip.key && (
+                <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 130, maxHeight: 200, overflowY: 'auto', padding: 4, marginTop: 4 }}>
+                  {filterVals(chip.key).map(v => (
+                    <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', fontSize: 12, cursor: 'pointer', borderRadius: 3, background: (filters[chip.key] || []).includes(v) ? '#eff6ff' : 'transparent' }}>
+                      <input type="checkbox" checked={(filters[chip.key] || []).includes(v)} onChange={() => toggleFilter(chip.key, v)} style={{ margin: 0 }} />
+                      {v}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="desktop-cards">
+          {paged.map(app => (
+            <CompletedCard key={app.id} app={app} onClick={setSelectedApp} onCancelCut={handleCancelCut} />
+          ))}
+          {paged.length === 0 && (
+            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 20, color: '#64748b' }}>Нет выполненных заказов</div>
+          )}
+        </div>
+        </>
       ) : (
         <>
           <div className="table-container">

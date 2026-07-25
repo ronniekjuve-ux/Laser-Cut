@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import useIsMobile, { getForceMobile } from '../../hooks/useIsMobile';
 import ApplicationDetail from '../Applications/ApplicationDetail';
 import MobileOrderCard from '../../components/MobileOrderCard';
+import { ViewToggle, OrderCard } from '../../components/DesktopCards';
 import NewOrderModal from '../Applications/NewOrderModal';
 import MergeModal from '../Applications/MergeModal';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -99,8 +100,11 @@ export default function OrdersList({ initialTab }) {
   const [editModal, setEditModal] = useState(null);
   const [reuploadModal, setReuploadModal] = useState(null);
   const [filterValues, setFilterValues] = useState({});
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('viewMode_orders') || 'table');
   const filterRef = useRef(null);
   const isMobile = useIsMobile();
+
+  useEffect(() => { localStorage.setItem('viewMode_orders', viewMode); }, [viewMode]);
   const [activeTab, setActiveTab] = useState(initialTab || 'orders');
   const [machineFilter, setMachineFilter] = useState(null);
   const PAGE_SIZE = 15;
@@ -368,6 +372,7 @@ export default function OrdersList({ initialTab }) {
           onChange={e => setSearch(e.target.value)}
           className="search-input"
         />
+        {!isMobile && <ViewToggle mode={viewMode} onChange={setViewMode} />}
         <span style={{ marginLeft: 'auto', fontSize: 13, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center' }}>
           Всего: {activeApps.length} заказов | Стр. {page} из {totalPages || 1}
           <button className="btn" onClick={async () => {
@@ -496,6 +501,69 @@ export default function OrdersList({ initialTab }) {
             <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Нет активных заказов</div>
           )}
         </div>
+      ) : viewMode === 'cards' ? (
+        <>
+        {/* Desktop card filters */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[null, 'CNF', 'FNF'].map(machine => (
+              <div
+                key={machine || 'all'}
+                onClick={() => setMachineFilter(machine)}
+                style={{
+                  padding: '5px 12px', borderRadius: 16, fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                  background: machineFilter === machine ? 'var(--primary)' : '#f1f5f9',
+                  color: machineFilter === machine ? '#fff' : '#64748b',
+                  border: '1px solid ' + (machineFilter === machine ? 'var(--primary)' : 'var(--border)'),
+                }}
+              >
+                {machine === 'CNF' ? 'станок 1' : machine === 'FNF' ? 'станок 2' : 'Все'}
+              </div>
+            ))}
+          </div>
+          <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
+          {[
+            { key: 'customer', label: 'Заказчик' },
+            { key: 'material', label: 'Материал' },
+            { key: 'thickness', label: 'Толщина' },
+            { key: 'priority', label: 'Срочность' },
+          ].map(chip => (
+            <div
+              key={chip.key}
+              className="filter-chip"
+              onClick={(e) => {
+                if (filters[chip.key]) { clearFilter(chip.key); return; }
+                const rect = e.currentTarget.getBoundingClientRect();
+                setFilterPos({ top: rect.bottom + 4, left: rect.left });
+                if (openFilter === chip.key) { setOpenFilter(null); } else { setOpenFilter(chip.key); setFilterSearch(''); }
+              }}
+              style={{
+                padding: '5px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+                background: filters[chip.key] ? '#dbeafe' : '#f1f5f9',
+                color: filters[chip.key] ? '#1d4ed8' : '#64748b',
+                border: '1px solid ' + (filters[chip.key] ? '#93c5fd' : 'var(--border)'),
+              }}
+            >
+              {chip.label} {filters[chip.key] ? '✕' : '▾'}
+            </div>
+          ))}
+        </div>
+        <div className="desktop-cards">
+          {pageItems.map(app => (
+            <OrderCard
+              key={app.id}
+              app={app}
+              onClick={setSelectedApp}
+              onReupload={(user?.role === 'admin' || user?.role === 'director') ? (app) => setReuploadModal(app) : undefined}
+              onEdit={(user?.role === 'admin' || user?.role === 'director') ? (app) => setEditModal(app) : undefined}
+              onDelete={(user?.role === 'admin') ? (id) => setConfirmDelete(id) : undefined}
+            />
+          ))}
+          {pageItems.length === 0 && (
+            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 20, color: '#64748b' }}>Нет активных заказов</div>
+          )}
+        </div>
+        </>
       ) : (
         <div className="table-container">
           <table>

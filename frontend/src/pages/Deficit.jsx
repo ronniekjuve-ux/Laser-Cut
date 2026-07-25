@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { ViewToggle, DeficitCard } from '../components/DesktopCards';
 
 export default function Deficit() {
   const { user } = useAuth();
@@ -20,6 +21,17 @@ export default function Deficit() {
   const [filterCustomer, setFilterCustomer] = useState([]);
   const [showFilter, setShowFilter] = useState(null);
   const [searchArticle, setSearchArticle] = useState('');
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('viewMode_deficit') || 'table');
+  const [filterChipPos, setFilterChipPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => { localStorage.setItem('viewMode_deficit', viewMode); }, [viewMode]);
+
+  useEffect(() => {
+    // Close filter on Escape key
+    const handler = (e) => { if (e.key === 'Escape') setShowFilter(null); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -105,7 +117,7 @@ export default function Deficit() {
     })
     .filter(r => !hasCF || r._da > 0 || r._ss > 0);
 
-  const uniqueGrades = [...new Set(deficit.map(r => r.grade || '—'))];
+  const uniqueGrades = [...new Set(deficit.map(r => r.grade || '—'))].sort();
   const uniqueThicknesses = [...new Set(deficit.map(r => r.thickness ? `${r.thickness}мм` : '—'))];
   const toggleFilter = (setter, val) => setter(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]);
 
@@ -142,29 +154,8 @@ export default function Deficit() {
         {(stdW !== appliedW || stdH !== appliedH) && (
           <button className="btn btn-primary" onClick={applySize} style={{ padding: '2px 8px', fontSize: 11 }}>Применить</button>
         )}
-        {!isCustomer && (
-          <>
-            <span style={{ fontSize: 12, color: '#64748b', marginLeft: 12 }}>Заказчик:</span>
-            <div style={{ position: 'relative' }}>
-              <span onClick={(e) => { e.stopPropagation(); setShowFilter(showFilter === 'customer' ? null : 'customer'); }}
-                style={{ cursor: 'pointer', fontSize: 12, padding: '2px 8px', border: '1px solid var(--border)', borderRadius: 3, background: hasCF ? '#dbeafe' : '#fff' }}>
-                {hasCF ? (filterCustomer.length <= 2 ? filterCustomer.join(', ') : `${filterCustomer[0]} +${filterCustomer.length - 1}`) : 'Все'} ▾
-              </span>
-              {showFilter === 'customer' && (
-                <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 160, maxHeight: 200, overflowY: 'auto', padding: 4 }}>
-                  {allCustomers.map(c => (
-                    <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, background: filterCustomer.includes(c) ? '#eff6ff' : 'transparent' }}>
-                      <input type="checkbox" checked={filterCustomer.includes(c)} onChange={() => toggleFilter(setFilterCustomer, c)} style={{ margin: 0 }} />
-                      {c}
-                    </label>
-                  ))}
-                  {hasCF && <div onClick={() => setFilterCustomer([])} style={{ padding: '2px 6px', fontSize: 10, color: '#ef4444', cursor: 'pointer', borderTop: '1px solid var(--border)', marginTop: 2, textAlign: 'center' }}>Сбросить</div>}
-                </div>
-              )}
-            </div>
-          </>
-        )}
         <button className="btn" onClick={exportExcel} style={{ marginLeft: 'auto', padding: '3px 10px', fontSize: 11 }}>📥 Excel</button>
+        <ViewToggle mode={viewMode} onChange={setViewMode} />
         <input
           type="text"
           value={searchArticle}
@@ -174,7 +165,137 @@ export default function Deficit() {
         />
       </div>
 
-      {/* Table */}
+      {/* Table or Cards */}
+      {viewMode === 'cards' || (typeof window !== 'undefined' && window.innerWidth <= 768) ? (
+        <>
+        {/* Desktop card filters */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center', position: 'relative' }}>
+          {!isCustomer && (
+            <div
+              className="filter-chip"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (filterCustomer.length) { setFilterCustomer([]); return; }
+                const rect = e.currentTarget.getBoundingClientRect();
+                setFilterChipPos({ top: rect.bottom + 4, left: rect.left });
+                setShowFilter(showFilter === 'customer' ? null : 'customer');
+              }}
+              style={{
+                padding: '5px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+                background: filterCustomer.length ? '#dbeafe' : '#f1f5f9',
+                color: filterCustomer.length ? '#1d4ed8' : '#64748b',
+                border: '1px solid ' + (filterCustomer.length ? '#93c5fd' : 'var(--border)'),
+              }}
+            >
+              Заказчик {filterCustomer.length ? '✕' : '▾'}
+            </div>
+          )}
+          <div
+            className="filter-chip"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (filterGrade.length) { setFilterGrade([]); return; }
+              const rect = e.currentTarget.getBoundingClientRect();
+              setFilterChipPos({ top: rect.bottom + 4, left: rect.left });
+              setShowFilter(showFilter === 'grade' ? null : 'grade');
+            }}
+            style={{
+              padding: '5px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+              background: filterGrade.length ? '#dbeafe' : '#f1f5f9',
+              color: filterGrade.length ? '#1d4ed8' : '#64748b',
+              border: '1px solid ' + (filterGrade.length ? '#93c5fd' : 'var(--border)'),
+            }}
+          >
+            Материал {filterGrade.length ? '✕' : '▾'}
+          </div>
+          <div
+            className="filter-chip"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (filterThickness.length) { setFilterThickness([]); return; }
+              const rect = e.currentTarget.getBoundingClientRect();
+              setFilterChipPos({ top: rect.bottom + 4, left: rect.left });
+              setShowFilter(showFilter === 'thickness' ? null : 'thickness');
+            }}
+            style={{
+              padding: '5px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+              background: filterThickness.length ? '#dbeafe' : '#f1f5f9',
+              color: filterThickness.length ? '#1d4ed8' : '#64748b',
+              border: '1px solid ' + (filterThickness.length ? '#93c5fd' : 'var(--border)'),
+            }}
+          >
+            Толщина {filterThickness.length ? '✕' : '▾'}
+          </div>
+        </div>
+        {showFilter && (
+          <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', top: filterChipPos.top, left: filterChipPos.left, zIndex: 1000, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 140, maxHeight: 200, overflowY: 'auto', padding: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
+              <strong style={{ fontSize: 12 }}>{showFilter === 'customer' ? 'Заказчик' : showFilter === 'grade' ? 'Материал' : 'Толщина'}</strong>
+              <span onClick={() => setShowFilter(null)} style={{ cursor: 'pointer', fontSize: 12, color: '#94a3b8' }}>✕</span>
+            </div>
+            {(showFilter === 'customer' ? allCustomers : showFilter === 'grade' ? uniqueGrades : uniqueThicknesses).map(v => {
+              const sel = showFilter === 'customer' ? filterCustomer : showFilter === 'grade' ? filterGrade : filterThickness;
+              const set = showFilter === 'customer' ? setFilterCustomer : showFilter === 'grade' ? setFilterGrade : setFilterThickness;
+              return (
+                <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', fontSize: 12, cursor: 'pointer', borderRadius: 3, background: sel.includes(v) ? '#eff6ff' : 'transparent' }}>
+                  <input type="checkbox" checked={sel.includes(v)} onChange={() => set(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v])} style={{ margin: 0 }} />
+                  {v}
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <div className="desktop-cards">
+          {filtered.map(row => {
+            const key = `${row.grade || '—'}-${row.thickness}`;
+            return (
+              <DeficitCard key={key} row={row} onClick={() => toggle(key)} />
+            );
+          })}
+          {filtered.length === 0 && (
+            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 20, color: '#64748b' }}>Нет данных</div>
+          )}
+        </div>
+        </>
+      ) : (
+      <>
+      {!isCustomer && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div
+            className="filter-chip"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (filterCustomer.length) { setFilterCustomer([]); return; }
+              const rect = e.currentTarget.getBoundingClientRect();
+              setFilterChipPos({ top: rect.bottom + 4, left: rect.left });
+              setShowFilter(showFilter === 'customer' ? null : 'customer');
+            }}
+            style={{
+              padding: '5px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+              background: filterCustomer.length ? '#dbeafe' : '#e0f2fe',
+              color: filterCustomer.length ? '#1d4ed8' : '#0369a1',
+              border: '1px solid ' + (filterCustomer.length ? '#93c5fd' : '#7dd3fc'),
+              fontWeight: 500,
+            }}
+          >
+            Заказчик {filterCustomer.length ? '✕' : '▾'}
+          </div>
+        </div>
+      )}
+      {showFilter === 'customer' && (
+        <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', top: filterChipPos.top, left: filterChipPos.left, zIndex: 1000, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 140, maxHeight: 200, overflowY: 'auto', padding: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
+            <strong style={{ fontSize: 12 }}>Заказчик</strong>
+            <span onClick={() => setShowFilter(null)} style={{ cursor: 'pointer', fontSize: 12, color: '#94a3b8' }}>✕</span>
+          </div>
+          {allCustomers.map(v => (
+            <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', fontSize: 12, cursor: 'pointer', borderRadius: 3, background: filterCustomer.includes(v) ? '#eff6ff' : 'transparent' }}>
+              <input type="checkbox" checked={filterCustomer.includes(v)} onChange={() => setFilterCustomer(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v])} style={{ margin: 0 }} />
+              {v}
+            </label>
+          ))}
+        </div>
+      )}
       <div style={{ border: '1px solid #d1d5db', borderRadius: 6, overflow: 'hidden' }}>
         <table style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }}>
           <colgroup>
@@ -189,7 +310,7 @@ export default function Deficit() {
           </colgroup>
           <thead>
             <tr style={{ borderBottom: '2px solid #9ca3af' }}>
-              <DD col="grade" values={uniqueGrades} selected={filterGrade} setter={setFilterGrade} label="Марка" />
+              <DD col="grade" values={uniqueGrades} selected={filterGrade} setter={setFilterGrade} label="Материал" />
               <DD col="thickness" values={uniqueThicknesses} selected={filterThickness} setter={setFilterThickness} label="Толщ." align="center" />
               <th style={{ padding: '6px 6px', fontSize: 11, fontWeight: 600, textAlign: 'center', background: '#dbeafe', borderRight: '1px solid #93c5fd', color: '#1e40af' }}>Заказ, листы</th>
               <th style={{ padding: '6px 6px', fontSize: 11, fontWeight: 600, textAlign: 'center', background: '#dbeafe', borderRight: '1px solid #93c5fd', color: '#1e40af' }}>Заказ, м²</th>
@@ -203,7 +324,7 @@ export default function Deficit() {
             {filtered.length === 0 ? (
               <tr><td colSpan={8} style={{ textAlign: 'center', padding: 16, color: '#64748b' }}>Нет данных</td></tr>
             ) : filtered.map((row) => {
-              const key = `${row.grade}|${row.thickness}`;
+              const key = `${row.grade || '—'}-${row.thickness}`;
               const dS = hasCF ? row._ds : row.demand_sheets_std;
               const dA = hasCF ? row._da : row.demand_area;
               const sS = hasCF ? row._ss : row.stock_sheets;
@@ -242,9 +363,11 @@ export default function Deficit() {
           </tbody>
         </table>
       </div>
+      </>
+      )}
       {/* Detail modal */}
       {modalRow && (() => {
-        const row = filtered.find(r => `${r.grade}|${r.thickness}` === modalRow);
+        const row = filtered.find(r => `${r.grade || '—'}-${r.thickness}` === modalRow);
         if (!row) return null;
         const dA = hasCF ? (filterCustomer.reduce((s, c) => s + ((row.demand_by_customer || {})[c]?.area || 0), 0)) : row.demand_area;
         const sS = hasCF ? (filterCustomer.reduce((s, c) => s + ((row.stock_by_customer || {})[c]?.sheets || 0), 0)) : row.stock_sheets;
@@ -333,10 +456,10 @@ export default function Deficit() {
                             : null;
                           const area = (W * H / 1000000).toFixed(2);
                           return (
-                            <div key={i} style={{ marginTop: 4, padding: 6, background: '#f0fdf4', borderRadius: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <div key={i} style={{ marginTop: 4, padding: 6, background: '#f8f9fa', borderRadius: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
                               <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ border: '1.5px solid #333', background: '#f8f8f8', flexShrink: 0 }}>
                                 {polyPoints ? (
-                                  <polygon points={polyPoints} fill="#dcfce7" fillOpacity="0.5" stroke="#333" strokeWidth="1.5" />
+                                  <polygon points={polyPoints} fill="#b0b8c4" fillOpacity="0.7" stroke="#333" strokeWidth="1.5" />
                                 ) : (
                                   <rect x={0} y={0} width={svgW} height={svgH} fill="none" stroke="#333" strokeWidth="1.5" />
                                 )}

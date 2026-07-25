@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, update
 from datetime import datetime, timezone
 from app.db.base import get_db
 from app.db.models import WarehouseItem, WarehouseMovement, WarehouseRemnant, ItemNote, Application, ApplicationLayout, Customer, user_customers
@@ -1209,6 +1209,23 @@ async def delete_warehouse_item(
         await db.delete(m)
     await db.flush()
 
+    # Delete associated remnants (FK constraint)
+    remnants = await db.execute(
+        select(WarehouseRemnant).where(WarehouseRemnant.warehouse_item_id == item_id)
+    )
+    for r in remnants.scalars().all():
+        await db.delete(r)
+    await db.flush()
+
+    # Null out FK references in Application and ApplicationLayout
+    await db.execute(
+        update(Application).where(Application.warehouse_item_id == item_id).values(warehouse_item_id=None)
+    )
+    await db.execute(
+        update(ApplicationLayout).where(ApplicationLayout.warehouse_item_id == item_id).values(warehouse_item_id=None)
+    )
+    await db.flush()
+
     await db.delete(item)
     await db.commit()
 
@@ -1302,7 +1319,7 @@ async def deficit_analysis(
 
     stock = {}  # key: (grade, thickness) -> {total_sheets, total_area, by_customer: {name: sheets, articles}}
     for item in stock_items:
-        grade = item.grade or ""
+        grade = item.metal or item.grade or ""
         thickness = item.thickness or 0
         key = (grade, thickness)
         cust_name = item.owner or "—"
