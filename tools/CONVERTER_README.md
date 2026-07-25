@@ -8,80 +8,86 @@
 
 ---
 
-## Быстрый старт (локально)
-
-### Шаг 1: Скачайте файл
-Скачайте `lasercut_converter.exe` из папки `tools/dist/`
-
-### Шаг 2: Запустите
-Дважды кликните на `lasercut_converter.exe`  
-Появится окно терминала — **не закрывайте его!**
-
-### Шаг 3: Загружайте раскладки
-Откройте http://localhost:3000  
-Загружайте DOC файлы раскладок как обычно  
-Изображения автоматически будут с кривыми
-
----
-
-## Установка на другой компьютер (→ laser-cut.pro)
-
-### Шаг 1: Скачайте файл
-Скачайте `lasercut_converter.exe`
-
-### Шаг 2: Запустите с указанием сервера
-```cmd
-lasercut_converter.exe --server https://laser-cut.pro
-```
-
-Или через переменную окружения:
-```cmd
-set LASERCUT_SERVER_URL=https://laser-cut.pro
-lasercut_converter.exe
-```
-
-### Шаг 3: Загружайте раскладки
-Откройте https://laser-cut.pro  
-Загружайте DOC файлы раскладок  
-Конвертер автоматически:
-1. Конвертирует DOC → HTML → GIF (через MS Word)
-2. Сохраняет GIF локально в `data/images/`
-3. **Отправляет GIF на сервер** laser-cut.pro
-
-Изображения на сервере будут с кривыми и дугами.
-
----
-
-## Что нужно для работы
+## Требования
 
 | Компонент | Требование |
 |-----------|------------|
-| Windows | 7/10/11 |
-| MS Word | 2003 или новее |
+| Windows | 10/11 |
+| Microsoft Word | 2016 или новее (обязательно!) |
 | Python | **Не нужен** (exe уже собран) |
 
 ---
 
-## Как это работает
+## Сценарий 1: Локальная разработка (localhost:3000)
 
-```
-Локально (localhost:3000):
+Когда backend запущен в Docker на вашем компьютере.
+
+### Шаг 1: Запустите конвертер
+Дважды кликните на `lasercut_converter.exe`  
+Появится окно терминала — **не закрывайте его!**
+
+### Шаг 2: Загружайте раскладки
+Откройте http://localhost:3000  
+Загружайте DOC файлы раскладок как обычно  
+Изображения автоматически будут с кривыми
+
+**Как это работает:**
 1. Вы загружаете DOC файл через браузер
-2. Файл сохраняется в папку data/uploads/
-3. Конвертер автоматически находит файл
-4. Открывает его в Word и сохраняет как HTML
-5. Извлекает GIF изображение
-6. Сохраняет в папку data/images/
-7. Веб-приложение показывает изображение
+2. Backend в Docker пытается извлечь изображение
+3. Находит конвертер на `host.docker.internal:8001`
+4. Конвертер открывает DOC в Word, сохраняет как HTML, извлекает GIF
+5. GIF сохраняется в `data/images/` и показывается в браузере
 
-Удалённо (laser-cut.pro):
-1. Конвертер запущен с --server https://laser-cut.pro
-2. Вы загружаете DOC файл через браузер
-3. Сервер пытается извлечь изображение (LibreOffice — теряет кривые)
-4. Конвертер конвертирует DOC → HTML → GIF (MS Word — сохраняет кривые)
-5. Конвертер отправляет GIF на сервер через API
-6. Сервер использует загруженное GIF изображение
+---
+
+## Сценарий 2: Другой компьютер → laser-cut.pro
+
+Когда нужно загружать раскладки на удалённый сервер laser-cut.pro с другого компьютера.
+
+### Шаг 1: Скачайте файлы
+Скопируйте на компьютер:
+- `lasercut_converter.exe` (или папку `dist/` с exe)
+
+Разместите в **любой** папке, например:
 ```
+C:\Tools\lasercut_converter\
+```
+
+### Шаг 2: Запустите с указанием сервера
+Откройте командную строку (cmd) и выполните:
+
+```cmd
+cd C:\Tools\lasercut_converter
+lasercut_converter.exe --server https://laser-cut.pro
+```
+
+**Важно:** Укажите именно `--server https://laser-cut.pro`!
+
+### Шаг 3: Загружайте раскладки
+Откройте https://laser-cut.pro в браузере  
+Загружайте DOC файлы раскладок как обычно
+
+**Что происходит:**
+1. Вы загружаете DOC файл через браузер на laser-cut.pro
+2. Сервер пытается извлечь изображение LibreOffice (теряет кривые)
+3. Конвертер на вашем компьютере автоматически конвертирует DOC → GIF через Word
+4. Конвертер **отправляет GIF на сервер** laser-cut.pro
+5. Сервер использует загруженное GIF изображение (с кривыми!)
+
+---
+
+## Автозапуск (рекомендуется)
+
+Чтобы конвертер запускался автоматически при входе в Windows:
+
+1. Нажмите `Win + R`, введите `shell:startup`
+2. Создайте ярлык на `lasercut_converter.exe` с параметрами:
+
+```
+C:\Tools\lasercut_converter\lasercut_converter.exe --server https://laser-cut.pro
+```
+
+Теперь при каждом входе в Windows конвертер будет запускаться автоматически.
 
 ---
 
@@ -95,9 +101,9 @@ lasercut_converter.exe [опции]
                           (или переменная окружения LASERCUT_SERVER_URL)
 
 Примеры:
-  lasercut_converter.exe                           # Только локально
-  lasercut_converter.exe --server https://laser-cut.pro  # Локально + удалённо
-  lasercut_converter.exe -s http://localhost:8000        # Другой локальный сервер
+  lasercut_converter.exe                              # Только локально
+  lasercut_converter.exe --server https://laser-cut.pro   # Локально + laser-cut.pro
+  lasercut_converter.exe -s http://localhost:8000         # Другой сервер
 ```
 
 ---
@@ -111,20 +117,6 @@ lasercut_converter.exe [опции]
 
 ---
 
-## Автозапуск (опционально)
-
-Чтобы конвертер запускался автоматически при входе в Windows:
-
-1. Нажмите `Win + R`, введите `shell:startup`
-2. Создайте ярлык на `lasercut_converter.exe` с нужными параметрами
-
-Пример ярлыка для laser-cut.pro:
-```
-C:\path\to\lasercut_converter.exe --server https://laser-cut.pro
-```
-
----
-
 ## Устранение проблем
 
 **"ERROR: pywin32 not installed"**
@@ -133,7 +125,7 @@ pip install pywin32
 ```
 
 **"ERROR: Microsoft Word not found"**
-Установите Microsoft Word
+Установите Microsoft Word (обязательно для работы конвертера)
 
 **Конвертер запущен, но изображения без кривых**
 1. Закройте конвертер
@@ -141,36 +133,31 @@ pip install pywin32
 3. Загрузите раскладку повторно
 
 **Порт 8001 занят**
-Закройте другие программы, использующий порт 8001
+Закройте другие программы, использующие порт 8001
 
 **Изображение не загружается на сервер**
 - Проверьте URL сервера: `--server https://laser-cut.pro`
 - Проверьте подключение к интернету
-- Проверьте логи конвертера (converter.log)
+- Проверьте логи конвертера (`converter.log` в папке с exe)
+
+**Конвертер не находится из Docker (localhost:3000)**
+- Убедитесь, что конвертер запущен на порту 8001
+- Проверьте: `http://localhost:8001/health` должен вернуть `{"status": "ok"}`
+- Docker Desktop должен быть запущен (нужен `host.docker.internal`)
+
+---
+
+## API конвертера
+
+```
+GET  http://localhost:8001/health
+POST http://localhost:8001/convert   Body: {"path": "/path/to/file.doc"}
+GET  http://localhost:8001/images/<filename>
+```
 
 ---
 
 ## Для разработчиков
 
 Исходный код: `tools/lasercut_converter.py`  
-Сборка .exe: `tools/build_converter.bat`
-
-### API конвертера (локальный)
-
-```
-POST http://localhost:8001/convert
-Body: {"path": "/path/to/file.doc"}
-Response: {"images": [{"name": "file.gif", "size": 12345, "url": "/api/v1/images/file.gif"}]}
-
-GET http://localhost:8001/health
-Response: {"status": "ok", "word": true}
-```
-
-### API сервера (загрузка изображений)
-
-```
-POST https://laser-cut.pro/api/v1/images/upload
-Content-Type: multipart/form-data
-Body: file=<GIF изображение>
-Response: {"ok": true, "name": "filename.gif", "url": "/api/v1/images/filename.gif"}
-```
+Сборка .exe: `pyinstaller lasercut_converter.spec`
