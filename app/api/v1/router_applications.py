@@ -166,6 +166,72 @@ async def upload_application(
         raise HTTPException(status_code=500, detail=f"Ошибка парсинга: {str(e)}")
 
 
+@router.get("/converter/pending")
+async def converter_pending(db: AsyncSession = Depends(get_db)):
+    """Публичный эндпоинт для конвертера — список раскладок без изображений (без авторизации)"""
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(Application, ApplicationLayout)
+        .join(ApplicationLayout, Application.id == ApplicationLayout.application_id)
+        .where(ApplicationLayout.layout_image.is_(None))
+        .where(Application.status.notin_(["rejected"]))
+        .limit(50)
+    )
+    pending = []
+    for app, layout in result.all():
+        pending.append({
+            "app_id": app.id,
+            "order_name": app.order_name or "",
+            "layout_id": layout.id,
+            "layout_code": layout.layout_code or "",
+        })
+    return {"pending": pending}
+
+
+@router.post("/{app_id}/layouts/{layout_id}/image")
+async def upload_layout_image(
+        app_id: int,
+        layout_id: int,
+        file: UploadFile = File(...),
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN, UserRole.DIRECTOR))
+):
+    """Ручная загрузка изображения раскладки (GIF/PNG/JPG)"""
+    if not file.filename.lower().endswith(('.gif', '.png', '.jpg', '.jpeg')):
+        raise HTTPException(status_code=400, detail="Только изображения (GIF, PNG, JPG)")
+
+    result = await db.execute(
+        select(ApplicationLayout).where(
+            ApplicationLayout.id == layout_id,
+            ApplicationLayout.application_id == app_id
+        )
+    )
+    layout = result.scalar_one_or_none()
+    if not layout:
+        raise HTTPException(status_code=404, detail="Раскладка не найдена")
+
+    # Save image
+    app_result = await db.execute(select(Application).where(Application.id == app_id))
+    app = app_result.scalar_one_or_none()
+    layout_code = layout.layout_code or "001"
+    dest_dir = IMAGE_DIR / f"layouts/{app.order_name}_{layout_code}"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    ext = Path(file.filename).suffix
+    safe_name = f"{app_id}_{layout_code}_manual{ext}"
+    dest = dest_dir / safe_name
+
+    content = await file.read()
+    with open(dest, "wb") as f:
+        f.write(content)
+
+    layout_image_path = f"/api/v1/images/layouts/{app.order_name}_{layout_code}/{safe_name}"
+    layout.layout_image = layout_image_path
+    await db.commit()
+
+    return {"status": "success", "layout_image": layout_image_path}
+
+
 @router.post("/{app_id}/layouts/upload")
 async def upload_layout(
         app_id: int,
@@ -190,112 +256,11 @@ async def upload_layout(
         text = extract_text(file_path)
         layout_data = parse_layout_text(text, file.filename)
 
-        # === Image extraction: Word (DOC→HTML→GIF) preferred, LibreOffice fallback ===
-        import asyncio
-        layout_image_path = None
-        saved_name = Path(file_path).stem.replace(" ", "_").replace(".", "_")
-        dest_dir = IMAGE_DIR / f"layouts/{app.order_name}_{layout_code}"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-
-        # 1. Try Word directly (works on Windows with MS Word installed)
-        try:
-            import pythoncom
-            pythoncom.CoInitialize()
-            import win32com.client
-            import tempfile as _tmp
-            with _tmp.TemporaryDirectory() as tmpdir:
-                tmpdir = Path(tmpdir)
-                word = win32com.client.Dispatch("Word.Application")
-                word.Visible = False
-                word.DisplayAlerts = 0
-                try:
-                    doc = word.Documents.Open(str(Path(file_path).absolute()))
-                    html_path = tmpdir / f"{tmpdir.name}.html"
-                    doc.SaveAs2(str(html_path), FileFormat=10)  # wdFormatHTML
-                    doc.Close(False)
-                finally:
-                    word.Quit()
-
-                await asyncio.sleep(0.5)
-
-                # Find GIF in .files/_files folder or root
-                IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.emf', '.wmf'}
-                all_images = {}
-                for d in tmpdir.iterdir():
-                    if d.is_dir() and (d.name.endswith('.files') or d.name.endswith('_files')):
-                        for f in d.iterdir():
-                            if f.is_file() and f.suffix.lower() in IMG_EXTS:
-                                all_images[f.name] = f
-                for f in tmpdir.iterdir():
-                    if f.is_file() and f.suffix.lower() in IMG_EXTS:
-                        if f.name not in all_images:
-                            all_images[f.name] = f
-
-                if all_images:
-                    # Pick the largest image (main layout image)
-                    best_name = max(all_images, key=lambda k: all_images[k].stat().st_size)
-                    best_src = all_images[best_name]
-                    dest_name = f"{saved_name}_{best_name}"
-                    dest = dest_dir / dest_name
-                    shutil.copy2(best_src, dest)
-                    layout_image_path = f"/api/v1/images/layouts/{app.order_name}_{layout_code}/{dest_name}"
-                    print(f"WORD_OK: {layout_image_path} ({dest.stat().st_size} bytes)")
-            pythoncom.CoUninitialize()
-        except ImportError:
-            print("WORD_SKIP: win32com not available, trying auto_convert.py")
-        except Exception as e:
-            print(f"WORD_ERROR: {e}")
-
-        # 2. Try local converter (.exe running on Windows host)
+        # === Image extraction via LibreOffice ===
+        layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
         if not layout_image_path:
-            try:
-                import httpx
-                async with httpx.AsyncClient(timeout=5) as client:
-                    # Check if local converter is running
-                    health_resp = await client.get("http://host.docker.internal:8001/health")
-                    health_resp.raise_for_status()
-                    # Convert via local converter
-                    convert_resp = await client.post(
-                        "http://host.docker.internal:8001/convert",
-                        json={"path": file_path},
-                        timeout=30
-                    )
-                    result = convert_resp.json()
-                    if result.get('images'):
-                        for img in result['images']:
-                            if img.get('name', '').endswith(('.gif', '.png', '.jpg')):
-                                src = IMAGE_DIR / img['name']
-                                if src.exists():
-                                    dest_name = img['name']
-                                    dest = dest_dir / dest_name
-                                    shutil.copy2(src, dest)
-                                    layout_image_path = f"/api/v1/images/layouts/{app.order_name}_{layout_code}/{dest_name}"
-                                    break
-            except Exception:
-                pass  # Local converter not available, continue
-
-        # 3. If no Word image, wait for auto_convert.py (background process)
-        if not layout_image_path:
-            for wait in range(6):
-                await asyncio.sleep(1)
-                for ext in ['gif', 'png', 'jpg']:
-                    pattern = f"{saved_name}_*.{ext}"
-                    word_images = list(IMAGE_DIR.glob(pattern))
-                    if word_images:
-                        best = max(word_images, key=lambda f: f.stat().st_size)
-                        layout_image_path = f"/api/v1/images/{best.name}"
-                        print(f"AUTO_CONVERT_OK: {best.name}")
-                        break
-                if layout_image_path:
-                    break
-
-        # 4. Fallback to LibreOffice (known to lose curves, but better than nothing)
-        if not layout_image_path:
-            print(f"FALLBACK: LibreOffice (may lose curves)")
-            layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
-            if not layout_image_path:
-                layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
-                layout_image_path = layout_images[0] if layout_images else None
+            layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+            layout_image_path = layout_images[0] if layout_images else None
 
         # === Ищем файл заявки (для весов и чистых имен) ===
         print(f"\n🔍 Ищем файл заявки: {app.order_name}*.doc")
@@ -609,38 +574,8 @@ async def reupload_application(
                 layout_text = extract_text(file_path)
                 layout_data = parse_layout_text(layout_text, lf.filename)
 
-                # Extract layout image — try local converter first (preserves curves)
-                layout_image_path = None
-                dest_dir = IMAGE_DIR / f"layouts/{app.order_name}_{layout_code}"
-                dest_dir.mkdir(parents=True, exist_ok=True)
-
-                try:
-                    import httpx
-                    async with httpx.AsyncClient(timeout=5) as client:
-                        health_resp = await client.get("http://host.docker.internal:8001/health")
-                        health_resp.raise_for_status()
-                        convert_resp = await client.post(
-                            "http://host.docker.internal:8001/convert",
-                            json={"path": file_path},
-                            timeout=30
-                        )
-                        result = convert_resp.json()
-                        if result.get('images'):
-                            for img in result['images']:
-                                if img.get('name', '').endswith(('.gif', '.png', '.jpg')):
-                                    src = IMAGE_DIR / img['name']
-                                    if src.exists():
-                                        dest_name = img['name']
-                                        dest = dest_dir / dest_name
-                                        shutil.copy2(src, dest)
-                                        layout_image_path = f"/api/v1/images/layouts/{app.order_name}_{layout_code}/{dest_name}"
-                                        break
-                except Exception:
-                    pass
-
-                # Fallback to LibreOffice (known to lose curves)
-                if not layout_image_path:
-                    layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
+                # Extract layout image via LibreOffice
+                layout_image_path = extract_layout_image(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
                 if not layout_image_path:
                     layout_images = extract_images(file_path, str(IMAGE_DIR), prefix=f"layouts/{app.order_name}_{layout_code}")
                     layout_image_path = layout_images[0] if layout_images else None

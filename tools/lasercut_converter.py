@@ -55,6 +55,7 @@ PORT = 8001
 
 # Remote server URL for uploading images (set via config or CLI arg)
 SERVER_URL = os.environ.get("LASERCUT_SERVER_URL", "")
+SERVER_TOKEN = os.environ.get("LASERCUT_SERVER_TOKEN", "")
 
 IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.emf', '.wmf'}
 
@@ -270,8 +271,62 @@ class ConverterHandler(BaseHTTPRequestHandler):
         pass  # Suppress default logging
 
 
+def watch_server():
+    """Background thread: poll server for layouts needing conversion."""
+    if not SERVER_URL:
+        return
+    log(f"Watch mode: polling {SERVER_URL} every 30s for new layouts")
+    processed = set()
+    while True:
+        time.sleep(30)
+        try:
+            # Get layouts without images (public endpoint, no auth needed)
+            url = f"{SERVER_URL.rstrip('/')}/api/v1/applications/converter/pending"
+            req = urllib.request.Request(url)
+            resp = urllib.request.urlopen(req, timeout=10)
+            data = json.loads(resp.read().decode())
+
+            pending = data.get('pending', [])
+            for item in pending:
+                layout_id = item.get('layout_id')
+                app_id = item.get('app_id')
+                layout_code = item.get('layout_code', '001')
+                if not layout_id or layout_id in processed:
+                    continue
+
+                log(f"  Layout {layout_code} of app #{app_id} needs conversion (ID={layout_id})")
+                processed.add(layout_id)
+
+                # Try to find and convert the layout DOC
+                order_name = item.get('order_name', '')
+                import glob as globmod
+                patterns = [
+                    f"{app_id}_layout_{layout_code}_*.DOC",
+                    f"{order_name}_layout_{layout_code}_*.DOC",
+                ]
+                found = False
+                for pat in patterns:
+                    matches = globmod.glob(str(UPLOADS_DIR / pat))
+                    if matches:
+                        doc_path = Path(matches[0])
+                        log(f"  Found local DOC: {doc_path.name}")
+                        result = convert_doc_to_gif(doc_path)
+                        if result.get('images'):
+                            for img in result['images']:
+                                local_path = IMAGES_DIR / img['name']
+                                if local_path.exists():
+                                    upload_to_server(local_path, SERVER_URL)
+                            log(f"  Uploaded images for layout {layout_code} of app #{app_id}")
+                        found = True
+                        break
+                if not found:
+                    log(f"  DOC not found locally for layout {layout_code} of app #{app_id}")
+        except Exception as e:
+            log(f"  Watch error: {e}")
+
+
 def main():
-    global SERVER_URL
+    global SERVER_URL, SERVER_TOKEN
 
     # Parse command-line args
     for i, arg in enumerate(sys.argv[1:], 1):
@@ -279,6 +334,10 @@ def main():
             SERVER_URL = sys.argv[i + 1]
         elif arg.startswith('--server=') or arg.startswith('-s='):
             SERVER_URL = arg.split('=', 1)[1]
+        elif arg in ('--token', '-t') and i < len(sys.argv) - 1:
+            SERVER_TOKEN = sys.argv[i + 1]
+        elif arg.startswith('--token=') or arg.startswith('-t='):
+            SERVER_TOKEN = arg.split('=', 1)[1]
 
     log("=" * 50)
     log("LaserCut Local Converter v1.1")
@@ -311,6 +370,12 @@ def main():
     server = HTTPServer(('0.0.0.0', PORT), ConverterHandler)
     log(f"Server running on http://localhost:{PORT}")
     log("Ready to convert DOC files!")
+
+    # Start watcher thread if server URL is configured
+    if SERVER_URL:
+        watcher_thread = threading.Thread(target=watch_server, daemon=True)
+        watcher_thread.start()
+
     log("Press Ctrl+C to stop")
     print(f"\n{'='*50}")
     print(f"  LaserCut Converter running on port {PORT}")

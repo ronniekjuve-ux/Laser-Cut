@@ -91,6 +91,15 @@ export default function ReuploadModal({ app, onClose, onSaved }) {
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
 
+  // Image upload state
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imageLayoutId, setImageLayoutId] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageProgress, setImageProgress] = useState('');
+  const [imageError, setImageError] = useState('');
+
+  const layouts = app.layouts || [];
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (appFiles.length === 0 && layoutFiles.length === 0) {
@@ -128,45 +137,130 @@ export default function ReuploadModal({ app, onClose, onSaved }) {
     }
   };
 
+  const handleImageUpload = async () => {
+    if (!imageFiles.length || !imageLayoutId) {
+      setImageError('Выберите изображение и раскладку');
+      return;
+    }
+    setUploadingImage(true);
+    setImageError('');
+    setImageProgress('Загрузка изображения...');
+
+    try {
+      const fd = new FormData();
+      fd.append('file', imageFiles[0]);
+
+      const res = await client.post(
+        '/api/v1/applications/' + app.id + '/layouts/' + imageLayoutId + '/image',
+        fd
+      );
+      setImageProgress('Изображение загружено!');
+      await new Promise(r => setTimeout(r, 1500));
+      setImageFiles([]);
+      setImageLayoutId('');
+      setImageProgress('');
+      onSaved();
+    } catch (err) {
+      console.error('Image upload error:', err);
+      setImageError('Ошибка: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setUploadingImage(false);
+      setImageProgress('');
+    }
+  };
+
   return (
     <div className="modal-overlay active" onClick={onClose}>
-      <div className="modal-content" style={{width: 600}} onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content" style={{width: 700}} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Перезагрузка — #{app.id} {app.order_name || ''}</h3>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          <p style={{fontSize: 13, color: '#64748b', marginBottom: 12}}>
-            Загрузите новые файлы для обновления данных заказа. Все связанные раскладки и детали будут пересчитаны.
-          </p>
-
-          <div className="file-zones">
-            <FileDropZone
-              label="Файл заявки (.doc)"
-              accept=".doc,.cnf.doc,.fnf.doc"
-              multiple={false}
-              files={appFiles}
-              onFiles={setAppFiles}
-              disabled={uploading}
-            />
-            <FileDropZone
-              label="Файлы раскладок (.cnf.doc, .fnf.doc)"
-              accept=".doc,.cnf.doc,.fnf.doc"
-              multiple={true}
-              files={layoutFiles}
-              onFiles={setLayoutFiles}
-              disabled={uploading}
-            />
+          {/* Section 1: Upload DOC files */}
+          <div style={{marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--border)'}}>
+            <p style={{fontSize: 13, fontWeight: 600, marginBottom: 8}}>📄 Загрузка DOC файлов</p>
+            <p style={{fontSize: 12, color: '#64748b', marginBottom: 8}}>
+              Обновление DOC файлов пересчитает данные раскладок и деталей.
+            </p>
+            <div className="file-zones">
+              <FileDropZone
+                label="Файл заявки (.doc)"
+                accept=".doc,.cnf.doc,.fnf.doc"
+                multiple={false}
+                files={appFiles}
+                onFiles={setAppFiles}
+                disabled={uploading}
+              />
+              <FileDropZone
+                label="Файлы раскладок (.cnf.doc, .fnf.doc)"
+                accept=".doc,.cnf.doc,.fnf.doc"
+                multiple={true}
+                files={layoutFiles}
+                onFiles={setLayoutFiles}
+                disabled={uploading}
+              />
+            </div>
+            {error && <div style={{color: '#ef4444', fontSize: 12, marginTop: 8}}>{error}</div>}
+            {progress && <div style={{color: '#0369a1', fontSize: 12, marginTop: 8}}>{progress}</div>}
+            {(appFiles.length > 0 || layoutFiles.length > 0) && (
+              <button className="btn btn-primary" onClick={handleSubmit} disabled={uploading} style={{marginTop: 8}}>
+                {uploading ? 'Загрузка...' : 'Обновить DOC'}
+              </button>
+            )}
           </div>
 
-          {error && <div style={{color: '#ef4444', fontSize: 13, marginTop: 8}}>{error}</div>}
-          {progress && <div style={{color: '#0369a1', fontSize: 13, marginTop: 8}}>{progress}</div>}
+          {/* Section 2: Upload layout image */}
+          <div>
+            <p style={{fontSize: 13, fontWeight: 600, marginBottom: 8}}>🖼 Загрузка изображения раскладки</p>
+            <p style={{fontSize: 12, color: '#64748b', marginBottom: 8}}>
+              Вручную загрузите изображение (GIF/PNG/JPG) для раскладки, если автоматическое извлечение не сработало.
+            </p>
+
+            {layouts.length > 0 ? (
+              <>
+                <div style={{marginBottom: 8}}>
+                  <label style={{fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4}}>Раскладка:</label>
+                  <select
+                    value={imageLayoutId}
+                    onChange={e => setImageLayoutId(e.target.value)}
+                    style={{width: '100%', padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12}}
+                  >
+                    <option value="">Выберите раскладку...</option>
+                    {layouts.map(l => (
+                      <option key={l.id} value={l.id}>
+                        {l.layout_code || `#${l.id}`} — {l.sheet_w}×{l.sheet_h} мм
+                        {l.layout_image ? ' ✓ изображение есть' : ' ✗ нет изображения'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <FileDropZone
+                  label="Изображение раскладки (.gif, .png, .jpg)"
+                  accept=".gif,.png,.jpg,.jpeg"
+                  multiple={false}
+                  files={imageFiles}
+                  onFiles={setImageFiles}
+                  disabled={uploadingImage}
+                />
+
+                {imageError && <div style={{color: '#ef4444', fontSize: 12, marginTop: 8}}>{imageError}</div>}
+                {imageProgress && <div style={{color: '#0369a1', fontSize: 12, marginTop: 8}}>{imageProgress}</div>}
+
+                {imageFiles.length > 0 && imageLayoutId && (
+                  <button className="btn btn-primary" onClick={handleImageUpload} disabled={uploadingImage} style={{marginTop: 8}}>
+                    {uploadingImage ? 'Загрузка...' : 'Загрузить изображение'}
+                  </button>
+                )}
+              </>
+            ) : (
+              <p style={{fontSize: 12, color: '#94a3b8'}}>Сначала загрузите DOC файлы раскладок</p>
+            )}
+          </div>
         </div>
         <div className="modal-footer">
-          <button className="btn" onClick={onClose} disabled={uploading}>Отмена</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={uploading}>
-            {uploading ? 'Загрузка...' : 'Обновить'}
-          </button>
+          <button className="btn" onClick={onClose}>Закрыть</button>
         </div>
       </div>
     </div>

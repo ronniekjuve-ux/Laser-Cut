@@ -397,6 +397,17 @@ async def upload_layout_image(file: UploadFile = File(...)):
     return {"ok": True, "name": safe_name, "url": f"/api/v1/images/{safe_name}"}
 
 
+@router.get("/uploads/{full_path:path}")
+async def download_upload(full_path: str):
+    """Скачать DOC файл из uploads/ (для конвертера)"""
+    file_path = (UPLOAD_DIR / full_path).resolve()
+    if not file_path.is_relative_to(UPLOAD_DIR.resolve()):
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    return FileResponse(file_path, media_type="application/msword", filename=file_path.name)
+
+
 # IMPORTANT: catch-all route MUST be last
 @router.get("/{full_path:path}")
 async def get_image(full_path: str):
