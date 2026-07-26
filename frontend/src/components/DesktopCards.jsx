@@ -109,7 +109,7 @@ function PriorityBadge({ priority, appId, onChange }) {
   );
 }
 
-function OrderCard({ app, onClick, onReupload, onEdit, onDelete }) {
+function OrderCard({ app, onClick, onReupload, onEdit, onDelete, onCalc }) {
   const status = STATUS_CONFIG[app.status] || STATUS_CONFIG.approved;
   const created = app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : '';
   const [priority, setPriority] = useState(app.priority || 'medium');
@@ -147,10 +147,11 @@ function OrderCard({ app, onClick, onReupload, onEdit, onDelete }) {
       <div className="desktop-card-footer">
         <span>{created}</span>
         <div className="desktop-card-actions" onClick={e => e.stopPropagation()}>
-          {hasRuns && <button className="btn btn-sm" onClick={() => setShowHistory(true)} title="История">📋</button>}
-          {onReupload && <button className="btn btn-sm" onClick={() => onReupload(app)} title="Перезагрузить">📤</button>}
-          {onEdit && <button className="btn btn-sm" onClick={() => onEdit(app)} title="Редактировать">✏️</button>}
-          {onDelete && <button className="btn btn-sm" onClick={() => onDelete(app.id)} title="Удалить" style={{ color: '#ef4444' }}>🗑</button>}
+          {onCalc && <button className="btn btn-sm" onClick={() => onCalc(app)} title="Калькулятор" style={{ padding: '2px 6px', fontSize: 11 }}>🧮</button>}
+          {hasRuns && <button className="btn btn-sm" onClick={() => setShowHistory(true)} title="История" style={{ padding: '2px 6px', fontSize: 11 }}>📋</button>}
+          {onReupload && <button className="btn btn-sm" onClick={() => onReupload(app)} title="Перезагрузить" style={{ padding: '2px 6px', fontSize: 11 }}>📤</button>}
+          {onEdit && <button className="btn btn-sm" onClick={() => onEdit(app)} title="Редактировать" style={{ padding: '2px 6px', fontSize: 11 }}>✏️</button>}
+          {onDelete && <button className="btn btn-sm" onClick={() => onDelete(app.id)} title="Удалить" style={{ padding: '2px 6px', fontSize: 11, color: '#ef4444' }}>🗑</button>}
         </div>
       </div>
       {showHistory && <CutHistoryModal app={app} onClose={() => setShowHistory(false)} showHeader={false} />}
@@ -263,7 +264,7 @@ function CutHistoryModal({ app, onClose, showHeader = true }) {
   );
 }
 
-function CompletedCard({ app, onClick, onCancelCut }) {
+function CompletedCard({ app, onClick, onCancelCut, onCalc }) {
   const created = app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : '';
   const cutAt = app.cut_at ? new Date(app.cut_at).toLocaleDateString('ru-RU') : '';
   const layouts = app.layouts || [];
@@ -295,16 +296,21 @@ function CompletedCard({ app, onClick, onCancelCut }) {
       </div>
       <div className="desktop-card-footer">
         <span>Поступил: {created}</span>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <span>Выполнен: {cutAt}</span>
+          {onCalc && (
+            <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onCalc(app); }} title="Калькулятор" style={{ padding: '2px 6px', fontSize: 11 }}>
+              🧮
+            </button>
+          )}
           {(app.cut_by || cutAt) && (
-            <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); setShowHistory(true); }} title="История" style={{ background: '#f0f9ff', color: '#1d4ed8', border: '1px solid #bae6fd' }}>
-              📋 История
+            <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); setShowHistory(true); }} title="История" style={{ padding: '2px 6px', fontSize: 11, background: '#f0f9ff', color: '#1d4ed8', border: '1px solid #bae6fd' }}>
+              📋
             </button>
           )}
           {onCancelCut && (
-            <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onCancelCut(e, app.id); }} title="Отменить вырезку" style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}>
-              ↩ Вернуть
+            <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onCancelCut(e, app.id); }} title="Отменить вырезку" style={{ padding: '2px 6px', fontSize: 11, background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}>
+              ↩
             </button>
           )}
         </div>

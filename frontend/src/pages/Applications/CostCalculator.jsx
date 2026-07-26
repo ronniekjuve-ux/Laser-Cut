@@ -1,26 +1,40 @@
 import { useState, useMemo } from 'react';
 
-export default function CostCalculator({ layouts, supply_material, thickness, steel_grade, showMeters }) {
+export default function CostCalculator({ layouts, supply_material, thickness, steel_grade }) {
   const [pricePerCut, setPricePerCut] = useState('');
   const [pricePerPierce, setPricePerPierce] = useState('');
   const [pricePerKg, setPricePerKg] = useState('');
+  const [customSheetWeight, setCustomSheetWeight] = useState('');
+  const [customPartsWeight, setCustomPartsWeight] = useState('');
+  const [customOtherWeight, setCustomOtherWeight] = useState('');
+  const [weightSource, setWeightSource] = useState('auto'); // 'auto' | 'sheet' | 'parts' | 'custom'
 
   const totals = useMemo(() => {
     let cutLength = 0;
     let pierces = 0;
     let sheetWeight = 0;
+    let partsWeight = 0;
     for (const l of (layouts || [])) {
       cutLength += l.cut_length || 0;
       pierces += l.pierces || 0;
-      sheetWeight += (l.sheet_weight || l.parts_weight || 0) * (l.sheet_count || 1);
+      sheetWeight += (l.sheet_weight || 0) * (l.sheet_count || 1);
+      partsWeight += (l.parts || []).reduce((sum, p) => sum + (p.weight || 0) * (p.quantity || 0), 0);
     }
-    return { cutLength, pierces, sheetWeight };
+    return { cutLength, pierces, sheetWeight, partsWeight };
   }, [layouts]);
 
-  const cutLengthDisplay = showMeters ? totals.cutLength / 1000 : totals.cutLength;
-  const cutCost = (parseFloat(pricePerCut) || 0) * cutLengthDisplay;
+  const cutLengthMeters = totals.cutLength / 1000;
+  const cutCost = (parseFloat(pricePerCut) || 0) * cutLengthMeters;
   const pierceCost = (parseFloat(pricePerPierce) || 0) * totals.pierces;
-  const materialCost = (parseFloat(pricePerKg) || 0) * totals.sheetWeight;
+
+  const effectiveWeight = useMemo(() => {
+    if (weightSource === 'sheet') return parseFloat(customSheetWeight) || 0;
+    if (weightSource === 'parts') return parseFloat(customPartsWeight) || 0;
+    if (weightSource === 'custom') return parseFloat(customOtherWeight) || 0;
+    return totals.sheetWeight || totals.partsWeight;
+  }, [weightSource, customSheetWeight, customPartsWeight, customOtherWeight, totals]);
+
+  const materialCost = (parseFloat(pricePerKg) || 0) * effectiveWeight;
   const totalCost = cutCost + pierceCost + materialCost;
 
   const fmt = (n) => n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -35,7 +49,7 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', marginBottom: 12 }}>
         <div>
           <span style={{ color: '#64748b' }}>Суммарная длина реза: </span>
-          <b>{showMeters ? (totals.cutLength / 1000).toLocaleString('ru-RU', { maximumFractionDigits: 4 }) + ' м' : fmt(totals.cutLength) + ' мм'}</b>
+          <b>{cutLengthMeters.toLocaleString('ru-RU', { maximumFractionDigits: 4 })} м</b>
         </div>
         <div>
           <span style={{ color: '#64748b' }}>Кол-во проколов: </span>
@@ -46,7 +60,7 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px 12px', marginBottom: 12 }}>
         <div>
           <label style={{ display: 'block', color: '#64748b', marginBottom: 2, fontSize: 12 }}>
-            {showMeters ? 'Цена за м реза (руб.)' : 'Цена за мм реза (руб.)'}
+            Цена за м реза (руб.)
           </label>
           <input
             type="number"
@@ -78,16 +92,82 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
         </div>
       </div>
 
-      {totals.sheetWeight > 0 && (
-        <div style={{ padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, marginBottom: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Данные по материалу</div>
-          <div style={{ color: '#64748b' }}>
-            {steel_grade && <span>Марка: <b>{steel_grade}</b> · </span>}
-            {thickness && <span>Толщина: <b>{thickness} мм</b> · </span>}
-            <span>Общий вес: <b>{fmt(totals.sheetWeight)} кг</b></span>
-          </div>
+      <div style={{ padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, marginBottom: 12 }}>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>Данные по материалу</div>
+        <div style={{ color: '#64748b', marginBottom: 8 }}>
+          {steel_grade && <span>Марка: <b>{steel_grade}</b> · </span>}
+          {thickness && <span>Толщина: <b>{thickness} мм</b> · </span>}
+          <span>Вес листа: <b>{fmt(totals.sheetWeight)} кг</b> · </span>
+          <span>Вес деталей: <b>{fmt(totals.partsWeight)} кг</b></span>
         </div>
-      )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
+          {[
+            { key: 'auto', label: 'Авто' },
+            { key: 'sheet', label: 'Вес листа' },
+            { key: 'parts', label: 'Вес деталей' },
+            { key: 'custom', label: 'Другой источник' },
+          ].map(opt => (
+            <div
+              key={opt.key}
+              onClick={() => setWeightSource(opt.key)}
+              style={{
+                padding: '4px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, cursor: 'pointer', textAlign: 'center',
+                background: weightSource === opt.key ? '#1d4ed8' : '#f8fafc',
+                color: weightSource === opt.key ? '#fff' : '#64748b',
+                border: '1px solid ' + (weightSource === opt.key ? '#1d4ed8' : '#e2e8f0'),
+              }}
+            >
+              {opt.label}
+            </div>
+          ))}
+        </div>
+
+        {weightSource === 'sheet' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <label style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>Вес листа (кг):</label>
+            <input
+              type="number"
+              value={customSheetWeight}
+              onChange={e => setCustomSheetWeight(e.target.value)}
+              placeholder={String(totals.sheetWeight)}
+              style={{ width: 100, padding: '3px 6px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12 }}
+            />
+          </div>
+        )}
+        {weightSource === 'parts' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <label style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>Вес деталей (кг):</label>
+            <input
+              type="number"
+              value={customPartsWeight}
+              onChange={e => setCustomPartsWeight(e.target.value)}
+              placeholder={String(totals.partsWeight)}
+              style={{ width: 100, padding: '3px 6px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12 }}
+            />
+          </div>
+        )}
+        {weightSource === 'custom' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <label style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>Другой вес (кг):</label>
+            <input
+              type="number"
+              value={customOtherWeight}
+              onChange={e => setCustomOtherWeight(e.target.value)}
+              placeholder="0"
+              style={{ width: 100, padding: '3px 6px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12 }}
+            />
+          </div>
+        )}
+
+        <div style={{ fontSize: 12, color: '#64748b' }}>
+          Используется вес: <b>{fmt(effectiveWeight)} кг</b>
+          {weightSource === 'auto' && <span> (авто)</span>}
+          {weightSource === 'sheet' && <span> (лист)</span>}
+          {weightSource === 'parts' && <span> (детали)</span>}
+          {weightSource === 'custom' && <span> (другой)</span>}
+        </div>
+      </div>
 
       <div style={{
         display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr',

@@ -13,6 +13,7 @@ import GroupDetail from '../../components/GroupDetail';
 import CreateGroupModal from '../../components/CreateGroupModal';
 import EditModal from '../Applications/EditModal';
 import ReuploadModal from '../Applications/ReuploadModal';
+import CostCalculator from '../Applications/CostCalculator';
 
 function NotesModal({ app, onClose, onSaved }) {
   const [text, setText] = useState(app.comments || '');
@@ -50,6 +51,65 @@ function NotesModal({ app, onClose, onSaved }) {
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
           <button className="btn" onClick={onClose}>Отмена</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalcModal({ app, onClose }) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    client.get('/api/v1/applications/' + app.id).then(res => {
+      setData(res.data);
+    }).catch(() => {
+      alert('Ошибка загрузки данных');
+      onClose();
+    }).finally(() => setLoading(false));
+  }, [app.id]);
+
+  if (loading) return (
+    <div className="modal-overlay active" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+        <div className="modal-body" style={{ textAlign: 'center', padding: 40 }}>Загрузка...</div>
+      </div>
+    </div>
+  );
+
+  if (!data) return null;
+
+  const layouts = data.layouts || [];
+  const appData = data.application || app;
+
+  return (
+    <div className="modal-overlay active" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+        <div className="modal-header">
+          <h3>Предварительный расчёт — {app.order_name || app.id}</h3>
+          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ marginBottom: 12, fontSize: 13, color: '#64748b' }}>
+            <span>Материал: <b>{appData.material || appData.steel_grade || '-'}</b> · </span>
+            <span>Толщина: <b>{appData.thickness ? appData.thickness + ' мм' : '-'}</b></span>
+          </div>
+          {layouts.length > 0 ? (
+            <CostCalculator
+              layouts={layouts}
+              supply_material={appData.supply_material}
+              thickness={appData.thickness}
+              steel_grade={appData.steel_grade || appData.material}
+            />
+          ) : (
+            <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>
+              Нет загруженных раскладок
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={onClose}>Закрыть</button>
         </div>
       </div>
     </div>
@@ -99,6 +159,7 @@ export default function OrdersList({ initialTab }) {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [editModal, setEditModal] = useState(null);
   const [reuploadModal, setReuploadModal] = useState(null);
+  const [calcModal, setCalcModal] = useState(null);
   const [filterValues, setFilterValues] = useState({});
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('viewMode_orders') || 'table');
   const filterRef = useRef(null);
@@ -495,6 +556,9 @@ export default function OrdersList({ initialTab }) {
             <MobileOrderCard
               key={app.id}
               app={app}
+              onCalc={(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') ? setCalcModal : undefined}
+              onEdit={(user?.role === 'admin' || user?.role === 'director') ? (app) => setEditModal(app) : undefined}
+              onDelete={(user?.role === 'admin') ? (id) => setConfirmDelete(id) : undefined}
             />
           ))}
           {pageItems.length === 0 && (
@@ -557,6 +621,7 @@ export default function OrdersList({ initialTab }) {
               onReupload={(user?.role === 'admin' || user?.role === 'director') ? (app) => setReuploadModal(app) : undefined}
               onEdit={(user?.role === 'admin' || user?.role === 'director') ? (app) => setEditModal(app) : undefined}
               onDelete={(user?.role === 'admin') ? (id) => setConfirmDelete(id) : undefined}
+              onCalc={(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') ? (app) => setCalcModal(app) : undefined}
             />
           ))}
           {pageItems.length === 0 && (
@@ -822,12 +887,15 @@ export default function OrdersList({ initialTab }) {
                               {app.comments || '📝'}
                             </button>
                           ) : col.key === 'actions' ? (
-                            <div style={{ display: 'flex', gap: 4 }}>
+                            <div style={{ display: 'flex', gap: 3 }}>
+                              {(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') && (
+                                <button className="btn" onClick={(e) => { e.stopPropagation(); setCalcModal(app); }} title="Калькулятор" style={{ padding: '3px 6px', fontSize: 11 }}>🧮</button>
+                              )}
                               {(user?.role === 'admin' || user?.role === 'director') && (
                                 <>
-                                  <button className="btn" onClick={(e) => { e.stopPropagation(); setReuploadModal(app); }} title="Перезагрузить файлы" style={{ padding: '4px 8px', fontSize: 11 }}>📤</button>
-                                  <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{ padding: '4px 8px', fontSize: 11 }}>✏️</button>
-                                  <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{ padding: '4px 8px', fontSize: 11 }}>🗑️</button>
+                                  <button className="btn" onClick={(e) => { e.stopPropagation(); setReuploadModal(app); }} title="Перезагрузить файлы" style={{ padding: '3px 6px', fontSize: 11 }}>📤</button>
+                                  <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{ padding: '3px 6px', fontSize: 11 }}>✏️</button>
+                                  <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{ padding: '3px 6px', fontSize: 11 }}>🗑️</button>
                                 </>
                               )}
                             </div>
@@ -1034,6 +1102,13 @@ export default function OrdersList({ initialTab }) {
           app={reuploadModal}
           onClose={() => setReuploadModal(null)}
           onSaved={() => { setReuploadModal(null); fetchOrders(); }}
+        />
+      )}
+
+      {calcModal && (
+        <CalcModal
+          app={calcModal}
+          onClose={() => setCalcModal(null)}
         />
       )}
     </div>

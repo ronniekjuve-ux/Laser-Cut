@@ -420,6 +420,9 @@ export default function ApplicationsList() {
               key={app.id}
               app={app}
               showProgress={false}
+              onCalc={(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') ? setCalcModal : undefined}
+              onEdit={(user?.role === 'admin' || user?.role === 'director') ? (app) => setEditModal(app) : undefined}
+              onDelete={(user?.role === 'admin') ? (id) => setConfirmDelete(id) : undefined}
             />
           ))}
           {activeApps.length === 0 && (
@@ -670,13 +673,15 @@ export default function ApplicationsList() {
                         {app.comments || '📝'}
                       </button>
                     ) : col.key === 'actions' ? (
-                      <div style={{display: 'flex', gap: 4}}>
-                        <button className="btn" onClick={(e) => { e.stopPropagation(); setCalcModal(app); }} title="Калькулятор" style={{padding: '4px 8px', fontSize: 11}}>🧮</button>
+                      <div style={{display: 'flex', gap: 3}}>
+                        {(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') && (
+                          <button className="btn" onClick={(e) => { e.stopPropagation(); setCalcModal(app); }} title="Калькулятор" style={{padding: '3px 6px', fontSize: 11}}>🧮</button>
+                        )}
                         {(user?.role === 'admin' || user?.role === 'director') && (
                           <>
-                            <button className="btn" onClick={(e) => { e.stopPropagation(); setReuploadModal(app); }} title="Перезагрузить файлы" style={{padding: '4px 8px', fontSize: 11}}>📤</button>
-                            <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{padding: '4px 8px', fontSize: 11}}>✏️</button>
-                            <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{padding: '4px 8px', fontSize: 11}}>🗑️</button>
+                            <button className="btn" onClick={(e) => { e.stopPropagation(); setReuploadModal(app); }} title="Перезагрузить файлы" style={{padding: '3px 6px', fontSize: 11}}>📤</button>
+                            <button className="btn" onClick={(e) => handleEdit(e, app)} title="Редактировать" style={{padding: '3px 6px', fontSize: 11}}>✏️</button>
+                            <button className="btn btn-danger" onClick={(e) => handleDelete(e, app.id)} title="Удалить" style={{padding: '3px 6px', fontSize: 11}}>🗑️</button>
                           </>
                         )}
                       </div>

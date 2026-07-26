@@ -395,7 +395,6 @@ function ApplicationsTab() {
                   supply_material={calcModal.supply_material}
                   thickness={calcModal.thickness}
                   steel_grade={calcModal.steel_grade || calcModal.material}
-                  showMeters
                 />
               ) : (
                 <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>

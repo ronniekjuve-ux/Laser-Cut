@@ -1,12 +1,74 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import client from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import useIsMobile, { getForceMobile } from '../../hooks/useIsMobile';
 import ApplicationDetail from '../Applications/ApplicationDetail';
 import MobileOrderCard from '../../components/MobileOrderCard';
 import MobileOrderDetail from '../../components/MobileOrderDetail';
 import { ViewToggle, CompletedCard } from '../../components/DesktopCards';
+import CostCalculator from '../Applications/CostCalculator';
+
+function CalcModal({ app, onClose }) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    client.get('/api/v1/applications/' + app.id).then(res => {
+      setData(res.data);
+    }).catch(() => {
+      alert('Ошибка загрузки данных');
+      onClose();
+    }).finally(() => setLoading(false));
+  }, [app.id]);
+
+  if (loading) return (
+    <div className="modal-overlay active" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+        <div className="modal-body" style={{ textAlign: 'center', padding: 40 }}>Загрузка...</div>
+      </div>
+    </div>
+  );
+
+  if (!data) return null;
+
+  const layouts = data.layouts || [];
+  const appData = data.application || app;
+
+  return (
+    <div className="modal-overlay active" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+        <div className="modal-header">
+          <h3>Предварительный расчёт — {app.order_name || app.id}</h3>
+          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ marginBottom: 12, fontSize: 13, color: '#64748b' }}>
+            <span>Материал: <b>{appData.material || appData.steel_grade || '-'}</b> · </span>
+            <span>Толщина: <b>{appData.thickness ? appData.thickness + ' мм' : '-'}</b></span>
+          </div>
+          {layouts.length > 0 ? (
+            <CostCalculator
+              layouts={layouts}
+              supply_material={appData.supply_material}
+              thickness={appData.thickness}
+              steel_grade={appData.steel_grade || appData.material}
+            />
+          ) : (
+            <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>
+              Нет загруженных раскладок
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={onClose}>Закрыть</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function CompletedOrdersList() {
+  const { user } = useAuth();
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState(null);
@@ -19,6 +81,8 @@ export default function CompletedOrdersList() {
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('viewMode_completed') || 'table');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [calcModal, setCalcModal] = useState(null);
+  const [confirmReturn, setConfirmReturn] = useState(null);
   const isMobile = useIsMobile();
 
   useEffect(() => { localStorage.setItem('viewMode_completed', viewMode); }, [viewMode]);
@@ -43,6 +107,12 @@ export default function CompletedOrdersList() {
 
   const handleCancelCut = async (e, appId) => {
     e.stopPropagation();
+    setConfirmReturn(appId);
+  };
+
+  const confirmReturnAction = async () => {
+    const appId = confirmReturn;
+    setConfirmReturn(null);
     try {
       await client.patch('/api/v1/applications/' + appId + '/status?status=approved');
       fetchCompleted();
@@ -192,20 +262,12 @@ export default function CompletedOrdersList() {
       {isRealMobile ? (
         <div className="order-cards">
           {filtered.map(app => (
-            <div key={app.id} style={{ position: 'relative' }}>
-              <MobileOrderCard app={app} />
-              <button
-                className="btn"
-                onClick={(e) => handleCancelCut(e, app.id)}
-                title="Вернуть в заказы"
-                style={{
-                  position: 'absolute', top: 8, right: 8, padding: '4px 8px', fontSize: 11,
-                  background: '#fff', zIndex: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
-                }}
-              >
-                ↩️
-              </button>
-            </div>
+            <MobileOrderCard
+              key={app.id}
+              app={app}
+              onCalc={(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') ? setCalcModal : undefined}
+              onReturn={() => setConfirmReturn(app.id)}
+            />
           ))}
           {filtered.length === 0 && (
             <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Нет выполненных заказов</div>
@@ -253,7 +315,7 @@ export default function CompletedOrdersList() {
         </div>
         <div className="desktop-cards">
           {paged.map(app => (
-            <CompletedCard key={app.id} app={app} onClick={setSelectedApp} onCancelCut={handleCancelCut} />
+            <CompletedCard key={app.id} app={app} onClick={setSelectedApp} onCancelCut={handleCancelCut} onCalc={(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') ? setCalcModal : undefined} />
           ))}
           {paged.length === 0 && (
             <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 20, color: '#64748b' }}>Нет выполненных заказов</div>
@@ -301,14 +363,26 @@ export default function CompletedOrdersList() {
                     <td>{app.cut_at ? new Date(app.cut_at).toLocaleDateString('ru-RU') : ''}</td>
                     <td>{app.cut_by || ''}</td>
                     <td>
-                      <button
-                        className="btn"
-                        onClick={(e) => handleCancelCut(e, app.id)}
-                        title="Вернуть в заказы"
-                        style={{ padding: '3px 8px', fontSize: 11 }}
-                      >
-                        ↩️
-                      </button>
+                      <div style={{ display: 'flex', gap: 3 }}>
+                        {(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') && (
+                          <button
+                            className="btn"
+                            onClick={(e) => { e.stopPropagation(); setCalcModal(app); }}
+                            title="Калькулятор"
+                            style={{ padding: '3px 6px', fontSize: 11 }}
+                          >
+                            🧮
+                          </button>
+                        )}
+                        <button
+                          className="btn"
+                          onClick={(e) => handleCancelCut(e, app.id)}
+                          title="Вернуть в заказы"
+                          style={{ padding: '3px 6px', fontSize: 11 }}
+                        >
+                          ↩️
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   );
@@ -362,6 +436,32 @@ export default function CompletedOrdersList() {
             onUpdate={() => fetchCompleted()}
           />
         )
+      )}
+
+      {calcModal && (
+        <CalcModal
+          app={calcModal}
+          onClose={() => setCalcModal(null)}
+        />
+      )}
+
+      {confirmReturn && (
+        <div className="modal-overlay active" onClick={() => setConfirmReturn(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <h3>Вернуть заказ в резку?</h3>
+              <button className="close-btn" onClick={() => setConfirmReturn(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Действительно хотите вернуть заказ #{confirmReturn} в резку?</p>
+              <p style={{ fontSize: 12, color: '#64748b' }}>Статус заказа изменится на "В очереди".</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={confirmReturnAction}>Вернуть</button>
+              <button className="btn" onClick={() => setConfirmReturn(null)}>Отмена</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

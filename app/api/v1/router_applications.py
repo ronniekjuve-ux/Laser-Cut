@@ -15,7 +15,7 @@ from app.db.models import (
     Application, ApplicationLayout, ApplicationLayoutPart, Customer,
     User, UserRole, ApplicationStatus, ApplicationPriority,
     DeficitRequest, Notification, ChangeLog, OrderGroup,
-    WarehouseItem, WarehouseMovement
+    WarehouseItem, WarehouseMovement, DeletedApplication
 )
 from app.core.deps import get_current_user, require_role, get_customer_ids
 from app.services.unified_parser import (
@@ -1751,17 +1751,75 @@ async def delete_application(
     if not app:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
-    # Load layouts to get warehouse_item_ids before cascade delete
-    from app.db.models import ApplicationLayout, WarehouseMovement, WarehouseItem
+    # Save app data to trash before deletion
+    app_data = json.dumps({
+        "id": app.id,
+        "order_name": app.order_name,
+        "customer_id": app.customer_id,
+        "material": app.material,
+        "steel_grade": app.steel_grade,
+        "thickness": app.thickness,
+        "total_weight": app.total_weight,
+        "status": app.status,
+        "priority": app.priority,
+        "supply_material": app.supply_material,
+        "comments": app.comments,
+        "created_at": app.created_at.isoformat() if app.created_at else None,
+        "cut_at": app.cut_at.isoformat() if app.cut_at else None,
+        "cut_by": app.cut_by,
+    })
+
+    # Save layouts data
     layouts_result = await db.execute(
         select(ApplicationLayout).where(ApplicationLayout.application_id == app_id)
     )
-    layout_warehouse_ids = [l.warehouse_item_id for l in layouts_result.scalars().all() if l.warehouse_item_id]
+    layouts = layouts_result.scalars().all()
+    layout_warehouse_ids = [l.warehouse_item_id for l in layouts if l.warehouse_item_id]
+
+    layouts_data = json.dumps([{
+        "id": l.id,
+        "layout_code": l.layout_code,
+        "machine_type": l.machine_type,
+        "sheet_w": l.sheet_w,
+        "sheet_h": l.sheet_h,
+        "sheet_weight": l.sheet_weight,
+        "sheet_count": l.sheet_count,
+        "completed_runs": l.completed_runs,
+        "cut_time": l.cut_time,
+        "move_time": l.move_time,
+        "pierce_time": l.pierce_time,
+        "cut_length": l.cut_length,
+        "travel_length": l.travel_length,
+        "pierces": l.pierces,
+        "layout_image": l.layout_image,
+        "status": l.status,
+    } for l in layouts])
+
+    # Create DeletedApplication record
+    deleted_app = DeletedApplication(
+        original_id=app.id,
+        order_name=app.order_name,
+        customer_id=app.customer_id,
+        material=app.material,
+        steel_grade=app.steel_grade,
+        thickness=app.thickness,
+        total_weight=app.total_weight,
+        status=app.status,
+        priority=app.priority,
+        supply_material=app.supply_material,
+        comments=app.comments,
+        deleted_by=user.id,
+        deleted_by_name=user.username,
+        app_data=app_data,
+        layouts_data=layouts_data,
+    )
+    db.add(deleted_app)
 
     await db.execute(delete(DeficitRequest).where(DeficitRequest.application_id == app_id))
     await db.execute(delete(Notification).where(Notification.related_app_id == app_id))
 
     # Delete warehouse movements that reference this application
+    from app.db.models import WarehouseMovement, WarehouseItem
     await db.execute(
         delete(WarehouseMovement).where(WarehouseMovement.application_id == app_id)
     )
@@ -1776,6 +1834,153 @@ async def delete_application(
     await db.commit()
 
     return {"status": "success", "message": "Заявка удалена"}
+
+
+# ===== Trash endpoints =====
+
+@router.get("/trash/list")
+async def list_deleted_applications(
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN)),
+        page: int = Query(1, ge=1),
+        limit: int = Query(50, ge=1, le=200),
+):
+    offset = (page - 1) * limit
+    count_result = await db.execute(select(func.count(DeletedApplication.id)))
+    total = count_result.scalar() or 0
+
+    result = await db.execute(
+        select(DeletedApplication)
+        .order_by(DeletedApplication.deleted_at.desc())
+        .offset(offset).limit(limit)
+    )
+    items = result.scalars().all()
+
+    return {
+        "items": [{
+            "id": d.id,
+            "original_id": d.original_id,
+            "order_name": d.order_name,
+            "customer_id": d.customer_id,
+            "material": d.material,
+            "steel_grade": d.steel_grade,
+            "thickness": d.thickness,
+            "total_weight": d.total_weight,
+            "status": d.status,
+            "priority": d.priority,
+            "deleted_by": d.deleted_by_name,
+            "deleted_at": d.deleted_at.isoformat() if d.deleted_at else None,
+        } for d in items],
+        "total": total,
+        "page": page,
+        "pages": (total + limit - 1) // limit,
+    }
+
+
+@router.post("/trash/restore/{deleted_id}")
+async def restore_application(
+        deleted_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN))
+):
+    result = await db.execute(select(DeletedApplication).where(DeletedApplication.id == deleted_id))
+    deleted = result.scalar_one_or_none()
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Запись не найдена в корзине")
+
+    # Check if original_id already exists
+    existing = await db.execute(select(Application).where(Application.id == deleted.original_id))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Заявка с таким ID уже существует")
+
+    # Restore from app_data
+    app_data = json.loads(deleted.app_data) if deleted.app_data else {}
+
+    new_app = Application(
+        id=deleted.original_id,
+        order_name=deleted.order_name,
+        customer_id=deleted.customer_id,
+        material=deleted.material,
+        steel_grade=deleted.steel_grade,
+        thickness=deleted.thickness,
+        total_weight=deleted.total_weight,
+        status=deleted.status,
+        priority=deleted.priority,
+        supply_material=deleted.supply_material,
+        comments=deleted.comments,
+    )
+    db.add(new_app)
+
+    # Restore layouts if available
+    if deleted.layouts_data:
+        layouts_data = json.loads(deleted.layouts_data)
+        for ld in layouts_data:
+            layout = ApplicationLayout(
+                application_id=deleted.original_id,
+                layout_code=ld.get("layout_code", ""),
+                machine_type=ld.get("machine_type", ""),
+                sheet_w=ld.get("sheet_w", 0),
+                sheet_h=ld.get("sheet_h", 0),
+                sheet_weight=ld.get("sheet_weight"),
+                sheet_count=ld.get("sheet_count", 1),
+                completed_runs=ld.get("completed_runs"),
+                cut_time=ld.get("cut_time", "00:00:00"),
+                move_time=ld.get("move_time", "00:00:00"),
+                pierce_time=ld.get("pierce_time", "00:00:00"),
+                cut_length=ld.get("cut_length"),
+                travel_length=ld.get("travel_length"),
+                pierces=ld.get("pierces"),
+                layout_image=ld.get("layout_image"),
+                status=ld.get("status", "active"),
+            )
+            db.add(layout)
+
+    # Add changelog entry
+    log = ChangeLog(
+        user_id=user.id,
+        user_name=user.username,
+        change_type="restore",
+        resource="application",
+        resource_id=deleted.original_id,
+        description=f"Восстановлено из корзины: {deleted.order_name}",
+    )
+    db.add(log)
+
+    # Delete from trash
+    await db.delete(deleted)
+    await db.commit()
+
+    return {"status": "success", "message": "Заявка восстановлена"}
+
+
+@router.delete("/trash/delete/{deleted_id}")
+async def permanent_delete(
+        deleted_id: int,
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN))
+):
+    result = await db.execute(select(DeletedApplication).where(DeletedApplication.id == deleted_id))
+    deleted = result.scalar_one_or_none()
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Запись не найдена в корзине")
+
+    await db.delete(deleted)
+    await db.commit()
+
+    return {"status": "success", "message": "Запись удалена из корзины"}
+
+
+@router.delete("/trash/clear")
+async def clear_trash(
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(require_role(UserRole.ADMIN))
+):
+    await db.execute(delete(DeletedApplication))
+    await db.commit()
+
+    return {"status": "success", "message": "Корзина очищена"}
 
 
 @router.patch("/{app_id}/priority")

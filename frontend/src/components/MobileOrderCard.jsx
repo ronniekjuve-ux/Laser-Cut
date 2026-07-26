@@ -94,7 +94,7 @@ function ProgressPopup({ allLayouts, onClose }) {
   );
 }
 
-export default function MobileOrderCard({ app, showProgress = true }) {
+export default function MobileOrderCard({ app, showProgress = true, onCalc, onEdit, onDelete, onReturn }) {
   const { user } = useAuth();
   const [previewLayout, setPreviewLayout] = useState(null);
   const [activeLayoutIndex, setActiveLayoutIndex] = useState(0);
@@ -296,9 +296,30 @@ export default function MobileOrderCard({ app, showProgress = true }) {
                 {new Date(app.created_at).toLocaleDateString('ru-RU')}
               </span>
             )}
-            <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>
               #{app.id}
             </span>
+            {/* Action buttons inline */}
+            {(onCalc || onEdit || onDelete || onReturn) && (
+              <div style={{ display: 'flex', gap: 3, marginLeft: 'auto' }} onClick={e => e.stopPropagation()}>
+                {onReturn && (
+                  <button className="btn" onClick={() => onReturn(app)} title="Вернуть в резку"
+                    style={{ padding: '3px 6px', fontSize: 11, background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}>↩</button>
+                )}
+                {onCalc && (
+                  <button className="btn" onClick={() => onCalc(app)} title="Калькулятор"
+                    style={{ padding: '3px 6px', fontSize: 11 }}>🧮</button>
+                )}
+                {onEdit && (
+                  <button className="btn" onClick={() => onEdit(app)} title="Редактировать"
+                    style={{ padding: '3px 6px', fontSize: 11 }}>✏️</button>
+                )}
+                {onDelete && (
+                  <button className="btn btn-danger" onClick={() => onDelete(app.id)} title="Удалить"
+                    style={{ padding: '3px 6px', fontSize: 11 }}>🗑️</button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

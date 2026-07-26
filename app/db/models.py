@@ -465,3 +465,27 @@ class ItemNote(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
+
+
+class DeletedApplication(Base):
+    __tablename__ = "deleted_applications"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    original_id: Mapped[int] = mapped_column(index=True)
+    order_name: Mapped[str] = mapped_column(String(50))
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))
+    material: Mapped[str] = mapped_column(String(50), default="Steel")
+    steel_grade: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    thickness: Mapped[float] = mapped_column(Float)
+    total_weight: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(20))
+    priority: Mapped[str] = mapped_column(String(20), default="medium")
+    supply_material: Mapped[Optional[bool]] = mapped_column(default=None, nullable=True)
+    comments: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    deleted_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    deleted_by_name: Mapped[str] = mapped_column(String(50))
+    deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    app_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON snapshot of full application data
+    layouts_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON snapshot of layouts
+
+    customer: Mapped["Customer"] = relationship(foreign_keys=[customer_id])
+    deleter: Mapped["User"] = relationship(foreign_keys=[deleted_by])
