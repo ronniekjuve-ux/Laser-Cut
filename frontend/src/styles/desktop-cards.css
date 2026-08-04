@@ -44,7 +44,7 @@
   flex-direction: column;
   gap: 6px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 .desktop-card:hover {
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);

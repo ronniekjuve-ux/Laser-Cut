@@ -162,6 +162,19 @@ export default function MobileOrderCard({ app, showProgress = true, onCalc, onEd
           onActiveIndexChange={setActiveLayoutIndex}
         />
         <div className="order-card-body">
+          {onReturn && (
+            <div style={{ marginBottom: 6 }} onClick={e => e.stopPropagation()}>
+              <button
+                onClick={() => onReturn(app)}
+                title="Вернуть в резку"
+                style={{
+                  padding: '4px 10px', fontSize: 12, fontWeight: 600,
+                  background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca',
+                  borderRadius: 6, cursor: 'pointer',
+                }}
+              >↩ Вернуть в резку</button>
+            </div>
+          )}
           <div className="order-card-customer">{app.customer || '-'}</div>
           <div className="order-card-meta">
             <span>{material}</span>
@@ -300,12 +313,8 @@ export default function MobileOrderCard({ app, showProgress = true, onCalc, onEd
               #{app.id}
             </span>
             {/* Action buttons inline */}
-            {(onCalc || onEdit || onDelete || onReturn) && (
+            {(onCalc || onEdit || onDelete) && (
               <div style={{ display: 'flex', gap: 3, marginLeft: 'auto' }} onClick={e => e.stopPropagation()}>
-                {onReturn && (
-                  <button className="btn" onClick={() => onReturn(app)} title="Вернуть в резку"
-                    style={{ padding: '3px 6px', fontSize: 11, background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}>↩</button>
-                )}
                 {onCalc && (
                   <button className="btn" onClick={() => onCalc(app)} title="Калькулятор"
                     style={{ padding: '3px 6px', fontSize: 11 }}>🧮</button>

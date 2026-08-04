@@ -264,7 +264,7 @@ function CutHistoryModal({ app, onClose, showHeader = true }) {
   );
 }
 
-function CompletedCard({ app, onClick, onCancelCut, onCalc }) {
+function CompletedCard({ app, onClick, onCancelCut, onCalc, onReturn }) {
   const created = app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : '';
   const cutAt = app.cut_at ? new Date(app.cut_at).toLocaleDateString('ru-RU') : '';
   const layouts = app.layouts || [];
@@ -308,8 +308,8 @@ function CompletedCard({ app, onClick, onCancelCut, onCalc }) {
               📋
             </button>
           )}
-          {onCancelCut && (
-            <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onCancelCut(e, app.id); }} title="Отменить вырезку" style={{ padding: '2px 6px', fontSize: 11, background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}>
+          {onReturn && (
+            <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onReturn(app); }} title="Вернуть в резку" style={{ padding: '2px 6px', fontSize: 11, background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}>
               ↩
             </button>
           )}

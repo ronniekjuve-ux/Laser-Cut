@@ -1,4 +1,4 @@
-const CACHE_VERSION = '2026-07-19-v3';
+const CACHE_VERSION = '2026-07-26-v6';
 const CACHE_NAME = `lasercut-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/',

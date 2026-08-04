@@ -1751,69 +1751,72 @@ async def delete_application(
     if not app:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
-    # Save app data to trash before deletion
-    app_data = json.dumps({
-        "id": app.id,
-        "order_name": app.order_name,
-        "customer_id": app.customer_id,
-        "material": app.material,
-        "steel_grade": app.steel_grade,
-        "thickness": app.thickness,
-        "total_weight": app.total_weight,
-        "status": app.status,
-        "priority": app.priority,
-        "supply_material": app.supply_material,
-        "comments": app.comments,
-        "created_at": app.created_at.isoformat() if app.created_at else None,
-        "cut_at": app.cut_at.isoformat() if app.cut_at else None,
-        "cut_by": app.cut_by,
-    })
-
-    # Save layouts data
+    # Save layouts data (needed for both trash and FK cleanup)
     layouts_result = await db.execute(
         select(ApplicationLayout).where(ApplicationLayout.application_id == app_id)
     )
     layouts = layouts_result.scalars().all()
     layout_warehouse_ids = [l.warehouse_item_id for l in layouts if l.warehouse_item_id]
 
-    layouts_data = json.dumps([{
-        "id": l.id,
-        "layout_code": l.layout_code,
-        "machine_type": l.machine_type,
-        "sheet_w": l.sheet_w,
-        "sheet_h": l.sheet_h,
-        "sheet_weight": l.sheet_weight,
-        "sheet_count": l.sheet_count,
-        "completed_runs": l.completed_runs,
-        "cut_time": l.cut_time,
-        "move_time": l.move_time,
-        "pierce_time": l.pierce_time,
-        "cut_length": l.cut_length,
-        "travel_length": l.travel_length,
-        "pierces": l.pierces,
-        "layout_image": l.layout_image,
-        "status": l.status,
-    } for l in layouts])
+    # Try to save to trash in a savepoint — skip if table doesn't exist on production
+    try:
+        async with db.begin_nested():
+            app_data = json.dumps({
+                "id": app.id,
+                "order_name": app.order_name,
+                "customer_id": app.customer_id,
+                "material": app.material,
+                "steel_grade": app.steel_grade,
+                "thickness": app.thickness,
+                "total_weight": app.total_weight,
+                "status": app.status,
+                "priority": app.priority,
+                "supply_material": app.supply_material,
+                "comments": app.comments,
+                "created_at": app.created_at.isoformat() if app.created_at else None,
+                "cut_at": app.cut_at.isoformat() if app.cut_at else None,
+                "cut_by": app.cut_by,
+            })
 
-    # Create DeletedApplication record
-    deleted_app = DeletedApplication(
-        original_id=app.id,
-        order_name=app.order_name,
-        customer_id=app.customer_id,
-        material=app.material,
-        steel_grade=app.steel_grade,
-        thickness=app.thickness,
-        total_weight=app.total_weight,
-        status=app.status,
-        priority=app.priority,
-        supply_material=app.supply_material,
-        comments=app.comments,
-        deleted_by=user.id,
-        deleted_by_name=user.username,
-        app_data=app_data,
-        layouts_data=layouts_data,
-    )
-    db.add(deleted_app)
+            layouts_data = json.dumps([{
+                "id": l.id,
+                "layout_code": l.layout_code,
+                "machine_type": l.machine_type,
+                "sheet_w": l.sheet_w,
+                "sheet_h": l.sheet_h,
+                "sheet_weight": l.sheet_weight,
+                "sheet_count": l.sheet_count,
+                "completed_runs": l.completed_runs,
+                "cut_time": l.cut_time,
+                "move_time": l.move_time,
+                "pierce_time": l.pierce_time,
+                "cut_length": l.cut_length,
+                "travel_length": l.travel_length,
+                "pierces": l.pierces,
+                "layout_image": l.layout_image,
+                "status": l.status,
+            } for l in layouts])
+
+            deleted_app = DeletedApplication(
+                original_id=app.id,
+                order_name=app.order_name,
+                customer_id=app.customer_id,
+                material=app.material,
+                steel_grade=app.steel_grade,
+                thickness=app.thickness,
+                total_weight=app.total_weight,
+                status=app.status,
+                priority=app.priority,
+                supply_material=app.supply_material,
+                comments=app.comments,
+                deleted_by=user.id,
+                deleted_by_name=user.username,
+                app_data=app_data,
+                layouts_data=layouts_data,
+            )
+            db.add(deleted_app)
+    except Exception:
+        pass  # trash table missing or broken — continue with hard delete
 
     await db.execute(delete(DeficitRequest).where(DeficitRequest.application_id == app_id))
     await db.execute(delete(Notification).where(Notification.related_app_id == app_id))

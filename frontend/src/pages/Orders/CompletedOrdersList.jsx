@@ -315,7 +315,7 @@ export default function CompletedOrdersList() {
         </div>
         <div className="desktop-cards">
           {paged.map(app => (
-            <CompletedCard key={app.id} app={app} onClick={setSelectedApp} onCancelCut={handleCancelCut} onCalc={(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') ? setCalcModal : undefined} />
+            <CompletedCard key={app.id} app={app} onClick={setSelectedApp} onCancelCut={handleCancelCut} onCalc={(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') ? setCalcModal : undefined} onReturn={() => setConfirmReturn(app.id)} />
           ))}
           {paged.length === 0 && (
             <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 20, color: '#64748b' }}>Нет выполненных заказов</div>
