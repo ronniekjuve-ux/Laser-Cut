@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function ConfirmModal({ title, message, onConfirm, onCancel, confirmText = 'Удалить', danger = true }) {
   return (
-    <div className="modal-overlay active" onClick={onCancel} style={{ zIndex: 2000 }}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onCancel(); } }} style={{ zIndex: 2000 }}>
       <div
         className="modal-content"
         onClick={e => e.stopPropagation()}

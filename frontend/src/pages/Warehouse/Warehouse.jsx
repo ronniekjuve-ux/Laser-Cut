@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import client from '../../api/client';
 import useIsMobile from '../../hooks/useIsMobile';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -64,11 +64,11 @@ function SheetPreview({ item, onClose }) {
   const area = item.area ? (item.area / 1000000).toFixed(2) : (W * H / 1000000).toFixed(2);
   const weight = item.weight ? parseFloat(item.weight).toFixed(1) : null;
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 900, width: '90vw', height: '75vh', padding: 16, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexShrink: 0 }}>
           <strong style={{ fontSize: 13 }}>{item.article || `#${item.id}`} — {item.metal} {item.grade || ''} {item.thickness ? item.thickness + 'мм' : ''}</strong>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
         </div>
         <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
@@ -392,11 +392,11 @@ function MergeCutModal({ items, item, onClose, onSuccess }) {
   };
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
         <div className="modal-header">
           <h3>Откат разрезания</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
         </div>
         <div className="modal-body">
           <div style={{ padding: 10, background: '#f0f9ff', borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
@@ -422,7 +422,7 @@ function MergeCutModal({ items, item, onClose, onSuccess }) {
               style={{ flex: 1, background: '#dcfce7', color: '#166534', border: '1px solid #86efac', fontWeight: 600 }}>
               {loading ? 'Слияние...' : 'Вернуть целый лист'}
             </button>
-            <button className="btn" onClick={onClose}>Отмена</button>
+            <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Отмена</button>
           </div>
         </div>
       </div>
@@ -524,7 +524,7 @@ export default function Warehouse() {
   return (
     <div>
       <div className="toolbar" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>{showForm ? 'Отмена' : '+ Добавить на склад'}</button>
+        <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowForm(!showForm); } }}>{showForm ? 'Отмена' : '+ Добавить на склад'}</button>
         <input
           type="text"
           value={searchArticle}
@@ -756,11 +756,11 @@ export default function Warehouse() {
       {previewItem && <SheetPreview item={previewItem} onClose={() => setPreviewItem(null)} />}
       {mergeItem && <MergeCutModal items={items} item={mergeItem} onClose={() => setMergeItem(null)} onSuccess={() => { setMergeItem(null); fetchItems(); }} />}
       {modalEditItem && (
-        <div className="modal-overlay active" onClick={() => setModalEditItem(null)}>
+        <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setModalEditItem(null); } }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <h3>Редактирование — {modalEditItem.article || `#${modalEditItem.id}`}</h3>
-              <button className="close-btn" onClick={() => setModalEditItem(null)}>✕</button>
+              <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setModalEditItem(null); } }}>✕</button>
             </div>
             <div className="modal-body">
               <div className="form-grid">
@@ -776,7 +776,7 @@ export default function Warehouse() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-primary" onClick={async () => { await saveEdit(modalEditItem.id); setModalEditItem(null); }}>Сохранить</button>
-              <button className="btn" onClick={() => setModalEditItem(null)}>Отмена</button>
+              <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setModalEditItem(null); } }}>Отмена</button>
             </div>
           </div>
         </div>

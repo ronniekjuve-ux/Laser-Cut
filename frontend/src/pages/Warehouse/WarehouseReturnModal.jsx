@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import client from '../../api/client';
 
 export default function WarehouseReturnModal({ item, onClose, onSuccess }) {
@@ -25,11 +25,11 @@ export default function WarehouseReturnModal({ item, onClose, onSuccess }) {
   };
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
         <div className="modal-header">
           <h3>Возврат на склад</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
         </div>
         <div className="modal-body">
           <div style={{ padding: 10, background: '#f0fdf4', borderRadius: 6, marginBottom: 16 }}>
@@ -70,7 +70,7 @@ export default function WarehouseReturnModal({ item, onClose, onSuccess }) {
             >
               {loading ? 'Возврат...' : 'Вернуть на склад'}
             </button>
-            <button className="btn" onClick={onClose}>Отмена</button>
+            <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Отмена</button>
           </div>
         </div>
       </div>

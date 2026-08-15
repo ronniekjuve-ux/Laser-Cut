@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import client from '../api/client';
 
 export default function CreateGroupModal({ appIds, onClose, onCreated }) {
@@ -22,11 +22,11 @@ export default function CreateGroupModal({ appIds, onClose, onCreated }) {
   };
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: 400}}>
         <div className="modal-header">
           <h3>Создать группу</h3>
-          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>{'\u2715'}</button>
         </div>
         <div className="modal-body">
           <div style={{marginBottom: 12, fontSize: 13, color: '#64748b'}}>
@@ -51,7 +51,7 @@ export default function CreateGroupModal({ appIds, onClose, onCreated }) {
           <button className="btn btn-primary" onClick={handleCreate} disabled={loading}>
             {loading ? 'Создание...' : 'Создать'}
           </button>
-          <button className="btn" onClick={onClose}>Отмена</button>
+          <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Отмена</button>
         </div>
       </div>
     </div>

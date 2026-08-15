@@ -134,6 +134,9 @@ class Application(Base):
     steel_grade: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     thickness: Mapped[float] = mapped_column(Float)
     total_weight: Mapped[float] = mapped_column(Float, nullable=True)
+    weight_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # 'file' | 'calculated'
+    parts_weight: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    skeleton_weight: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     total_parts_count: Mapped[int] = mapped_column(Integer, default=0)
     placed_parts_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     ordered_parts_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -477,6 +480,7 @@ class DeletedApplication(Base):
     steel_grade: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     thickness: Mapped[float] = mapped_column(Float)
     total_weight: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    weight_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     status: Mapped[str] = mapped_column(String(20))
     priority: Mapped[str] = mapped_column(String(20), default="medium")
     supply_material: Mapped[Optional[bool]] = mapped_column(default=None, nullable=True)

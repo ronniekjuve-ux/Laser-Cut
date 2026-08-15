@@ -32,11 +32,11 @@ function NotesModal({ app, onClose, onSaved }) {
   };
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
         <div className="modal-header">
           <h3>Заметки — {app.order_name}</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
         </div>
         <div className="modal-body">
           <textarea
@@ -50,7 +50,7 @@ function NotesModal({ app, onClose, onSaved }) {
           <button className="btn btn-primary" onClick={save} disabled={saving}>
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
-          <button className="btn" onClick={onClose}>Отмена</button>
+          <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Отмена</button>
         </div>
       </div>
     </div>
@@ -71,7 +71,7 @@ function CalcModal({ app, onClose }) {
   }, [app.id]);
 
   if (loading) return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
         <div className="modal-body" style={{ textAlign: 'center', padding: 40 }}>Загрузка...</div>
       </div>
@@ -84,11 +84,11 @@ function CalcModal({ app, onClose }) {
   const appData = data.application || app;
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
         <div className="modal-header">
           <h3>Предварительный расчёт — {app.order_name || app.id}</h3>
-          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>{'\u2715'}</button>
         </div>
         <div className="modal-body">
           <div style={{ marginBottom: 12, fontSize: 13, color: '#64748b' }}>
@@ -101,7 +101,10 @@ function CalcModal({ app, onClose }) {
               supply_material={appData.supply_material}
               thickness={appData.thickness}
               steel_grade={appData.steel_grade || appData.material}
-            />
+              total_weight={appData.total_weight}
+              weight_source={appData.weight_source}
+              parts_weight={appData.parts_weight}
+/>
           ) : (
             <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>
               Нет загруженных раскладок
@@ -109,7 +112,7 @@ function CalcModal({ app, onClose }) {
           )}
         </div>
         <div className="modal-footer">
-          <button className="btn btn-primary" onClick={onClose}>Закрыть</button>
+          <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Закрыть</button>
         </div>
       </div>
     </div>
@@ -145,6 +148,7 @@ export default function OrdersList({ initialTab }) {
   const [openFilter, setOpenFilter] = useState(null);
   const [filterPos, setFilterPos] = useState({ top: 0, left: 0 });
   const [selectedApp, setSelectedApp] = useState(null);
+  const [initialLayoutIndex, setInitialLayoutIndex] = useState(null);
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
   const [notesModal, setNotesModal] = useState(null);
@@ -288,6 +292,8 @@ export default function OrdersList({ initialTab }) {
   };
 
   const filtered = allOrders.filter(app => {
+    // Скрыть заменённые заказы (после слияния)
+    if (app.is_replaced) return false;
     if (search) {
       const q = search.toLowerCase();
       const rd = getRowData(app);
@@ -412,7 +418,7 @@ export default function OrdersList({ initialTab }) {
     <div style={isMobile ? { margin: '-12px -12px 0 -12px' } : {}}>
       <div className="toolbar">
         {(user?.role === 'admin' || user?.role === 'director') && (
-          <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
+          <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowNewOrder(true); } }}>
             + Новый заказ
           </button>
         )}
@@ -460,7 +466,7 @@ export default function OrdersList({ initialTab }) {
             values.map(val => (
               <div key={key + val} className="filter-badge">
                 {FILTER_LABELS[key]?.[val] || val}
-                <span className="remove" onClick={() => toggleFilterItem(key, val)}>✕</span>
+                <span className="remove" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; toggleFilterItem(key, val); } }}>✕</span>
               </div>
             ))
           )}
@@ -622,6 +628,7 @@ export default function OrdersList({ initialTab }) {
               onEdit={(user?.role === 'admin' || user?.role === 'director') ? (app) => setEditModal(app) : undefined}
               onDelete={(user?.role === 'admin') ? (id) => setConfirmDelete(id) : undefined}
               onCalc={(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') ? (app) => setCalcModal(app) : undefined}
+              onNotesSaved={() => fetchOrders()}
             />
           ))}
           {pageItems.length === 0 && (
@@ -1030,14 +1037,23 @@ export default function OrdersList({ initialTab }) {
       {selectedApp && !isMobile && (
         <ApplicationDetail
           app={selectedApp}
+          initialLayoutIndex={initialLayoutIndex}
           onClose={() => {
             setSelectedApp(null);
+            setInitialLayoutIndex(null);
             if (groupDetailBeforeApp) {
               setGroupDetailId(groupDetailBeforeApp);
               setGroupDetailBeforeApp(null);
             }
           }}
           onUpdate={() => fetchOrders()}
+          onViewOrder={async (orderId, layoutIndex) => {
+            try {
+              const res = await client.get('/api/v1/applications/' + orderId);
+              setSelectedApp(res.data.application || res.data);
+              setInitialLayoutIndex(layoutIndex ?? 0);
+            } catch { /* ignore */ }
+          }}
         />
       )}
 

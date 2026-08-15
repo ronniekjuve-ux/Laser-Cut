@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import client from '../../api/client';
 
 export default function EditModal({ app, onClose, onSaved }) {
@@ -27,11 +27,11 @@ export default function EditModal({ app, onClose, onSaved }) {
   };
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
         <div className="modal-header">
           <h3>Редактирование — #{app.id} {app.order_name || ''}</h3>
-          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>{'\u2715'}</button>
         </div>
         <div className="modal-body">
           <div style={{ marginBottom: 12 }}>
@@ -71,7 +71,7 @@ export default function EditModal({ app, onClose, onSaved }) {
           <button className="btn btn-primary" onClick={save} disabled={saving}>
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
-          <button className="btn" onClick={onClose}>Отмена</button>
+          <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Отмена</button>
         </div>
       </div>
     </div>

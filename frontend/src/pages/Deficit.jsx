@@ -380,7 +380,7 @@ export default function Deficit() {
           ? Object.entries(row.stock_by_customer || {}).filter(([n]) => filterCustomer.includes(n))
           : Object.entries(row.stock_by_customer || {});
         return (
-          <div className="modal-overlay active" onClick={() => { setModalRow(null); setExpandedOrder(null); setSelectedArticle(null); }}>
+          <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setModalRow(null); setExpandedOrder(null); setSelectedArticle(null); } }}>
             <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
               <div className="modal-header">
                 <h3 style={{ fontSize: 14 }}>{row.grade || '—'} {row.thickness ? `${row.thickness}мм` : ''}</h3>

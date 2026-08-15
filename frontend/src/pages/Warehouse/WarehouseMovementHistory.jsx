@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import client from '../../api/client';
 
 export default function WarehouseMovementHistory({ item, onClose }) {
@@ -20,11 +20,11 @@ export default function WarehouseMovementHistory({ item, onClose }) {
   };
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
         <div className="modal-header">
           <h3>История движения</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
         </div>
         <div className="modal-body">
           <div style={{ padding: 8, background: '#f8fafc', borderRadius: 6, marginBottom: 12, fontSize: 13 }}>

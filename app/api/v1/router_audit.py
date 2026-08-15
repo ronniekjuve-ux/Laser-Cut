@@ -4,6 +4,7 @@ from sqlalchemy import select, and_, desc, delete
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timedelta, timezone
+import json
 
 from app.db.base import get_db
 from app.db.models import (
@@ -514,7 +515,8 @@ async def audit_applications(
                 "travel_length": layout.travel_length,
                 "pierces": layout.pierces,
                 "parts_count": len(parts),
-                "parts_weight": round(layout_parts_weight, 3)
+                "parts_weight": round(layout_parts_weight, 3),
+                "completed_runs": json.loads(layout.completed_runs) if layout.completed_runs else []
             })
 
         mt = (layouts[0].machine_type.upper() if layouts and layouts[0].machine_type else "")
@@ -538,6 +540,7 @@ async def audit_applications(
             "total_cut_length": round(total_cut_length, 1),
             "total_pierces": total_pierces,
             "total_parts_weight": round(total_parts_weight, 3),
+            "parts_weight": app.parts_weight,
             "layouts_count": len(layouts),
             "total_sheets": total_sheets,
             "layouts": layouts_summary,
@@ -571,6 +574,82 @@ def parse_time_seconds(time_str: str) -> float:
     except (ValueError, IndexError):
         pass
     return 0.0
+
+
+@router.get("/operators/work-done")
+async def operators_work_done(
+        month: str = Query(..., description="YYYY-MM"),
+        db: AsyncSession = Depends(get_db),
+        user: User = Depends(get_current_user)
+):
+    """Return all completed layout runs for the given month, with operator info."""
+    if user.role not in (UserRole.ADMIN, UserRole.DIRECTOR):
+        raise HTTPException(status_code=403, detail="Нет доступа")
+
+    year, mon = map(int, month.split("-"))
+    start = datetime(year, mon, 1, tzinfo=timezone.utc)
+    if mon == 12:
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        end = datetime(year, mon + 1, 1, tzinfo=timezone.utc)
+
+    # Get all layouts with completed runs in this month
+    result = await db.execute(
+        select(ApplicationLayout, Application, Customer)
+        .join(Application, ApplicationLayout.application_id == Application.id)
+        .join(Customer, Application.customer_id == Customer.id, isouter=True)
+        .where(
+            ApplicationLayout.completed_runs.isnot(None),
+            ApplicationLayout.status == "active"
+        )
+        .order_by(Application.created_at.desc())
+    )
+    rows = result.all()
+
+    work_items = []
+    for layout, app, cust in rows:
+        import json
+        runs = json.loads(layout.completed_runs) if layout.completed_runs else []
+        if not runs:
+            continue
+
+        mt = (layout.machine_type.upper() if layout.machine_type else "")
+        machine = "станок 1" if "CNF" in mt else "станок 2" if "FNF" in mt else (layout.machine_type or "")
+
+        for run_idx, run in enumerate(runs):
+            if not run:
+                continue
+            cut_at_str = run.get("cut_at") if isinstance(run, dict) else None
+            if not cut_at_str:
+                continue
+            try:
+                cut_dt = datetime.fromisoformat(cut_at_str.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                continue
+            if cut_dt < start or cut_dt >= end:
+                continue
+
+            cut_by = run.get("cut_by") if isinstance(run, dict) else None
+            work_items.append({
+                "app_id": app.id,
+                "order_name": app.order_name,
+                "customer": cust.name if cust else "-",
+                "material": app.steel_grade or app.material or "-",
+                "thickness": app.thickness,
+                "layout_code": layout.layout_code,
+                "machine": machine,
+                "sheet_w": layout.sheet_w,
+                "sheet_h": layout.sheet_h,
+                "run_index": run_idx + 1,
+                "total_runs": len([r for r in runs if r]),
+                "cut_by": cut_by,
+                "cut_at": cut_at_str,
+                "cut_length": layout.cut_length,
+                "pierces": layout.pierces,
+                "sheet_weight": layout.sheet_weight,
+            })
+
+    return work_items
 
 
 @router.get("/machines")

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+﻿import { useState, useEffect, useRef, useCallback } from 'react';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
@@ -161,7 +161,7 @@ export default function LayoutPreviewModal({ appId, layoutId, allLayoutIds, onCl
 
   if (loading) {
     return (
-      <div className="modal-overlay active" onClick={onClose}>
+      <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
         <div className="modal-content" style={{ width: '100%', maxWidth: '100%', height: '100%', borderRadius: 0 }}>
           <div className="modal-body" style={{ textAlign: 'center', padding: 40 }}>Загрузка...</div>
         </div>
@@ -171,7 +171,7 @@ export default function LayoutPreviewModal({ appId, layoutId, allLayoutIds, onCl
 
   if (!layout) {
     return (
-      <div className="modal-overlay active" onClick={onClose}>
+      <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
         <div className="modal-content" style={{ width: '100%', maxWidth: '100%', height: '100%', borderRadius: 0 }}>
           <div className="modal-body" style={{ textAlign: 'center', padding: 40 }}>Раскладка не найдена</div>
         </div>
@@ -190,7 +190,7 @@ export default function LayoutPreviewModal({ appId, layoutId, allLayoutIds, onCl
   const hasMultiple = allLayouts.length > 1;
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '100%', height: '100%', borderRadius: 0, maxHeight: '100%' }}>
         <div className="modal-header">
           <h3 style={{ fontSize: 14 }}>
@@ -201,7 +201,7 @@ export default function LayoutPreviewModal({ appId, layoutId, allLayoutIds, onCl
               </span>
             )}
           </h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
         </div>
         <div
           className="modal-body"
@@ -438,13 +438,13 @@ export default function LayoutPreviewModal({ appId, layoutId, allLayoutIds, onCl
           <div className="modal-content" style={{ width: '95%', maxWidth: 400 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3 style={{ fontSize: 14 }}>{showPartImage.name}</h3>
-              <button className="close-btn" onClick={() => setShowPartImage(null)}>✕</button>
+              <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowPartImage(null); } }}>✕</button>
             </div>
             <div className="modal-body" style={{ textAlign: 'center' }}>
               <img src={showPartImage.image_path} alt={showPartImage.name} style={{ maxWidth: '100%', maxHeight: 400, borderRadius: 6 }} />
             </div>
             <div className="modal-footer">
-              <button className="btn btn-primary" onClick={() => setShowPartImage(null)}>Закрыть</button>
+              <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowPartImage(null); } }}>Закрыть</button>
             </div>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { useEffect } from 'react';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -24,6 +25,29 @@ function MobileIndex() {
 }
 
 export default function App() {
+  useEffect(() => {
+    // Track where mousedown happened on modal overlays.
+    // window.__overlayMouseDownTarget is set to the mousedown target;
+    // modal overlays check it on mouseup to close only if BOTH events
+    // were on the overlay (not when user starts inside modal content
+    // and releases outside).
+    window.__overlayMouseDownTarget = null;
+    const onMouseDown = (e) => {
+      if (e.target.classList?.contains('modal-overlay')) {
+        window.__overlayMouseDownTarget = e.target;
+      }
+    };
+    const onMouseUp = (e) => {
+      window.__overlayMouseDownTarget = null;
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
   return (
     <AuthProvider>
       <BrowserRouter>

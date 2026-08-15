@@ -106,6 +106,9 @@ async def upload_application(
             app.steel_grade = steel_grade if steel_grade else app.steel_grade
             app.thickness = data.thickness
             app.total_weight = data.total_weight
+            app.weight_source = 'file' if data.total_weight else None
+            app.parts_weight = data.parts_weight
+            app.skeleton_weight = data.skeleton_weight
             app.total_parts_count = len(data.parts)
             app.placed_parts_count = data.placed_parts_count
             app.ordered_parts_count = data.ordered_parts_count
@@ -127,6 +130,9 @@ async def upload_application(
                 steel_grade=steel_grade if steel_grade else None,
                 thickness=data.thickness,
                 total_weight=data.total_weight,
+                weight_source='file' if data.total_weight else None,
+                parts_weight=data.parts_weight,
+                skeleton_weight=data.skeleton_weight,
                 total_parts_count=len(data.parts),
                 placed_parts_count=data.placed_parts_count,
                 ordered_parts_count=data.ordered_parts_count,
@@ -266,11 +272,19 @@ async def upload_layout(
         print(f"\n🔍 Ищем файл заявки: {app.order_name}*.doc")
 
         # Ищем файлы с именем заказа, исключая файлы раскладок (_layout_)
-        pattern = f"{UPLOAD_DIR}/{app.order_name}*"
+        # Сначала точное совпадение: order_name_order_name.doc
+        exact_pattern = f"{UPLOAD_DIR}/{app.order_name}_{app.order_name}.*"
         found_files = [
-            f for f in glob.glob(pattern + ".*")
+            f for f in glob.glob(exact_pattern)
             if f.lower().endswith(('.doc', '.docx')) and '_layout_' not in f.lower()
         ]
+        # Если точное не найдено — ищем по началу имени
+        if not found_files:
+            pattern = f"{UPLOAD_DIR}/{app.order_name}*"
+            found_files = [
+                f for f in glob.glob(pattern + ".*")
+                if f.lower().endswith(('.doc', '.docx')) and '_layout_' not in f.lower()
+            ]
         if not found_files:
             found_files = [
                 f for f in glob.glob(f"{UPLOAD_DIR}/{app.order_name}*.doc")
@@ -375,6 +389,7 @@ async def upload_layout(
 
         if app.total_weight is None and layout_data.sheet_weight:
             app.total_weight = layout_data.sheet_weight
+            app.weight_source = 'calculated'
 
         await db.commit()
 
@@ -451,6 +466,9 @@ async def reupload_application(
             app.material = data.material
             app.thickness = data.thickness
             app.total_weight = data.total_weight
+            app.weight_source = 'file' if data.total_weight else app.weight_source
+            app.parts_weight = data.parts_weight
+            app.skeleton_weight = data.skeleton_weight
             app.total_parts_count = len(data.parts)
             app.placed_parts_count = data.placed_parts_count
             app.ordered_parts_count = data.ordered_parts_count
@@ -547,6 +565,7 @@ async def reupload_application(
                     app.thickness = app_data.thickness
                 if app_data.total_weight:
                     app.total_weight = app_data.total_weight
+                    app.weight_source = 'file'
                 if app_data.material and app_data.material != "Steel":
                     app.material = app_data.material
 
@@ -817,6 +836,9 @@ async def list_applications(
             "thickness": app.thickness,
             "total_parts": app.total_parts_count,
             "total_weight": app.total_weight,
+            "weight_source": app.weight_source,
+            "parts_weight": app.parts_weight,
+            "skeleton_weight": app.skeleton_weight,
             "machine": machine,
             "is_replaced": is_replaced,
             "has_merged": has_merged,
@@ -924,6 +946,9 @@ async def export_applications_xlsx(
             "supply_material": app.supply_material,
             "total_parts": app.total_parts_count,
             "total_weight": app.total_weight,
+            "weight_source": app.weight_source,
+            "parts_weight": app.parts_weight,
+            "skeleton_weight": app.skeleton_weight,
             "status": app.status,
             "priority": app.priority,
             "created_at": app.created_at.strftime('%d.%m.%Y') if app.created_at else "",
@@ -1231,7 +1256,7 @@ async def merge_layouts(
         for part in sl.parts:
             key = normalize_name(part.name)
             if key not in source_parts_by_name:
-                source_parts_by_name[key] = {"name": part.name, "dx": part.dx, "dy": part.dy, "quantity": 0, "layouts": []}
+                source_parts_by_name[key] = {"name": part.name, "dx": part.dx, "dy": part.dy, "quantity": 0, "weight": part.weight, "layouts": []}
             source_parts_by_name[key]["quantity"] += part.quantity
             source_parts_by_name[key]["layouts"].append(sl.id)
 
@@ -1329,12 +1354,20 @@ async def merge_layouts(
             await db.delete(old_layout)
         await db.flush()
     else:
+        # Вес листа из новой раскладки, вес деталей — сумма из исходных
+        parts_weight_sum = sum(
+            (src.get("weight") or 0) * src["quantity"]
+            for src in source_parts_by_name.values()
+        )
         new_app = Application(
             order_name=merged_name,
             customer_id=customer.id if customer else None,
             material=(new_layout_data.material or (first_app.material if first_app else "Steel"))[:50],
             steel_grade=first_app.steel_grade if first_app else None,
             thickness=new_layout_data.thickness or (first_app.thickness if first_app else 0.0),
+            total_weight=new_layout_data.sheet_weight,
+            parts_weight=round(parts_weight_sum, 3) if parts_weight_sum > 0 else None,
+            weight_source='file',
             total_parts_count=sum(p.quantity for p in new_layout_data.parts),
             status="approved",
             supply_material=first_app.supply_material if first_app else None,
@@ -1382,7 +1415,13 @@ async def merge_layouts(
 
     thickness = new_app.thickness or 0.0
     for part_data in new_layout_data.parts:
-        part_weight = part_data.weight
+        part_weight = getattr(part_data, 'weight', None)
+        # Если веса нет в новой раскладке — берём из исходных
+        if part_weight is None:
+            part_key = normalize_name(part_data.name)
+            src = source_parts_by_name.get(part_key)
+            if src and src.get("weight") is not None:
+                part_weight = src["weight"]
         part_key = normalize_name(part_data.name)
         part_image = merged_detail_images.get(part_key)
         db.add(ApplicationLayoutPart(
@@ -1437,13 +1476,21 @@ async def unmerge_layout(
     source_layout_ids = [l["id"] for l in merged_data.get("layouts", [])]
 
     if action == "cancel":
+        # Сохраняем ID заявки слияния до удаления раскладки
+        merged_app_id = layout.application_id
         if source_layout_ids:
             source_result = await db.execute(
                 select(ApplicationLayout).where(ApplicationLayout.id.in_(source_layout_ids))
             )
             for sl in source_result.scalars().all():
                 sl.status = "active"
-        layout.status = "merge_cancelled"
+        # Удаляем раскладку и детали слияния
+        await db.execute(delete(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == layout.id))
+        await db.delete(layout)
+        await db.flush()
+        # Удаляем заявку слияния
+        if merged_app_id:
+            await db.execute(delete(Application).where(Application.id == merged_app_id))
     elif action == "restore":
         if source_layout_ids:
             source_result = await db.execute(
@@ -1616,6 +1663,9 @@ async def get_group_details(
             "total_parts": app_total_parts,
             "types_count": app_types_count,
             "total_weight": app.total_weight,
+            "weight_source": app.weight_source,
+            "parts_weight": app.parts_weight,
+            "skeleton_weight": app.skeleton_weight,
             "layouts_count": len(active_layouts),
             "progress_pct": pct,
         })
@@ -1722,6 +1772,9 @@ async def get_application_details(
             "placed_parts": app.placed_parts_count,
             "ordered_parts": app.ordered_parts_count,
             "total_weight": app.total_weight,
+            "weight_source": app.weight_source,
+            "parts_weight": app.parts_weight,
+            "skeleton_weight": app.skeleton_weight,
             "comments": app.comments,
             "detail_images": app.detail_images,
             "status": app.status or "pending",
@@ -1769,6 +1822,9 @@ async def delete_application(
                 "steel_grade": app.steel_grade,
                 "thickness": app.thickness,
                 "total_weight": app.total_weight,
+                "weight_source": app.weight_source,
+                "parts_weight": app.parts_weight,
+                "skeleton_weight": app.skeleton_weight,
                 "status": app.status,
                 "priority": app.priority,
                 "supply_material": app.supply_material,
@@ -1869,6 +1925,7 @@ async def list_deleted_applications(
             "steel_grade": d.steel_grade,
             "thickness": d.thickness,
             "total_weight": d.total_weight,
+            "weight_source": d.weight_source,
             "status": d.status,
             "priority": d.priority,
             "deleted_by": d.deleted_by_name,

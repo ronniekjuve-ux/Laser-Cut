@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+﻿import { useState, useRef } from 'react';
 import client from '../../api/client';
 
 function FileDropZone({ label, accept, multiple, files, onFiles, disabled }) {
@@ -170,11 +170,11 @@ export default function ReuploadModal({ app, onClose, onSaved }) {
   };
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" style={{width: 700}} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Перезагрузка — #{app.id} {app.order_name || ''}</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
         </div>
         <div className="modal-body">
           {/* Section 1: Upload DOC files */}
@@ -260,7 +260,7 @@ export default function ReuploadModal({ app, onClose, onSaved }) {
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn" onClick={onClose}>Закрыть</button>
+          <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Закрыть</button>
         </div>
       </div>
     </div>

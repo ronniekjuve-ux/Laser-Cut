@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+﻿import { useState, useRef } from 'react';
 import client from '../../api/client';
 
 function FileDropZone({ label, accept, multiple, files, onFiles, disabled }) {
@@ -144,11 +144,11 @@ export default function NewOrderModal({ onClose, onCreated, status = 'pending' }
   };
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" style={{width: 700}} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{status === 'approved' ? 'Новый заказ' : 'Новая заявка'}</h3>
-          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>{'\u2715'}</button>
         </div>
         <div className="modal-body">
           <form onSubmit={handleSubmit} className="order-form">

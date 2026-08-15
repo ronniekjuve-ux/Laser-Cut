@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+﻿import React, { useState, useCallback } from 'react';
 import MobileLayoutCarousel from './MobileLayoutCarousel';
 import LayoutPreviewModal from './LayoutPreviewModal';
 import client from '../api/client';
@@ -26,7 +26,7 @@ function ProgressPopup({ allLayouts, onClose }) {
   }, 0);
 
   return (
-    <div className="modal-overlay active" style={{ zIndex: 1100 }} onClick={onClose}>
+    <div className="modal-overlay active" style={{ zIndex: 1100 }} onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div
         onClick={e => e.stopPropagation()}
         style={{

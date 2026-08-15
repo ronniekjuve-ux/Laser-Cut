@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import client from '../../api/client';
 
 export default function TrashPage() {
@@ -171,11 +171,11 @@ export default function TrashPage() {
       )}
 
       {confirmAction && (
-        <div className="modal-overlay active" onClick={() => setConfirmAction(null)}>
+        <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setConfirmAction(null); } }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h3>Подтверждение</h3>
-              <button className="close-btn" onClick={() => setConfirmAction(null)}>✕</button>
+              <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setConfirmAction(null); } }}>✕</button>
             </div>
             <div className="modal-body">
               {confirmAction.type === 'clearAll' && (
@@ -195,7 +195,7 @@ export default function TrashPage() {
               >
                 {confirmAction.type === 'clearAll' ? 'Очистить' : 'Удалить'}
               </button>
-              <button className="btn" onClick={() => setConfirmAction(null)}>Отмена</button>
+              <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setConfirmAction(null); } }}>Отмена</button>
             </div>
           </div>
         </div>

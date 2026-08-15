@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import client from '../api/client';
 import ConfirmModal from './ConfirmModal';
 
@@ -63,7 +63,7 @@ export default function GroupDetail({ groupId, onClose, onRefresh, onOpenApp }) 
   };
 
   if (loading) return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
         <div className="modal-body" style={{textAlign: 'center', padding: 40}}>Загрузка...</div>
       </div>
@@ -75,7 +75,7 @@ export default function GroupDetail({ groupId, onClose, onRefresh, onOpenApp }) 
   const { group: info, applications: apps, summary } = group;
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: 800}}>
         <div className="modal-header">
           <h3>
@@ -87,7 +87,7 @@ export default function GroupDetail({ groupId, onClose, onRefresh, onOpenApp }) 
               {info.name || `Группа #${info.id}`}
             </span>
           </h3>
-          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>{'\u2715'}</button>
         </div>
         <div className="modal-body">
           <div style={{display: 'flex', gap: 20, marginBottom: 16, fontSize: 13}}>
@@ -162,10 +162,10 @@ export default function GroupDetail({ groupId, onClose, onRefresh, onOpenApp }) 
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-danger" onClick={() => setConfirmDeleteGroup(true)}>
+          <button className="btn btn-danger" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setConfirmDeleteGroup(true); } }}>
             Удалить группу
           </button>
-          <button className="btn btn-primary" onClick={onClose}>Закрыть</button>
+          <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Закрыть</button>
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import useIsMobile, { getForceMobile } from '../../hooks/useIsMobile';
@@ -22,7 +22,7 @@ function CalcModal({ app, onClose }) {
   }, [app.id]);
 
   if (loading) return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
         <div className="modal-body" style={{ textAlign: 'center', padding: 40 }}>Загрузка...</div>
       </div>
@@ -35,11 +35,11 @@ function CalcModal({ app, onClose }) {
   const appData = data.application || app;
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
         <div className="modal-header">
           <h3>Предварительный расчёт — {app.order_name || app.id}</h3>
-          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>{'\u2715'}</button>
         </div>
         <div className="modal-body">
           <div style={{ marginBottom: 12, fontSize: 13, color: '#64748b' }}>
@@ -52,7 +52,10 @@ function CalcModal({ app, onClose }) {
               supply_material={appData.supply_material}
               thickness={appData.thickness}
               steel_grade={appData.steel_grade || appData.material}
-            />
+              total_weight={appData.total_weight}
+              weight_source={appData.weight_source}
+              parts_weight={appData.parts_weight}
+/>
           ) : (
             <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>
               Нет загруженных раскладок
@@ -60,7 +63,7 @@ function CalcModal({ app, onClose }) {
           )}
         </div>
         <div className="modal-footer">
-          <button className="btn btn-primary" onClick={onClose}>Закрыть</button>
+          <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Закрыть</button>
         </div>
       </div>
     </div>
@@ -261,7 +264,7 @@ export default function CompletedOrdersList() {
 
       {isRealMobile ? (
         <div className="order-cards">
-          {filtered.map(app => (
+          {paged.map(app => (
             <MobileOrderCard
               key={app.id}
               app={app}
@@ -269,8 +272,29 @@ export default function CompletedOrdersList() {
               onReturn={() => setConfirmReturn(app.id)}
             />
           ))}
-          {filtered.length === 0 && (
+          {paged.length === 0 && (
             <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Нет выполненных заказов</div>
+          )}
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center' }}>
+              <button className="btn" onClick={() => setPage(1)} disabled={page <= 1} style={{ fontSize: 12 }}>«</button>
+              <button className="btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={{ fontSize: 12 }}>‹</button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let p;
+                if (totalPages <= 5) p = i + 1;
+                else if (page <= 3) p = i + 1;
+                else if (page >= totalPages - 2) p = totalPages - 4 + i;
+                else p = page - 2 + i;
+                return (
+                  <button key={p} className={'btn' + (p === page ? ' btn-primary' : '')}
+                    onClick={() => setPage(p)}
+                    style={{ fontSize: 12 }}>{p}</button>
+                );
+              })}
+              <button className="btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} style={{ fontSize: 12 }}>›</button>
+              <button className="btn" onClick={() => setPage(totalPages)} disabled={page >= totalPages} style={{ fontSize: 12 }}>»</button>
+              <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8 }}>{filtered.length} заказов | Стр. {page}/{totalPages}</span>
+            </div>
           )}
         </div>
       ) : viewMode === 'cards' ? (
@@ -321,6 +345,27 @@ export default function CompletedOrdersList() {
             <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 20, color: '#64748b' }}>Нет выполненных заказов</div>
           )}
         </div>
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16, alignItems: 'center' }}>
+            <button className="btn" onClick={() => setPage(1)} disabled={page <= 1} style={{ fontSize: 12 }}>«</button>
+            <button className="btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={{ fontSize: 12 }}>‹</button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let p;
+              if (totalPages <= 5) p = i + 1;
+              else if (page <= 3) p = i + 1;
+              else if (page >= totalPages - 2) p = totalPages - 4 + i;
+              else p = page - 2 + i;
+              return (
+                <button key={p} className={'btn' + (p === page ? ' btn-primary' : '')}
+                  onClick={() => setPage(p)}
+                  style={{ fontSize: 12 }}>{p}</button>
+              );
+            })}
+            <button className="btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} style={{ fontSize: 12 }}>›</button>
+            <button className="btn" onClick={() => setPage(totalPages)} disabled={page >= totalPages} style={{ fontSize: 12 }}>»</button>
+            <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8 }}>{filtered.length} заказов | Стр. {page}/{totalPages}</span>
+          </div>
+        )}
         </>
       ) : (
         <>
@@ -446,11 +491,11 @@ export default function CompletedOrdersList() {
       )}
 
       {confirmReturn && (
-        <div className="modal-overlay active" onClick={() => setConfirmReturn(null)}>
+        <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setConfirmReturn(null); } }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h3>Вернуть заказ в резку?</h3>
-              <button className="close-btn" onClick={() => setConfirmReturn(null)}>✕</button>
+              <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setConfirmReturn(null); } }}>✕</button>
             </div>
             <div className="modal-body">
               <p>Действительно хотите вернуть заказ #{confirmReturn} в резку?</p>
@@ -458,7 +503,7 @@ export default function CompletedOrdersList() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-primary" onClick={confirmReturnAction}>Вернуть</button>
-              <button className="btn" onClick={() => setConfirmReturn(null)}>Отмена</button>
+              <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setConfirmReturn(null); } }}>Отмена</button>
             </div>
           </div>
         </div>

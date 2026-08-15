@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import client from '../../api/client';
 
 export default function WarehouseDeductModal({ item, onClose, onSuccess }) {
@@ -88,11 +88,11 @@ export default function WarehouseDeductModal({ item, onClose, onSuccess }) {
   const selectedLayout = layouts.find(l => String(l.id) === String(layoutId));
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
         <div className="modal-header">
           <h3>Списание со склада</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
         </div>
         <div className="modal-body">
           <div style={{ padding: 10, background: '#f8fafc', borderRadius: 6, marginBottom: 16 }}>
@@ -193,7 +193,7 @@ export default function WarehouseDeductModal({ item, onClose, onSuccess }) {
             <button className="btn btn-primary" onClick={handleSubmit} disabled={loading} style={{ flex: 1 }}>
               {loading ? 'Списание...' : 'Списать'}
             </button>
-            <button className="btn" onClick={onClose}>Отмена</button>
+            <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Отмена</button>
           </div>
         </div>
       </div>

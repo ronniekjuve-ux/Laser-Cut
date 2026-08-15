@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import client from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import CostCalculator from '../Applications/CostCalculator';
+import { CutHistoryModal } from '../../components/DesktopCards';
+import ApplicationDetail from '../Applications/ApplicationDetail';
 import MachinesTab from './MachinesTab';
 import { useAuth } from '../../context/AuthContext';
 
@@ -89,6 +91,10 @@ function ApplicationsTab() {
       let key;
       if (groupBy === 'date') {
         key = monthKey(item.created_at);
+      } else if (groupBy === 'grade') {
+        key = item.steel_grade || item.material || 'Без марки';
+      } else if (groupBy === 'thickness') {
+        key = item.thickness ? item.thickness + ' мм' : 'Без толщины';
       } else {
         key = item.customer || 'Без заказчика';
       }
@@ -124,6 +130,8 @@ function ApplicationsTab() {
   const deselectAllColumns = () => setSelectedColumns([]);
 
   const [calcModal, setCalcModal] = useState(null);
+  const [historyApp, setHistoryApp] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
   const exportToExcel = async () => {
     if (selectedColumns.length === 0) return;
@@ -193,6 +201,8 @@ function ApplicationsTab() {
           style={{padding:'6px 8px', border:'1px solid var(--border)', borderRadius:6, fontSize:13}}>
           <option value="date">По дате</option>
           <option value="customer">По заказчику</option>
+          <option value="grade">По марке</option>
+          <option value="thickness">По толщине</option>
           <option value="none">Без группировки</option>
         </select>
         <button className="btn btn-primary" onClick={handleFilter} style={{fontSize:13}}>Применить</button>
@@ -202,7 +212,7 @@ function ApplicationsTab() {
       {showExportModal && (
         <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.4)',
           display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000}}
-          onClick={() => setShowExportModal(false)}>
+          onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowExportModal(false); } }}>
           <div style={{background:'#fff', borderRadius:12, padding:24, minWidth:420, maxWidth:600,
             boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}
             onClick={e => e.stopPropagation()}>
@@ -233,7 +243,7 @@ function ApplicationsTab() {
             </div>
 
             <div style={{display:'flex', gap:8, justifyContent:'flex-end'}}>
-              <button className="btn" onClick={() => setShowExportModal(false)}>Отмена</button>
+              <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowExportModal(false); } }}>Отмена</button>
               <button className="btn btn-primary" onClick={exportToExcel}
                 disabled={selectedColumns.length === 0}
                 style={{opacity: selectedColumns.length === 0 ? 0.5 : 1}}>
@@ -259,6 +269,7 @@ function ApplicationsTab() {
               <span>{expandedGroups.has(g.key) ? '\u25BC' : '\u25B6'} {g.label} ({g.items.length})</span>
               <span style={{fontSize:12, fontWeight:400, color:'#64748b'}}>
                 Масса: {formatNum(g.items.reduce((s,i) => s + (i.total_weight||0), 0), 1)} кг |
+                Детали: {formatNum(g.items.reduce((s,i) => s + (i.parts_weight||0), 0), 1)} кг |
                 Рез: {formatNum(g.items.reduce((s,i) => s + (i.total_cut_length||0), 0), 0)} мм |
                 Проколы: {formatNum(g.items.reduce((s,i) => s + (i.total_pierces||0), 0))}
               </span>
@@ -288,6 +299,8 @@ function ApplicationsTab() {
                         <th>Длина реза</th>
                         <th>Проколы</th>
                         <th>Масса заявки</th>
+                        <th>Вес деталей</th>
+                        <th></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -315,6 +328,14 @@ function ApplicationsTab() {
                             <td>{formatNum(item.total_cut_length, 1)}</td>
                             <td>{formatNum(item.total_pierces)}</td>
                             <td>{formatNum(item.total_weight, 1)}</td>
+                            <td>{item.parts_weight != null ? formatNum(item.parts_weight, 1) : '-'}</td>
+                            <td style={{whiteSpace:'nowrap'}}>
+                              <div style={{display:'flex', gap:3}}>
+                                <button className="btn" onClick={(e) => { e.stopPropagation(); setSelectedOrder(item); }} title="Открыть заявку" style={{padding:'2px 6px', fontSize:11}}>📂</button>
+                                <button className="btn" onClick={(e) => { e.stopPropagation(); setCalcModal(item); }} title="Калькулятор" style={{padding:'2px 6px', fontSize:11}}>🧮</button>
+                                <button className="btn" onClick={(e) => { e.stopPropagation(); setHistoryApp(item); }} title="История" style={{padding:'2px 6px', fontSize:11}}>📋</button>
+                              </div>
+                            </td>
                           </tr>
                           {expandedApps.has(item.id) && item.layouts.map((l, li) => (
                             <tr key={li} style={{background:'#f8fafc', fontSize:12}}>
@@ -334,16 +355,6 @@ function ApplicationsTab() {
                               <td style={{color:'#475569'}}>{l.sheet_weight ? formatNum(l.sheet_weight * (l.sheet_count || 1), 1) + ' кг' : '-'}</td>
                             </tr>
                           ))}
-                          {expandedApps.has(item.id) && (
-                            <tr style={{background:'#f0f9ff'}}>
-                              <td colSpan={14} style={{padding:'8px 12px'}}>
-                                <button className="btn" onClick={(e) => { e.stopPropagation(); setCalcModal(item); }}
-                                  style={{fontSize:12}}>
-                                  🧮 Калькулятор
-                                </button>
-                              </td>
-                            </tr>
-                          )}
                         </React.Fragment>
                       ))}
                     </tbody>
@@ -378,11 +389,11 @@ function ApplicationsTab() {
       ))}
 
       {calcModal && (
-        <div className="modal-overlay active" onClick={() => setCalcModal(null)}>
+        <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setCalcModal(null); } }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
             <div className="modal-header">
               <h3>Предварительный расчёт — {calcModal.order_name || calcModal.id}</h3>
-              <button className="close-btn" onClick={() => setCalcModal(null)}>{'\u2715'}</button>
+              <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setCalcModal(null); } }}>{'\u2715'}</button>
             </div>
             <div className="modal-body">
               <div style={{ marginBottom: 12, fontSize: 13, color: '#64748b' }}>
@@ -395,7 +406,10 @@ function ApplicationsTab() {
                   supply_material={calcModal.supply_material}
                   thickness={calcModal.thickness}
                   steel_grade={calcModal.steel_grade || calcModal.material}
-                />
+                  total_weight={calcModal.total_weight}
+                  weight_source={calcModal.weight_source}
+                  parts_weight={calcModal.parts_weight}
+/>
               ) : (
                 <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>
                   Нет загруженных раскладок
@@ -403,11 +417,13 @@ function ApplicationsTab() {
               )}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-primary" onClick={() => setCalcModal(null)}>Закрыть</button>
+              <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setCalcModal(null); } }}>Закрыть</button>
             </div>
           </div>
         </div>
       )}
+      {historyApp && <CutHistoryModal app={historyApp} onClose={() => setHistoryApp(null)} />}
+      {selectedOrder && <ApplicationDetail app={selectedOrder} onClose={() => setSelectedOrder(null)} onUpdate={() => fetchData()} />}
     </div>
   );
 }
@@ -424,6 +440,12 @@ function OperatorsTab() {
   const [editingStat, setEditingStat] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [opSubTab, setOpSubTab] = useState('hours'); // 'hours' | 'work'
+  const [workDone, setWorkDone] = useState([]);
+  const [workSort, setWorkSort] = useState('cut_at');
+  const [workSortDir, setWorkSortDir] = useState('desc');
+  const [workPage, setWorkPage] = useState(1);
+  const WORK_PAGE_SIZE = 15;
 
   const fetchShifts = async () => {
     setLoading(true);
@@ -447,6 +469,17 @@ function OperatorsTab() {
   };
 
   useEffect(() => { fetchShifts(); fetchStats(); }, [month]);
+
+  const fetchWorkDone = async () => {
+    try {
+      const res = await client.get('/audit/operators/work-done', { params: { month } });
+      setWorkDone(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error('Failed to load work done', err);
+    }
+  };
+
+  useEffect(() => { fetchWorkDone(); setWorkPage(1); }, [month]);
   useEffect(() => {
     client.get('/audit/operators/users').then(r => setOperators(Array.isArray(r.data) ? r.data : []));
   }, []);
@@ -577,6 +610,38 @@ function OperatorsTab() {
     );
   };
 
+  const sortedWorkDone = useMemo(() => {
+    const list = [...workDone];
+    list.sort((a, b) => {
+      let va = a[workSort] ?? '', vb = b[workSort] ?? '';
+      if (workSort === 'thickness' || workSort === 'run_index') {
+        va = parseFloat(va) || 0; vb = parseFloat(vb) || 0;
+        return workSortDir === 'asc' ? va - vb : vb - va;
+      }
+      if (workSort === 'cut_at') {
+        va = va ? new Date(va).getTime() : 0; vb = vb ? new Date(vb).getTime() : 0;
+        return workSortDir === 'asc' ? va - vb : vb - va;
+      }
+      va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+      return workSortDir === 'asc' ? va.localeCompare(vb, 'ru') : vb.localeCompare(va, 'ru');
+    });
+    return list;
+  }, [workDone, workSort, workSortDir]);
+
+  const workTotalPages = Math.ceil(sortedWorkDone.length / WORK_PAGE_SIZE);
+  const workPaged = sortedWorkDone.slice((workPage - 1) * WORK_PAGE_SIZE, workPage * WORK_PAGE_SIZE);
+
+  const handleWorkSort = (col) => {
+    if (workSort === col) setWorkSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setWorkSort(col); setWorkSortDir('asc'); }
+  };
+
+  const WorkTH = ({ col, label }) => (
+    <th onClick={() => handleWorkSort(col)} style={{cursor:'pointer', userSelect:'none', whiteSpace:'nowrap'}}>
+      {label} {workSort === col ? (workSortDir === 'asc' ? '↑' : '↓') : '▾'}
+    </th>
+  );
+
   return (
     <div>
       <div style={{display:'flex', gap:12, alignItems:'center', marginBottom:16, flexWrap:'wrap'}}>
@@ -584,9 +649,21 @@ function OperatorsTab() {
           style={{padding:'6px 8px', border:'1px solid var(--border)', borderRadius:6, fontSize:13}}>
           {monthOptions.map(m => <option key={m.val} value={m.val}>{m.label}</option>)}
         </select>
+        <div style={{display:'flex', border:'1px solid var(--border)', borderRadius:6, overflow:'hidden'}}>
+          <button onClick={() => setOpSubTab('hours')} style={{padding:'6px 12px', fontSize:13, cursor:'pointer',
+            background: opSubTab === 'hours' ? '#eff6ff' : 'transparent',
+            border:'none', fontWeight: opSubTab === 'hours' ? 600 : 400}}>
+            Рабочие часы
+          </button>
+          <button onClick={() => setOpSubTab('work')} style={{padding:'6px 12px', fontSize:13, cursor:'pointer',
+            background: opSubTab === 'work' ? '#eff6ff' : 'transparent',
+            border:'none', borderLeft:'1px solid var(--border)', fontWeight: opSubTab === 'work' ? 600 : 400}}>
+            Проделанная работа ({workDone.length})
+          </button>
+        </div>
       </div>
 
-      {loading ? <div className="loading">Загрузка...</div> : (
+      {loading ? <div className="loading">Загрузка...</div> : opSubTab === 'hours' ? (
         <div>
           <div className="table-container">
             <table>
@@ -606,7 +683,7 @@ function OperatorsTab() {
                 {aggregated.map(op => (
                   <React.Fragment key={op.id}>
                     <tr>
-                      <td style={{width:30, textAlign:'center', cursor:'pointer'}} onClick={() => toggleOp(op.id)}>
+                      <td style={{width:30, textAlign:'center', cursor:'pointer'}} onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; toggleOp(op.id); } }}>
                         {expandedOps.has(op.id) ? '\u25BC' : '\u25B6'}
                       </td>
                       <td><b>{op.username}</b></td>
@@ -639,6 +716,66 @@ function OperatorsTab() {
               </tbody>
             </table>
           </div>
+        </div>
+      ) : (
+        <div>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <WorkTH col="customer" label="Заказчик" />
+                  <WorkTH col="order_name" label="Заявка" />
+                  <WorkTH col="material" label="Марка" />
+                  <WorkTH col="thickness" label="Толщ." />
+                  <WorkTH col="layout_code" label="Раскладка" />
+                  <WorkTH col="machine" label="Станок" />
+                  <WorkTH col="run_index" label="Выпуск" />
+                  <WorkTH col="cut_by" label="Оператор" />
+                  <WorkTH col="cut_at" label="Дата резки" />
+                </tr>
+              </thead>
+              <tbody>
+                {workPaged.map((w, i) => (
+                  <tr key={i}>
+                    <td>{w.customer}</td>
+                    <td><b>{w.order_name}</b></td>
+                    <td>{w.material}</td>
+                    <td>{w.thickness}</td>
+                    <td>{w.layout_code}</td>
+                    <td>{w.machine}</td>
+                    <td>{w.run_index} / {w.total_runs}</td>
+                    <td>{w.cut_by || '-'}</td>
+                    <td style={{fontSize:12}}>{w.cut_at ? new Date(w.cut_at).toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'}</td>
+                  </tr>
+                ))}
+                {sortedWorkDone.length === 0 && (
+                  <tr><td colSpan={9} style={{textAlign:'center', padding:20, color:'#64748b'}}>Нет данных за этот месяц</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {workTotalPages > 1 && (
+            <div style={{display:'flex', gap:4, justifyContent:'center', marginTop:8, alignItems:'center'}}>
+              <button className="btn" disabled={workPage <= 1} onClick={() => setWorkPage(1)} style={{fontSize:12}}>«</button>
+              <button className="btn" disabled={workPage <= 1} onClick={() => setWorkPage(p => p - 1)} style={{fontSize:12}}>‹</button>
+              {Array.from({length: Math.min(5, workTotalPages)}, (_, i) => {
+                let p;
+                if (workTotalPages <= 5) p = i + 1;
+                else if (workPage <= 3) p = i + 1;
+                else if (workPage >= workTotalPages - 2) p = workTotalPages - 4 + i;
+                else p = workPage - 2 + i;
+                return (
+                  <button key={p} className={'btn' + (p === workPage ? ' btn-primary' : '')}
+                    onClick={() => setWorkPage(p)} style={{fontSize:12}}>{p}</button>
+                );
+              })}
+              <button className="btn" disabled={workPage >= workTotalPages} onClick={() => setWorkPage(p => p + 1)} style={{fontSize:12}}>›</button>
+              <button className="btn" disabled={workPage >= workTotalPages} onClick={() => setWorkPage(workTotalPages)} style={{fontSize:12}}>»</button>
+              <span style={{fontSize:12, color:'#64748b', marginLeft:8}}>
+                {sortedWorkDone.length} записей | Стр. {workPage}/{workTotalPages}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

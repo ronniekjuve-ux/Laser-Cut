@@ -49,9 +49,9 @@ function LayoutImage({ layouts, layoutImage }) {
       <img src={current.layout_image} alt="раскладка" />
       {all.length > 1 && (
         <div className="desktop-card-image-nav" onClick={e => e.stopPropagation()}>
-          <button onClick={() => setIdx(i => (i - 1 + all.length) % all.length)}>‹</button>
+          <button onMouseDown={e => { window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setIdx(i => (i - 1 + all.length) % all.length); } }}>‹</button>
           <span>{idx + 1}/{all.length}</span>
-          <button onClick={() => setIdx(i => (i + 1) % all.length)}>›</button>
+          <button onMouseDown={e => { window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setIdx(i => (i + 1) % all.length); } }}>›</button>
         </div>
       )}
     </div>
@@ -109,19 +109,111 @@ function PriorityBadge({ priority, appId, onChange }) {
   );
 }
 
-function OrderCard({ app, onClick, onReupload, onEdit, onDelete, onCalc }) {
+function NotesModal({ app, onClose, onSaved }) {
+  const [text, setText] = useState(app.comments || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await client.patch('/api/v1/applications/' + app.id + '/comments?comments=' + encodeURIComponent(text));
+      onSaved();
+    } catch (err) {
+      alert('Ошибка сохранения');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay active" onMouseDown={e => { window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+        <div className="modal-header">
+          <h3>Заметки — {app.order_name || '#' + app.id}</h3>
+          <button className="close-btn" onMouseDown={e => { window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
+        </div>
+        <div className="modal-body">
+          <textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="Введите заметку..."
+            style={{ width: '100%', minHeight: 100, padding: 8, border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? 'Сохранение...' : 'Сохранить'}
+          </button>
+          <button className="btn" onMouseDown={e => { window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Отмена</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OverflowMenu({ items, onOpenChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef(null);
+
+  const close = () => { setOpen(false); if (onOpenChange) onOpenChange(false); };
+  const toggle = () => { const next = !open; setOpen(next); if (onOpenChange) onOpenChange(next); };
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) close();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <span className="overflow-menu-wrap" ref={ref} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onMouseUp={e => e.stopPropagation()}>
+      <button
+        className="btn btn-sm overflow-menu-btn"
+        onClick={toggle}
+        title="Действия"
+        style={{ padding: '2px 8px', fontSize: 14, fontWeight: 700, letterSpacing: 2 }}
+      >
+        ⋮
+      </button>
+      {open && (
+        <div className="overflow-menu-dropdown" style={{ position: 'fixed', zIndex: 999 }}>
+          {items.filter(it => it.visible !== false).map((it, i) => (
+            <div
+              key={i}
+              className="overflow-menu-item"
+              onClick={(e) => { e.stopPropagation(); close(); it.onClick(); }}
+              style={it.danger ? { color: '#ef4444' } : undefined}
+            >
+              <span className="overflow-menu-icon">{it.icon}</span>
+              <span>{it.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
+
+function OrderCard({ app, onClick, onReupload, onEdit, onDelete, onCalc, onNotesSaved }) {
   const status = STATUS_CONFIG[app.status] || STATUS_CONFIG.approved;
   const created = app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : '';
   const [priority, setPriority] = useState(app.priority || 'medium');
   const [showHistory, setShowHistory] = React.useState(false);
+  const [showNotes, setShowNotes] = useState(false);
   const layouts = app.layouts || [];
+  const menuOpenRef = React.useRef(false);
+  const menuJustClosedRef = React.useRef(false);
   const hasRuns = layouts.some(l => {
     const runs = Array.isArray(l.completed_runs) ? l.completed_runs : [];
     return runs.some(Boolean);
   });
 
   return (
-    <div className={`desktop-card priority-${priority}`} onClick={() => onClick(app)}>
+    <div className={`desktop-card priority-${priority}`} onMouseDown={e => { if (menuJustClosedRef.current) { menuJustClosedRef.current = false; return; } window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (menuJustClosedRef.current) { menuJustClosedRef.current = false; return; } if (window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClick(app); } }}>
       <LayoutImage layouts={app.layouts} layoutImage={app.layout_image} />
       <div className="desktop-card-header">
         <span className="desktop-card-id">#{app.id}</span>
@@ -146,24 +238,29 @@ function OrderCard({ app, onClick, onReupload, onEdit, onDelete, onCalc }) {
       </div>
       <div className="desktop-card-footer">
         <span>{created}</span>
-        <div className="desktop-card-actions" onClick={e => e.stopPropagation()}>
-          {onCalc && <button className="btn btn-sm" onClick={() => onCalc(app)} title="Калькулятор" style={{ padding: '2px 6px', fontSize: 11 }}>🧮</button>}
-          {hasRuns && <button className="btn btn-sm" onClick={() => setShowHistory(true)} title="История" style={{ padding: '2px 6px', fontSize: 11 }}>📋</button>}
-          {onReupload && <button className="btn btn-sm" onClick={() => onReupload(app)} title="Перезагрузить" style={{ padding: '2px 6px', fontSize: 11 }}>📤</button>}
-          {onEdit && <button className="btn btn-sm" onClick={() => onEdit(app)} title="Редактировать" style={{ padding: '2px 6px', fontSize: 11 }}>✏️</button>}
-          {onDelete && <button className="btn btn-sm" onClick={() => onDelete(app.id)} title="Удалить" style={{ padding: '2px 6px', fontSize: 11, color: '#ef4444' }}>🗑</button>}
-        </div>
+        <OverflowMenu items={[
+          onCalc && { icon: '🧮', label: 'Калькулятор', onClick: () => onCalc(app) },
+          { icon: '📋', label: 'История', onClick: () => setShowHistory(true) },
+          { icon: '📝', label: 'Заметки', onClick: () => setShowNotes(true) },
+          onReupload && { icon: '📤', label: 'Перезагрузить', onClick: () => onReupload(app) },
+          onEdit && { icon: '✏️', label: 'Редактировать', onClick: () => onEdit(app) },
+          onDelete && { icon: '🗑', label: 'Удалить', onClick: () => onDelete(app.id), danger: true },
+        ]} onOpenChange={(open) => { menuOpenRef.current = open; if (!open) menuJustClosedRef.current = true; }} />
       </div>
       {showHistory && <CutHistoryModal app={app} onClose={() => setShowHistory(false)} showHeader={false} />}
+      {showNotes && <NotesModal app={app} onClose={() => setShowNotes(false)} onSaved={() => { setShowNotes(false); if (onNotesSaved) onNotesSaved(); }} />}
     </div>
   );
 }
 
-function ApplicationCard({ app, onClick }) {
+function ApplicationCard({ app, onClick, onReupload, onEdit, onDelete, onCalc, onNotesSaved }) {
   const created = app.created_at ? new Date(app.created_at).toLocaleDateString('ru-RU') : '';
+  const [showNotes, setShowNotes] = useState(false);
+  const menuOpenRef = React.useRef(false);
+  const menuJustClosedRef = React.useRef(false);
 
   return (
-    <div className="desktop-card" onClick={() => onClick(app)}>
+    <div className="desktop-card" onMouseDown={e => { if (menuJustClosedRef.current) { menuJustClosedRef.current = false; return; } window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (menuJustClosedRef.current) { menuJustClosedRef.current = false; return; } if (window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClick(app); } }}>
       <LayoutImage layouts={app.layouts} layoutImage={app.layout_image} />
       <div className="desktop-card-header">
         <span className="desktop-card-id">#{app.id}</span>
@@ -191,7 +288,15 @@ function ApplicationCard({ app, onClick }) {
       <div className="desktop-card-footer">
         <span>{created}</span>
         {app.comments && <span title={app.comments}>📝</span>}
+        <OverflowMenu items={[
+          onCalc && { icon: '🧮', label: 'Калькулятор', onClick: () => onCalc(app) },
+          { icon: '📝', label: 'Заметки', onClick: () => setShowNotes(true) },
+          onReupload && { icon: '📤', label: 'Перезагрузить', onClick: () => onReupload(app) },
+          onEdit && { icon: '✏️', label: 'Редактировать', onClick: () => onEdit(app) },
+          onDelete && { icon: '🗑', label: 'Удалить', onClick: () => onDelete(app.id), danger: true },
+        ]} onOpenChange={(open) => { menuOpenRef.current = open; if (!open) menuJustClosedRef.current = true; }} />
       </div>
+      {showNotes && <NotesModal app={app} onClose={() => setShowNotes(false)} onSaved={() => { setShowNotes(false); if (onNotesSaved) onNotesSaved(); }} />}
     </div>
   );
 }
@@ -205,11 +310,11 @@ function CutHistoryModal({ app, onClose, showHeader = true }) {
   const cutAt = app.cut_at ? new Date(app.cut_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => { window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
         <div className="modal-header">
           <h3>История вырезки — #{app.id} {app.customer || ''}</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onMouseDown={e => { window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
         </div>
         <div className="modal-body">
           {showHeader && (
@@ -269,9 +374,11 @@ function CompletedCard({ app, onClick, onCancelCut, onCalc, onReturn }) {
   const cutAt = app.cut_at ? new Date(app.cut_at).toLocaleDateString('ru-RU') : '';
   const layouts = app.layouts || [];
   const [showHistory, setShowHistory] = React.useState(false);
+  const menuOpenRef = React.useRef(false);
+  const menuJustClosedRef = React.useRef(false);
 
   return (
-    <div className="desktop-card" onClick={() => onClick(app)}>
+    <div className="desktop-card" onMouseDown={e => { if (menuJustClosedRef.current) { menuJustClosedRef.current = false; return; } window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (menuJustClosedRef.current) { menuJustClosedRef.current = false; return; } if (window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClick(app); } }}>
       <LayoutImage layouts={app.layouts} layoutImage={app.layout_image} />
       <div className="desktop-card-header">
         <span className="desktop-card-id">#{app.id}</span>
@@ -296,24 +403,12 @@ function CompletedCard({ app, onClick, onCancelCut, onCalc, onReturn }) {
       </div>
       <div className="desktop-card-footer">
         <span>Поступил: {created}</span>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <span>Выполнен: {cutAt}</span>
-          {onCalc && (
-            <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onCalc(app); }} title="Калькулятор" style={{ padding: '2px 6px', fontSize: 11 }}>
-              🧮
-            </button>
-          )}
-          {(app.cut_by || cutAt) && (
-            <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); setShowHistory(true); }} title="История" style={{ padding: '2px 6px', fontSize: 11, background: '#f0f9ff', color: '#1d4ed8', border: '1px solid #bae6fd' }}>
-              📋
-            </button>
-          )}
-          {onReturn && (
-            <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onReturn(app); }} title="Вернуть в резку" style={{ padding: '2px 6px', fontSize: 11, background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}>
-              ↩
-            </button>
-          )}
-        </div>
+        <span>Выполнен: {cutAt}</span>
+        <OverflowMenu items={[
+          onCalc && { icon: '🧮', label: 'Калькулятор', onClick: () => onCalc(app) },
+          { icon: '📋', label: 'История', onClick: () => setShowHistory(true) },
+          onReturn && { icon: '↩', label: 'Вернуть в резку', onClick: () => onReturn(app), danger: true },
+        ]} onOpenChange={(open) => { menuOpenRef.current = open; if (!open) menuJustClosedRef.current = true; }} />
       </div>
       {showHistory && <CutHistoryModal app={app} onClose={() => setShowHistory(false)} />}
     </div>
@@ -360,7 +455,7 @@ function WarehouseCard({ item, onClick, onEdit, onDeduct, onCut, onMerge, onDele
   const dims = (item.sheet_w && item.sheet_h) ? `${item.sheet_w}×${item.sheet_h}` : '—';
 
   return (
-    <div className="desktop-card" onClick={() => onClick && onClick(item)}>
+    <div className="desktop-card" onMouseDown={e => { window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClick && onClick(item); } }}>
       <div className="desktop-card-warehouse-shape">
         <SheetShape item={item} />
       </div>
@@ -414,7 +509,7 @@ function DeficitCard({ row, onClick }) {
   const balanceCls = balance > 0 ? 'negative' : balance < 0 ? 'positive' : 'neutral';
 
   return (
-    <div className="desktop-card" onClick={() => onClick && onClick(row)}>
+    <div className="desktop-card" onMouseDown={e => { window.__overlayMouseDownTarget = e.currentTarget; }} onMouseUp={e => { if (window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClick && onClick(row); } }}>
       <div className="desktop-card-header">
         <span className="desktop-card-customer">{row.grade || '—'}</span>
         <span className="desktop-card-meta-value">{row.thickness ? row.thickness + ' мм' : ''}</span>
@@ -447,4 +542,4 @@ function DeficitCard({ row, onClick }) {
   );
 }
 
-export { ViewToggle, OrderCard, ApplicationCard, CompletedCard, WarehouseCard, DeficitCard };
+export { ViewToggle, OrderCard, ApplicationCard, CompletedCard, WarehouseCard, DeficitCard, CutHistoryModal };

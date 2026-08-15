@@ -51,6 +51,8 @@ class ApplicationData:
     material: str = "Steel"
     thickness: float = 0.0
     total_weight: Optional[float] = None
+    parts_weight: Optional[float] = None
+    skeleton_weight: Optional[float] = None
     parts: List[AppPart] = field(default_factory=list)
     placed_parts_count: Optional[int] = None
     ordered_parts_count: Optional[int] = None
@@ -352,46 +354,56 @@ def parse_application_text(text: str) -> ApplicationData:
             if 'Детали в субраскладках' in line:
                 break
 
-    # ========== ИСПРАВЛЕНИЕ 2: Общий вес ==========
-    # Ищем "Общий в ес ( KG )" в таблице
+    # ========== ИСПРАВЛЕНИЕ 2: Веса из таблицы ==========
+    # Ищем строку-заголовок: "Вес детали (KG) | Вес «скелета» (KG) | Общий вес (KG)"
     for i, line in enumerate(lines):
         if 'Общий' in line and 'вес' in line and 'KG' in line:
-            # Строка-заголовок содержит "Общий вес (KG)" — находим индекс столбца
             header_parts = [c.strip() for c in line.split('|')]
-            weight_col = None
+            total_col = None
+            parts_col = None
+            skeleton_col = None
             for ci, cell in enumerate(header_parts):
-                if 'Общий' in cell and 'вес' in cell:
-                    weight_col = ci
-                    break
+                cl = cell.lower()
+                if 'скелет' in cl and 'вес' in cl:
+                    skeleton_col = ci
+                elif 'вес' in cl and 'детал' in cl:
+                    parts_col = ci
+                elif 'общий' in cl and 'вес' in cl:
+                    total_col = ci
 
-            # Проверяем текущую строку (если значение в той же строке)
-            for cell in [c.strip() for c in line.split('|')]:
-                try:
-                    val = float(cell.replace(',', '.'))
-                    if 10 < val < 100000:
-                        data.total_weight = val
-                        break
-                except ValueError:
-                    pass
-
-            # Если не нашли — смотрим следующую строку (pipe-таблица без | в начале)
-            if data.total_weight is None and i + 1 < len(lines):
+            # Значения в следующей строке (строка данных)
+            if i + 1 < len(lines):
                 next_line = lines[i + 1]
-                data_parts = [c.strip() for c in next_line.split('|')]
-                if weight_col is not None and weight_col < len(data_parts):
-                    try:
-                        val = float(data_parts[weight_col].replace(',', '.'))
-                        if 10 < val < 100000:
-                            data.total_weight = val
-                    except (ValueError, IndexError):
-                        pass
-                elif data_parts:
-                    try:
-                        val = float(data_parts[0].replace(',', '.'))
-                        if 10 < val < 100000:
-                            data.total_weight = val
-                    except ValueError:
-                        pass
+                data_cells = [c.strip() for c in next_line.split('|')]
+
+                def _parse_cell(cells, idx):
+                    if idx is not None and idx < len(cells):
+                        try:
+                            return float(cells[idx].replace(',', '.'))
+                        except (ValueError, IndexError):
+                            pass
+                    return None
+
+                data.total_weight = _parse_cell(data_cells, total_col)
+                data.parts_weight = _parse_cell(data_cells, parts_col)
+                data.skeleton_weight = _parse_cell(data_cells, skeleton_col)
+
+                # Fallback: если не нашли по колонкам, ищем все числа в строке
+                if data.total_weight is None and data.parts_weight is None:
+                    nums = []
+                    for cell in data_cells:
+                        try:
+                            v = float(cell.replace(',', '.'))
+                            if v > 0:
+                                nums.append(v)
+                        except ValueError:
+                            pass
+                    if len(nums) >= 3:
+                        data.parts_weight = nums[-3]
+                        data.skeleton_weight = nums[-2]
+                        data.total_weight = nums[-1]
+                    elif len(nums) == 1:
+                        data.total_weight = nums[0]
             break
 
     # ========== Парсинг деталей ==========
@@ -519,7 +531,7 @@ def parse_layout_text(text: str, filename: str) -> LayoutData:
         if sc is not None and sc > 0:
             data.sheet_count = sc
 
-    mat_match = re.search(r'Материал\s*:\s*([^\n]+)', text, re.I)
+    mat_match = re.search(r'Материал\s*:\s*([^\n|]+)', text, re.I)
     if mat_match:
         data.material = mat_match.group(1).strip()
 

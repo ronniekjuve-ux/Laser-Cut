@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+﻿import { useState, useEffect, useRef, useMemo } from 'react';
 import client from '../../api/client';
 import useIsMobile from '../../hooks/useIsMobile';
 
@@ -292,7 +292,7 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
   const st = { padding: '3px 5px', fontSize: 11, border: '1px solid var(--border)', borderRadius: 3, boxSizing: 'border-box' };
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()}
         style={{ maxWidth: isMobile ? '100vw' : 900, width: isMobile ? '100vw' : '90vw', height: isMobile ? '100dvh' : '75vh', display: 'flex', flexDirection: 'column' }}>
         <div className="modal-header" style={{ padding: '6px 14px', flexShrink: 0 }}>
@@ -300,7 +300,7 @@ export default function RemnantEditor({ item, onClose, onSuccess }) {
             Резка — {item.metal} {item.grade || ''} {W}x{H}
             {item.article && <span style={{ fontWeight: 400, color: '#64748b' }}> [{item.article}]</span>}
           </h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
         </div>
         <div className="modal-body" style={{ padding: isMobile ? '4px 8px 8px' : '4px 14px 8px', display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 6 : 10, flex: 1, minHeight: 0, overflow: 'hidden' }}>
           {/* SVG Sheet — left */}

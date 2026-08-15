@@ -32,11 +32,11 @@ function NotesModal({ app, onClose, onSaved }) {
   };
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
         <div className="modal-header">
           <h3>Заметка — {app.order_name || app.id}</h3>
-          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>{'\u2715'}</button>
         </div>
         <div className="modal-body">
           <textarea
@@ -50,7 +50,7 @@ function NotesModal({ app, onClose, onSaved }) {
           <button className="btn btn-primary" onClick={save} disabled={saving}>
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
-          <button className="btn" onClick={onClose}>Отмена</button>
+          <button className="btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Отмена</button>
         </div>
       </div>
     </div>
@@ -71,7 +71,7 @@ function CalcModal({ app, onClose }) {
   }, [app.id]);
 
   if (loading) return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
         <div className="modal-body" style={{ textAlign: 'center', padding: 40 }}>Загрузка...</div>
       </div>
@@ -84,11 +84,11 @@ function CalcModal({ app, onClose }) {
   const appData = data.application || app;
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
         <div className="modal-header">
           <h3>Предварительный расчёт — {app.order_name || app.id}</h3>
-          <button className="close-btn" onClick={onClose}>{'\u2715'}</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>{'\u2715'}</button>
         </div>
         <div className="modal-body">
           <div style={{ marginBottom: 12, fontSize: 13, color: '#64748b' }}>
@@ -101,7 +101,10 @@ function CalcModal({ app, onClose }) {
               supply_material={appData.supply_material}
               thickness={appData.thickness}
               steel_grade={appData.steel_grade || appData.material}
-            />
+              total_weight={appData.total_weight}
+              weight_source={appData.weight_source}
+              parts_weight={appData.parts_weight}
+/>
           ) : (
             <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>
               Нет загруженных раскладок
@@ -109,7 +112,7 @@ function CalcModal({ app, onClose }) {
           )}
         </div>
         <div className="modal-footer">
-          <button className="btn btn-primary" onClick={onClose}>Закрыть</button>
+          <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Закрыть</button>
         </div>
       </div>
     </div>
@@ -148,6 +151,7 @@ export default function ApplicationsList() {
   const [openFilter, setOpenFilter] = useState(null);
   const [filterPos, setFilterPos] = useState({top: 0, left: 0});
   const [selectedApp, setSelectedApp] = useState(null);
+  const [initialLayoutIndex, setInitialLayoutIndex] = useState(null);
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
   const [notesModal, setNotesModal] = useState(null);
@@ -365,7 +369,7 @@ export default function ApplicationsList() {
           onChange={(e) => setSearch(e.target.value)}
         />
         {(user?.role === 'admin' || user?.role === 'director') && (
-          <button className="btn btn-primary" onClick={() => setShowNewOrder(true)}>
+          <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowNewOrder(true); } }}>
             + {'\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u044f\u0432\u043a\u0430'}
           </button>
         )}
@@ -406,7 +410,7 @@ export default function ApplicationsList() {
             values.map(val => (
               <div key={key + val} className="filter-badge">
                 {key}: {val}
-                <span className="remove" onClick={() => toggleFilterItem(key, val)}>{'\u2715'}</span>
+                <span className="remove" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; toggleFilterItem(key, val); } }}>{'\u2715'}</span>
               </div>
             ))
           )}
@@ -461,7 +465,13 @@ export default function ApplicationsList() {
         </div>
         <div className="desktop-cards">
           {activeApps.map(app => (
-            <ApplicationCard key={app.id} app={app} onClick={setSelectedApp} />
+            <ApplicationCard key={app.id} app={app} onClick={setSelectedApp}
+              onCalc={(user?.role === 'admin' || user?.role === 'director' || user?.role === 'accountant') ? setCalcModal : undefined}
+              onReupload={(user?.role === 'admin' || user?.role === 'director') ? (app) => setReuploadModal(app) : undefined}
+              onEdit={(user?.role === 'admin' || user?.role === 'director') ? (app) => setEditModal(app) : undefined}
+              onDelete={(user?.role === 'admin') ? (id) => setConfirmDelete(id) : undefined}
+              onNotesSaved={() => fetchApplications(search || undefined)}
+            />
           ))}
           {activeApps.length === 0 && (
             <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 20, color: '#64748b' }}>Нет заявок</div>
@@ -764,14 +774,23 @@ export default function ApplicationsList() {
       {selectedApp && !isRealMobile && (
         <ApplicationDetail
           app={selectedApp}
+          initialLayoutIndex={initialLayoutIndex}
           onClose={() => {
             setSelectedApp(null);
+            setInitialLayoutIndex(null);
             if (groupDetailBeforeApp) {
               setGroupDetailId(groupDetailBeforeApp);
               setGroupDetailBeforeApp(null);
             }
           }}
           onUpdate={fetchApplications}
+          onViewOrder={async (orderId, layoutIndex) => {
+            try {
+              const res = await client.get('/api/v1/applications/' + orderId);
+              setSelectedApp(res.data.application || res.data);
+              setInitialLayoutIndex(layoutIndex ?? 0);
+            } catch { /* ignore */ }
+          }}
         />
       )}
 

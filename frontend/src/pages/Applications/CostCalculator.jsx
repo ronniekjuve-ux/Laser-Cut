@@ -1,11 +1,9 @@
 import { useState, useMemo } from 'react';
 
-export default function CostCalculator({ layouts, supply_material, thickness, steel_grade }) {
+export default function CostCalculator({ layouts, supply_material, thickness, steel_grade, total_weight, weight_source, parts_weight }) {
   const [pricePerCut, setPricePerCut] = useState('');
   const [pricePerPierce, setPricePerPierce] = useState('');
   const [pricePerKg, setPricePerKg] = useState('');
-  const [customSheetWeight, setCustomSheetWeight] = useState('');
-  const [customPartsWeight, setCustomPartsWeight] = useState('');
   const [customOtherWeight, setCustomOtherWeight] = useState('');
   const [weightSource, setWeightSource] = useState('auto'); // 'auto' | 'sheet' | 'parts' | 'custom'
 
@@ -28,16 +26,20 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
   const pierceCost = (parseFloat(pricePerPierce) || 0) * totals.pierces;
 
   const effectiveWeight = useMemo(() => {
-    if (weightSource === 'sheet') return parseFloat(customSheetWeight) || 0;
-    if (weightSource === 'parts') return parseFloat(customPartsWeight) || 0;
+    if (weightSource === 'sheet') return total_weight || 0;
+    if (weightSource === 'parts') return parts_weight || 0;
     if (weightSource === 'custom') return parseFloat(customOtherWeight) || 0;
-    return totals.sheetWeight || totals.partsWeight;
-  }, [weightSource, customSheetWeight, customPartsWeight, customOtherWeight, totals]);
+    // auto: prefer file weight, then sheet, then parts
+    return total_weight || totals.sheetWeight || totals.partsWeight;
+  }, [weightSource, customOtherWeight, total_weight, parts_weight, totals]);
 
   const materialCost = (parseFloat(pricePerKg) || 0) * effectiveWeight;
   const totalCost = cutCost + pierceCost + materialCost;
 
   const fmt = (n) => n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+  const hasFileWeight = total_weight != null && total_weight > 0;
+  const isCalculated = weight_source === 'calculated';
 
   return (
     <div style={{
@@ -97,16 +99,18 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
         <div style={{ color: '#64748b', marginBottom: 8 }}>
           {steel_grade && <span>Марка: <b>{steel_grade}</b> · </span>}
           {thickness && <span>Толщина: <b>{thickness} мм</b> · </span>}
-          <span>Вес листа: <b>{fmt(totals.sheetWeight)} кг</b> · </span>
-          <span>Вес деталей: <b>{fmt(totals.partsWeight)} кг</b></span>
+          {hasFileWeight && (
+            <span>Вес листа: <b>{fmt(total_weight)} кг</b>{isCalculated ? ' (расчёт)' : ''} · </span>
+          )}
+          {parts_weight != null && <span>Вес деталей: <b>{fmt(parts_weight)} кг</b></span>}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
           {[
             { key: 'auto', label: 'Авто' },
-            { key: 'sheet', label: 'Вес листа' },
-            { key: 'parts', label: 'Вес деталей' },
-            { key: 'custom', label: 'Другой источник' },
+            ...(hasFileWeight ? [{ key: 'sheet', label: 'Вес листа' }] : []),
+            ...(parts_weight != null ? [{ key: 'parts', label: 'Вес деталей' }] : []),
+            { key: 'custom', label: 'Другой' },
           ].map(opt => (
             <div
               key={opt.key}
@@ -123,30 +127,6 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
           ))}
         </div>
 
-        {weightSource === 'sheet' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <label style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>Вес листа (кг):</label>
-            <input
-              type="number"
-              value={customSheetWeight}
-              onChange={e => setCustomSheetWeight(e.target.value)}
-              placeholder={String(totals.sheetWeight)}
-              style={{ width: 100, padding: '3px 6px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12 }}
-            />
-          </div>
-        )}
-        {weightSource === 'parts' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <label style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>Вес деталей (кг):</label>
-            <input
-              type="number"
-              value={customPartsWeight}
-              onChange={e => setCustomPartsWeight(e.target.value)}
-              placeholder={String(totals.partsWeight)}
-              style={{ width: 100, padding: '3px 6px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12 }}
-            />
-          </div>
-        )}
         {weightSource === 'custom' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
             <label style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>Другой вес (кг):</label>
@@ -162,7 +142,7 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
 
         <div style={{ fontSize: 12, color: '#64748b' }}>
           Используется вес: <b>{fmt(effectiveWeight)} кг</b>
-          {weightSource === 'auto' && <span> (авто)</span>}
+          {weightSource === 'auto' && <span> (авто{hasFileWeight ? ' — из файла' : ''})</span>}
           {weightSource === 'sheet' && <span> (лист)</span>}
           {weightSource === 'parts' && <span> (детали)</span>}
           {weightSource === 'custom' && <span> (другой)</span>}

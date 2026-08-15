@@ -112,6 +112,7 @@
   border-top: 1px solid #f1f5f9;
   font-size: 11px;
   color: #94a3b8;
+  gap: 6px;
 }
 
 .desktop-card-tags {
@@ -287,4 +288,59 @@
 .desktop-card-priority-option.active {
   background: #eff6ff;
   font-weight: 600;
+}
+
+/* === OVERFLOW MENU === */
+.overflow-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.overflow-menu-btn {
+  font-size: 16px !important;
+  padding: 0 6px !important;
+  line-height: 1;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.overflow-menu-btn:hover {
+  background: #f1f5f9;
+  border-color: var(--border);
+  color: #1e293b;
+}
+.overflow-menu-dropdown {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  min-width: 160px;
+  padding: 4px;
+  animation: overflowFadeIn 0.12s ease;
+}
+@keyframes overflowFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.overflow-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.1s;
+  white-space: nowrap;
+}
+.overflow-menu-item:hover {
+  background: #f1f5f9;
+}
+.overflow-menu-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
 }

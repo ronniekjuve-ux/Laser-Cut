@@ -150,16 +150,16 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
     const isDisabled = currentLayout.replaced || currentLayout.status === 'merge_cancelled';
 
     return (
-      <div className="modal-overlay active" onClick={() => setActiveLayout(null)}>
+      <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setActiveLayout(null); } }}>
         <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '100%', height: '100%', borderRadius: 0, maxHeight: '100%' }}>
           <div className="modal-header">
             <h3 style={{ fontSize: 14 }}>
               {data.id}.{currentLayout.layout_code || '?'}
-              <button className="btn" style={{ marginLeft: 8, fontSize: 11, padding: '3px 8px' }} onClick={() => setActiveLayout(null)}>
+              <button className="btn" style={{ marginLeft: 8, fontSize: 11, padding: '3px 8px' }} onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setActiveLayout(null); } }}>
                 Назад
               </button>
             </h3>
-            <button className="close-btn" onClick={onClose}>✕</button>
+            <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
           </div>
           <div className="modal-body" style={{ padding: '0 12px 12px' }}>
             {currentLayout.layout_image && (
@@ -305,11 +305,11 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
         </div>
 
         {showPartInfo && (
-          <div className="modal-overlay active" style={{ zIndex: 1100 }} onClick={() => setShowPartInfo(null)}>
+          <div className="modal-overlay active" style={{ zIndex: 1100 }} onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowPartInfo(null); } }}>
             <div className="modal-content" style={{ width: '95%', maxWidth: 400 }} onClick={e => e.stopPropagation()}>
               <div className="modal-header">
                 <h3 style={{ fontSize: 14 }}>{showPartInfo.name}</h3>
-                <button className="close-btn" onClick={() => setShowPartInfo(null)}>✕</button>
+                <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowPartInfo(null); } }}>✕</button>
               </div>
               <div className="modal-body" style={{ textAlign: 'center' }}>
                 {showPartInfo.image_path ? (
@@ -319,7 +319,7 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
                 )}
               </div>
               <div className="modal-footer">
-                <button className="btn btn-primary" onClick={() => setShowPartInfo(null)}>Закрыть</button>
+                <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowPartInfo(null); } }}>Закрыть</button>
               </div>
             </div>
           </div>
@@ -329,11 +329,11 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
   }
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
+    <div className="modal-overlay active" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '100%', height: '100%', borderRadius: 0, maxHeight: '100%' }}>
         <div className="modal-header">
           <h3 style={{ fontSize: 14 }}>#{data.id} {data.order_name || ''}</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
         </div>
         <div className="modal-body" style={{ padding: '0 12px 12px' }}>
           {/* Main layout image */}
@@ -350,8 +350,8 @@ export default function MobileOrderDetail({ app, onClose, onUpdate }) {
             <div><span style={{ fontWeight: 600 }}>Заказчик:</span> {data.customer || '-'}</div>
             <div><span style={{ fontWeight: 600 }}>Материал:</span> {data.material || data.steel_grade || '-'}</div>
             <div><span style={{ fontWeight: 600 }}>Толщина:</span> {data.thickness != null && data.thickness !== '' ? data.thickness + ' мм' : '-'}</div>
-            {data.total_weight != null && data.total_weight !== '' && <div><span style={{ fontWeight: 600 }}>Вес:</span> {data.total_weight} кг</div>}
-            {totalPartsWeight > 0 && <div><span style={{ fontWeight: 600 }}>Вес деталей:</span> {totalPartsWeight.toFixed(2)} кг</div>}
+            {data.total_weight != null && data.total_weight !== '' && <div><span style={{ fontWeight: 600 }}>Вес листа:</span> {Number(data.total_weight).toFixed(1)} кг{data.weight_source === 'calculated' && <span style={{color:'#d97706', fontSize:11, marginLeft:4}}>(расчёт)</span>}</div>}
+            {data.parts_weight != null && <div><span style={{ fontWeight: 600 }}>Вес деталей:</span> {Number(data.parts_weight).toFixed(1)} кг</div>}
             <div><span style={{ fontWeight: 600 }}>Раскладок:</span> {layouts.length}</div>
           </div>
 

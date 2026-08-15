@@ -3,7 +3,7 @@ import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmModal from '../../components/ConfirmModal';
 
-export default function ApplicationDetail({ app, onClose, onUpdate }) {
+export default function ApplicationDetail({ app, onClose, onUpdate, onViewOrder, initialLayoutIndex }) {
   const { user } = useAuth();
   const [fullApp, setFullApp] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -98,6 +98,16 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
     };
     fetchFull();
   }, [app.id]);
+
+  // Автооткрытие раскладки по initialLayoutIndex
+  useEffect(() => {
+    if (fullApp && initialLayoutIndex != null && activeLayout === null) {
+      const layouts = fullApp.layouts || [];
+      if (layouts[initialLayoutIndex]) {
+        setActiveLayout(initialLayoutIndex);
+      }
+    }
+  }, [fullApp, initialLayoutIndex]);
 
   // Автооткрытие раскладки с подсвечиваемой деталью
   useEffect(() => {
@@ -290,7 +300,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
   }, 0);
 
   return (
-    <div className="modal-overlay active" onClick={activeLayout !== null ? () => setActiveLayout(null) : onClose}>
+    <div className="modal-overlay active" onClick={(e) => { if (e.target === e.currentTarget) { activeLayout !== null ? setActiveLayout(null) : onClose(); } }}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{width: 800}}>
         <div className="modal-header">
           <h3>{data.order_name || 'Заявка'} #{data.id}</h3>
@@ -300,7 +310,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                 ⬅ Назад к заявке
               </span>
             )}
-            <button className="close-btn" onClick={onClose}>✕</button>
+            <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>✕</button>
           </div>
         </div>
         <div className="modal-body">
@@ -312,8 +322,8 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                     <div><span style={{fontWeight: 600}}>Заказчик:</span> {data.customer || '-'}</div>
                     <div><span style={{fontWeight: 600}}>Материал:</span> {data.material || data.steel_grade || '-'}</div>
                     <div><span style={{fontWeight: 600}}>Толщина:</span> {data.thickness != null && data.thickness !== '' ? data.thickness + ' мм' : '-'}</div>
-                    <div><span style={{fontWeight: 600}}>Вес:</span> {data.total_weight != null && data.total_weight !== '' ? data.total_weight + ' кг' : '-'}</div>
-                    {totalPartsWeight > 0 && <div><span style={{fontWeight: 600}}>Вес деталей:</span> {totalPartsWeight.toFixed(2)} кг</div>}
+                    <div><span style={{fontWeight: 600}}>Вес листа:</span> {data.total_weight != null && data.total_weight !== '' ? Number(data.total_weight).toFixed(1) + ' кг' : '-'}{data.weight_source === 'calculated' && <span style={{color:'#d97706', fontSize:11, marginLeft:4}}>(расчёт)</span>}</div>
+                    {data.parts_weight != null && <div><span style={{fontWeight: 600}}>Вес деталей:</span> {Number(data.parts_weight).toFixed(1)} кг</div>}
                     <div><span style={{fontWeight: 600}}>Раскладок:</span> {layouts.length}</div>
                     <div><span style={{fontWeight: 600}}>Видов деталей:</span> {uniquePartTypes}</div>
                     <div><span style={{fontWeight: 600}}>Всего деталей:</span> {totalPartsQty}</div>
@@ -324,6 +334,35 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                     )}
                     <div><span style={{fontWeight: 600}}>Дата:</span> {data.created_at ? new Date(data.created_at).toLocaleDateString('ru-RU') : '-'}</div>
                     {data.comments && <div><span style={{fontWeight: 600}}>Комментарий:</span> {data.comments}</div>}
+                    {(() => {
+                      const mergedFrom = layouts.length > 0 && layouts[0].merged_from;
+                      if (!mergedFrom || !mergedFrom.apps) return null;
+                      const uniqueApps = [];
+                      const seenIds = new Set();
+                      for (const a of mergedFrom.apps) {
+                        if (a.id && !seenIds.has(a.id)) {
+                          seenIds.add(a.id);
+                          uniqueApps.push(a);
+                        }
+                      }
+                      if (uniqueApps.length === 0) return null;
+                      return (
+                        <div style={{marginTop: 8}}>
+                          <span style={{fontWeight: 600}}>Составляющие: </span>
+                          {uniqueApps.map((a, i) => (
+                            <span key={a.id}>
+                              {i > 0 && ' + '}
+                              <span
+                                onClick={() => onViewOrder && onViewOrder(a.id, 0)}
+                                style={{color: '#2563eb', cursor: 'pointer', textDecoration: 'underline', fontSize: 13}}
+                              >
+                                {a.name || '#' + a.id}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {data.status === 'pending' && user?.role === 'admin' && (
@@ -460,8 +499,8 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                             key={layout.id || li}
                             style={{
                               padding: 10, border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8,
-                              cursor: isDisabled ? 'default' : 'pointer',
-                              opacity: isDisabled ? 0.45 : 1,
+                              cursor: 'pointer',
+                              opacity: isDisabled ? 0.6 : 1,
                               background: isMergeCancelled ? '#fef2f2' : isReplaced ? '#f1f5f9'
                                 : isComplete && hasUnboundCutRuns ? '#fef2f2'
                                 : isComplete ? '#f0fdf4' : undefined,
@@ -470,7 +509,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                               borderLeft: isComplete && hasUnboundCutRuns
                                 ? '3px solid #ef4444' : undefined,
                             }}
-                            onClick={() => !isDisabled && setActiveLayout(li)}
+                            onClick={() => setActiveLayout(li)}
                           >
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                               <strong>{layout.layout_code ? (`Раскладка ${data.id}.${layout.layout_code}`) : (`Раскладка ${data.id}.${String(li + 1).padStart(3, '0')}`)}</strong>
@@ -526,7 +565,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
                                 )}
                               </span>
                             </div>
-                            {!isReplaced && layout.sheet_count >= 1 && (
+                            {layout.sheet_count >= 1 && (
                               <div style={{marginTop: 8}}>
                                 <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 4}}>
                                   <span>Вырезано: {layoutDone} из {layoutTotal} листов</span>
@@ -764,8 +803,16 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
 
               const layoutImg = layout.layout_image;
 
+              const isReplaced = layout.replaced;
+              const isMergeCancelled = layout.status === 'merge_cancelled';
+
               return (
-                <div>
+                <div style={{opacity: isReplaced ? 0.6 : 1}}>
+                  {isReplaced && (
+                    <div style={{marginBottom: 8, padding: '6px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#991b1b', fontWeight: 600}}>
+                      Заменена (в слиянии)
+                    </div>
+                  )}
                   <div style={{display: 'flex', gap: 20, alignItems: 'flex-start'}}>
                     <div style={{flex: '0 0 65%'}}>
                       {layoutImg ? (
@@ -869,7 +916,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
         </div>
         <div className="modal-footer">
           <button className="btn btn-danger" onClick={handleDelete}>Удалить</button>
-          <button className="btn btn-primary" onClick={onClose}>Закрыть</button>
+          <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; onClose(); } }}>Закрыть</button>
         </div>
       </div>
 
@@ -878,7 +925,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
           <div className="modal-content" style={{width: 600}} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{showPartInfo.name || ''}</h3>
-              <button className="close-btn" onClick={() => setShowPartInfo(null)}>✕</button>
+              <button className="close-btn" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowPartInfo(null); } }}>✕</button>
             </div>
             <div className="modal-body" style={{textAlign: 'center'}}>
               {showPartInfo.image_path ? (
@@ -890,7 +937,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate }) {
               )}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-primary" onClick={() => setShowPartInfo(null)}>Закрыть</button>
+              <button className="btn btn-primary" onMouseDown={e => e.target === e.currentTarget && (window.__overlayMouseDownTarget = e.currentTarget)} onMouseUp={e => { if (e.target === e.currentTarget && window.__overlayMouseDownTarget === e.currentTarget) { window.__overlayMouseDownTarget = null; setShowPartInfo(null); } }}>Закрыть</button>
             </div>
           </div>
         </div>

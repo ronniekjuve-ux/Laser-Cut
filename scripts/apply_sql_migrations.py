@@ -378,6 +378,14 @@ END $$;""",
     # 39. Add parent_sheet_w/parent_sheet_h to warehouse_items (original sheet dimensions before cut)
     "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS parent_sheet_w DOUBLE PRECISION;",
     "ALTER TABLE warehouse_items ADD COLUMN IF NOT EXISTS parent_sheet_h DOUBLE PRECISION;",
+
+    # 40. Add weight_source to applications and deleted_applications
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS weight_source VARCHAR(20);",
+    "ALTER TABLE deleted_applications ADD COLUMN IF NOT EXISTS weight_source VARCHAR(20);",
+
+    # 41. Add parts_weight, skeleton_weight to applications
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS parts_weight DOUBLE PRECISION;",
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS skeleton_weight DOUBLE PRECISION;",
 ]
 
 async def main():
