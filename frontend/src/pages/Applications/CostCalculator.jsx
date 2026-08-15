@@ -25,13 +25,15 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
   const cutCost = (parseFloat(pricePerCut) || 0) * cutLengthMeters;
   const pierceCost = (parseFloat(pricePerPierce) || 0) * totals.pierces;
 
+  const effectivePartsWeight = parts_weight || totals.partsWeight;
+
   const effectiveWeight = useMemo(() => {
     if (weightSource === 'sheet') return total_weight || 0;
-    if (weightSource === 'parts') return parts_weight || 0;
+    if (weightSource === 'parts') return effectivePartsWeight || 0;
     if (weightSource === 'custom') return parseFloat(customOtherWeight) || 0;
     // auto: prefer file weight, then sheet, then parts
-    return total_weight || totals.sheetWeight || totals.partsWeight;
-  }, [weightSource, customOtherWeight, total_weight, parts_weight, totals]);
+    return total_weight || totals.sheetWeight || effectivePartsWeight;
+  }, [weightSource, customOtherWeight, total_weight, effectivePartsWeight, totals]);
 
   const materialCost = (parseFloat(pricePerKg) || 0) * effectiveWeight;
   const totalCost = cutCost + pierceCost + materialCost;
@@ -102,7 +104,7 @@ export default function CostCalculator({ layouts, supply_material, thickness, st
           {hasFileWeight && (
             <span>Вес листа: <b>{fmt(total_weight)} кг</b>{isCalculated ? ' (расчёт)' : ''} · </span>
           )}
-          {parts_weight != null && <span>Вес деталей: <b>{fmt(parts_weight)} кг</b></span>}
+          {effectivePartsWeight > 0 && <span>Вес деталей: <b>{fmt(effectivePartsWeight)} кг</b></span>}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>

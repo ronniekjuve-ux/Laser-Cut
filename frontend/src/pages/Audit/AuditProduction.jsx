@@ -269,7 +269,7 @@ function ApplicationsTab() {
               <span>{expandedGroups.has(g.key) ? '\u25BC' : '\u25B6'} {g.label} ({g.items.length})</span>
               <span style={{fontSize:12, fontWeight:400, color:'#64748b'}}>
                 Масса: {formatNum(g.items.reduce((s,i) => s + (i.total_weight||0), 0), 1)} кг |
-                Детали: {formatNum(g.items.reduce((s,i) => s + (i.parts_weight||0), 0), 1)} кг |
+                Детали: {formatNum(g.items.reduce((s,i) => s + (i.total_parts_weight||0), 0), 1)} кг |
                 Рез: {formatNum(g.items.reduce((s,i) => s + (i.total_cut_length||0), 0), 0)} мм |
                 Проколы: {formatNum(g.items.reduce((s,i) => s + (i.total_pierces||0), 0))}
               </span>
@@ -328,7 +328,7 @@ function ApplicationsTab() {
                             <td>{formatNum(item.total_cut_length, 1)}</td>
                             <td>{formatNum(item.total_pierces)}</td>
                             <td>{formatNum(item.total_weight, 1)}</td>
-                            <td>{item.parts_weight != null ? formatNum(item.parts_weight, 1) : '-'}</td>
+                            <td>{item.total_parts_weight != null ? formatNum(item.total_parts_weight, 1) : '-'}</td>
                             <td style={{whiteSpace:'nowrap'}}>
                               <div style={{display:'flex', gap:3}}>
                                 <button className="btn" onClick={(e) => { e.stopPropagation(); setSelectedOrder(item); }} title="Открыть заявку" style={{padding:'2px 6px', fontSize:11}}>📂</button>

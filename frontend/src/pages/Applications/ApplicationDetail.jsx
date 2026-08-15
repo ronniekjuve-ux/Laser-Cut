@@ -323,7 +323,7 @@ export default function ApplicationDetail({ app, onClose, onUpdate, onViewOrder,
                     <div><span style={{fontWeight: 600}}>Материал:</span> {data.material || data.steel_grade || '-'}</div>
                     <div><span style={{fontWeight: 600}}>Толщина:</span> {data.thickness != null && data.thickness !== '' ? data.thickness + ' мм' : '-'}</div>
                     <div><span style={{fontWeight: 600}}>Вес листа:</span> {data.total_weight != null && data.total_weight !== '' ? Number(data.total_weight).toFixed(1) + ' кг' : '-'}{data.weight_source === 'calculated' && <span style={{color:'#d97706', fontSize:11, marginLeft:4}}>(расчёт)</span>}</div>
-                    {data.parts_weight != null && <div><span style={{fontWeight: 600}}>Вес деталей:</span> {Number(data.parts_weight).toFixed(1)} кг</div>}
+                    {totalPartsWeight > 0 && <div><span style={{fontWeight: 600}}>Вес деталей:</span> {totalPartsWeight.toFixed(1)} кг</div>}
                     <div><span style={{fontWeight: 600}}>Раскладок:</span> {layouts.length}</div>
                     <div><span style={{fontWeight: 600}}>Видов деталей:</span> {uniquePartTypes}</div>
                     <div><span style={{fontWeight: 600}}>Всего деталей:</span> {totalPartsQty}</div>
