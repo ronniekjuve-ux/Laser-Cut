@@ -391,6 +391,15 @@ async def upload_layout(
             app.total_weight = layout_data.sheet_weight
             app.weight_source = 'calculated'
 
+        # Заполняем веса из файла заявки (если ещё не заполнены)
+        if app.parts_weight is None and app_data.parts_weight is not None:
+            app.parts_weight = app_data.parts_weight
+        if app.skeleton_weight is None and app_data.skeleton_weight is not None:
+            app.skeleton_weight = app_data.skeleton_weight
+        if app.total_weight is None and app_data.total_weight is not None:
+            app.total_weight = app_data.total_weight
+            app.weight_source = 'file'
+
         await db.commit()
 
         return {
