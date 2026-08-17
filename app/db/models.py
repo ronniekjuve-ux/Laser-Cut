@@ -153,6 +153,7 @@ class Application(Base):
     warehouse_item_id: Mapped[Optional[int]] = mapped_column(ForeignKey("warehouse_items.id"), nullable=True)
     sheets_used: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     warehouse_deducted: Mapped[Optional[bool]] = mapped_column(default=False, nullable=True)
+    is_merged: Mapped[Optional[bool]] = mapped_column(default=False, nullable=True)
 
     customer: Mapped["Customer"] = relationship(back_populates="applications")
     updater: Mapped[Optional["User"]] = relationship(foreign_keys=[updated_by])

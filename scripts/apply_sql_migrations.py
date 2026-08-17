@@ -386,6 +386,9 @@ END $$;""",
     # 41. Add parts_weight, skeleton_weight to applications
     "ALTER TABLE applications ADD COLUMN IF NOT EXISTS parts_weight DOUBLE PRECISION;",
     "ALTER TABLE applications ADD COLUMN IF NOT EXISTS skeleton_weight DOUBLE PRECISION;",
+
+    # 42. Add is_merged to applications
+    "ALTER TABLE applications ADD COLUMN IF NOT EXISTS is_merged BOOLEAN DEFAULT FALSE;",
 ]
 
 async def main():

@@ -1312,10 +1312,7 @@ async def merge_layouts(
         if app_obj and app_obj.order_name:
             order_names.append(app_obj.order_name)
 
-    merged_name = "Слияние: " + " + ".join(order_names[:3])
-    if len(order_names) > 3:
-        merged_name += f" (+{len(order_names) - 3})"
-    merged_name = merged_name[:50]
+    merged_name = "+".join(str(aid) for aid in sorted(set(app_ids)))[:50]
 
     first_app = None
     if app_ids:
@@ -1346,6 +1343,7 @@ async def merge_layouts(
 
     if existing_app:
         new_app = existing_app
+        new_app.is_merged = True
         new_app.material = (new_layout_data.material or (first_app.material if first_app else "Steel"))[:50]
         new_app.steel_grade = first_app.steel_grade if first_app else new_app.steel_grade
         new_app.thickness = new_layout_data.thickness or (first_app.thickness if first_app else new_app.thickness)
@@ -1382,6 +1380,7 @@ async def merge_layouts(
             supply_material=first_app.supply_material if first_app else None,
             comments="Объединённые заказчики: " + ", ".join(customers) if len(customers) > 1 else None,
             detail_images=json.dumps(merged_detail_images) if merged_detail_images else None,
+            is_merged=True,
         )
         db.add(new_app)
     await db.flush()

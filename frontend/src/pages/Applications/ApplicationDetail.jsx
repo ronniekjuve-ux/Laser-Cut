@@ -143,6 +143,11 @@ export default function ApplicationDetail({ app, onClose, onUpdate, onViewOrder,
     setConfirmUnmerge(null);
     try {
       await client.post('/api/v1/applications/layouts/' + layoutId + '/unmerge?action=' + action);
+      if (action === 'cancel') {
+        if (onUpdate) onUpdate();
+        onClose();
+        return;
+      }
       const res = await client.get('/api/v1/applications/' + app.id);
       setFullApp(res.data);
       if (onUpdate) onUpdate();

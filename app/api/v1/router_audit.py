@@ -438,7 +438,7 @@ async def audit_applications(
     query = (
         select(Application, Customer)
         .join(Customer, Application.customer_id == Customer.id, isouter=True)
-        .where(~Application.order_name.like("Слияние%"))
+        .where(Application.is_merged != True)
         .order_by(Application.created_at.desc())
     )
 
@@ -464,7 +464,7 @@ async def audit_applications(
     layouts_result = await db.execute(
         select(ApplicationLayout).where(
             ApplicationLayout.application_id.in_(app_ids),
-            ApplicationLayout.status.in_(["active", None])
+            ApplicationLayout.status.in_(["active", "replaced", None])
         )
     )
     all_layouts = layouts_result.scalars().all()
@@ -489,17 +489,14 @@ async def audit_applications(
 
         total_cut_length = 0.0
         total_pierces = 0
-        total_parts_weight = 0.0
         layouts_summary = []
 
         for layout in layouts:
             parts = parts_by_layout.get(layout.id, [])
-            layout_parts_weight = sum(p.weight or 0 for p in parts)
             sc = layout.sheet_count or 1
 
             total_cut_length += (layout.cut_length or 0) * sc
             total_pierces += (layout.pierces or 0) * sc
-            total_parts_weight += layout_parts_weight * sc
 
             layouts_summary.append({
                 "layout_code": layout.layout_code,
@@ -515,7 +512,6 @@ async def audit_applications(
                 "travel_length": layout.travel_length,
                 "pierces": layout.pierces,
                 "parts_count": len(parts),
-                "parts_weight": round(layout_parts_weight, 3),
                 "completed_runs": json.loads(layout.completed_runs) if layout.completed_runs else []
             })
 
@@ -539,7 +535,7 @@ async def audit_applications(
             "total_weight": round(total_sheets_weight, 1),
             "total_cut_length": round(total_cut_length, 1),
             "total_pierces": total_pierces,
-            "total_parts_weight": round(total_parts_weight, 3),
+            "total_parts_weight": app.parts_weight,
             "parts_weight": app.parts_weight,
             "layouts_count": len(layouts),
             "total_sheets": total_sheets,
@@ -666,7 +662,7 @@ async def audit_machines(
         select(ApplicationLayout, Application)
         .join(Application, ApplicationLayout.application_id == Application.id)
         .where(ApplicationLayout.status.in_(["active", None]))
-        .where(~Application.order_name.like("Слияние%"))
+        .where(Application.is_merged != True)
     )
     if date_from:
         query = query.where(Application.created_at >= datetime.fromisoformat(date_from))
