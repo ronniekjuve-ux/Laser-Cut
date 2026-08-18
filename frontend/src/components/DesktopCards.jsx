@@ -167,7 +167,8 @@ function OverflowMenu({ items, onOpenChange }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  if (!items || items.length === 0) return null;
+  const visibleItems = (items || []).filter(Boolean).filter(it => it.visible !== false);
+  if (visibleItems.length === 0) return null;
 
   return (
     <span className="overflow-menu-wrap" ref={ref} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onMouseUp={e => e.stopPropagation()}>
@@ -181,7 +182,7 @@ function OverflowMenu({ items, onOpenChange }) {
       </button>
       {open && (
         <div className="overflow-menu-dropdown" style={{ position: 'fixed', zIndex: 999 }}>
-          {items.filter(it => it.visible !== false).map((it, i) => (
+          {visibleItems.map((it, i) => (
             <div
               key={i}
               className="overflow-menu-item"
@@ -245,7 +246,7 @@ function OrderCard({ app, onClick, onReupload, onEdit, onDelete, onCalc, onNotes
           onReupload && { icon: '📤', label: 'Перезагрузить', onClick: () => onReupload(app) },
           onEdit && { icon: '✏️', label: 'Редактировать', onClick: () => onEdit(app) },
           onDelete && { icon: '🗑', label: 'Удалить', onClick: () => onDelete(app.id), danger: true },
-        ]} onOpenChange={(open) => { menuOpenRef.current = open; if (!open) menuJustClosedRef.current = true; }} />
+        ].filter(Boolean)} onOpenChange={(open) => { menuOpenRef.current = open; if (!open) menuJustClosedRef.current = true; }} />
       </div>
       {showHistory && <CutHistoryModal app={app} onClose={() => setShowHistory(false)} showHeader={false} />}
       {showNotes && <NotesModal app={app} onClose={() => setShowNotes(false)} onSaved={() => { setShowNotes(false); if (onNotesSaved) onNotesSaved(); }} />}
@@ -294,7 +295,7 @@ function ApplicationCard({ app, onClick, onReupload, onEdit, onDelete, onCalc, o
           onReupload && { icon: '📤', label: 'Перезагрузить', onClick: () => onReupload(app) },
           onEdit && { icon: '✏️', label: 'Редактировать', onClick: () => onEdit(app) },
           onDelete && { icon: '🗑', label: 'Удалить', onClick: () => onDelete(app.id), danger: true },
-        ]} onOpenChange={(open) => { menuOpenRef.current = open; if (!open) menuJustClosedRef.current = true; }} />
+        ].filter(Boolean)} onOpenChange={(open) => { menuOpenRef.current = open; if (!open) menuJustClosedRef.current = true; }} />
       </div>
       {showNotes && <NotesModal app={app} onClose={() => setShowNotes(false)} onSaved={() => { setShowNotes(false); if (onNotesSaved) onNotesSaved(); }} />}
     </div>
@@ -408,7 +409,7 @@ function CompletedCard({ app, onClick, onCancelCut, onCalc, onReturn }) {
           onCalc && { icon: '🧮', label: 'Калькулятор', onClick: () => onCalc(app) },
           { icon: '📋', label: 'История', onClick: () => setShowHistory(true) },
           onReturn && { icon: '↩', label: 'Вернуть в резку', onClick: () => onReturn(app), danger: true },
-        ]} onOpenChange={(open) => { menuOpenRef.current = open; if (!open) menuJustClosedRef.current = true; }} />
+        ].filter(Boolean)} onOpenChange={(open) => { menuOpenRef.current = open; if (!open) menuJustClosedRef.current = true; }} />
       </div>
       {showHistory && <CutHistoryModal app={app} onClose={() => setShowHistory(false)} />}
     </div>
