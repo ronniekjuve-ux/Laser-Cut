@@ -520,6 +520,15 @@ async def audit_applications(
         total_sheets = sum(l.sheet_count or 1 for l in layouts)
         total_sheets_weight = sum((l.sheet_weight or 0) * (l.sheet_count or 1) for l in layouts)
 
+        # Фоллбэк: если parts_weight NULL, считаем из layout parts
+        parts_weight = app.parts_weight
+        if parts_weight is None:
+            parts_weight = sum(
+                (p.weight or 0) * (p.quantity or 0)
+                for layout in layouts
+                for p in parts_by_layout.get(layout.id, [])
+            ) or None
+
         enriched.append({
             "id": app.id,
             "order_name": app.order_name,
@@ -535,8 +544,8 @@ async def audit_applications(
             "total_weight": round(total_sheets_weight, 1),
             "total_cut_length": round(total_cut_length, 1),
             "total_pierces": total_pierces,
-            "total_parts_weight": app.parts_weight,
-            "parts_weight": app.parts_weight,
+            "total_parts_weight": parts_weight,
+            "parts_weight": parts_weight,
             "layouts_count": len(layouts),
             "total_sheets": total_sheets,
             "layouts": layouts_summary,
