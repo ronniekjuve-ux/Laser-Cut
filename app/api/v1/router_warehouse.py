@@ -114,7 +114,7 @@ async def list_warehouse(
                 if bid not in weight_map:
                     weight_map[bid] = {"layout_sheet_weight": 0, "parts_weight": 0}
                 weight_map[bid]["layout_sheet_weight"] += (layout.sheet_weight or 0) * (layout.sheet_count or 1)
-                # Calculate parts weight from layout parts
+                # Calculate parts weight from layout parts (учитываем sheet_count)
                 parts_weight = 0
                 try:
                     from app.db.models import ApplicationLayoutPart
@@ -122,7 +122,7 @@ async def list_warehouse(
                         select(ApplicationLayoutPart).where(ApplicationLayoutPart.layout_id == layout.id)
                     )
                     for p in parts_res.scalars().all():
-                        parts_weight += (p.weight or 0) * (p.quantity or 0)
+                        parts_weight += (p.weight or 0) * (p.quantity or 0) * (layout.sheet_count or 1)
                 except Exception:
                     pass
                 weight_map[bid]["parts_weight"] += parts_weight

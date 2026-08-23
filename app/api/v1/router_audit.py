@@ -524,7 +524,7 @@ async def audit_applications(
         parts_weight = app.parts_weight
         if parts_weight is None:
             parts_weight = sum(
-                (p.weight or 0) * (p.quantity or 0)
+                (p.weight or 0) * (p.quantity or 0) * (layout.sheet_count or 1)
                 for layout in layouts
                 for p in parts_by_layout.get(layout.id, [])
             ) or None
