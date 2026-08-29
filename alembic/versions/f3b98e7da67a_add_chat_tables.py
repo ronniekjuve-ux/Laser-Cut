@@ -21,7 +21,7 @@ def upgrade() -> None:
     op.create_table('messages',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('sender_id', sa.Integer(), nullable=False),
-        sa.Column('chat_type', sa.Enum('GENERAL', 'PERSONAL', name='chattype'), nullable=False),
+        sa.Column('chat_type', sa.Enum('general', 'personal', name='chattype'), nullable=False),
         sa.Column('chat_id', sa.Integer(), nullable=True),
         sa.Column('content', sa.Text(), nullable=False),
         sa.Column('reply_to_id', sa.Integer(), nullable=True),
