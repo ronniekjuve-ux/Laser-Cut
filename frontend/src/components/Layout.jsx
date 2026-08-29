@@ -8,6 +8,7 @@ import InstallPWA from './InstallPWA';
 import BottomNav from './BottomNav';
 import UpdateBanner from './UpdateBanner';
 import CacheManager from './CacheManager';
+import ChatWidget from './ChatWidget';
 import { getShiftForDate, loadOverridesFromServer } from '../utils/shifts';
 
 function getActiveOps(overrides) {
@@ -204,6 +205,7 @@ export default function Layout() {
           <Outlet />
         </div>
         <InstallPWA />
+        {!isMobile && <ChatWidget />}
         {isMobile && <BottomNav user={user} />}
       </div>
     </div>
