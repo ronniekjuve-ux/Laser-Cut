@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.api import auth, users, audit
+from app.api import auth, users, audit, chat
 from app.api.v1.router_orders import router as orders_router
 from app.api.v1.router_applications import router as applications_router
 from app.api.v1.router_images import router as images_router
@@ -122,6 +122,7 @@ app.include_router(images_router, prefix="/api/v1")
 app.include_router(warehouse_router, prefix="/api/v1")
 app.include_router(feedback_router, prefix="/api/v1")
 app.include_router(audit_data_router)
+app.include_router(chat.router)
 
 @app.get("/health")
 async def health():
