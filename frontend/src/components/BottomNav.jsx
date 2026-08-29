@@ -31,6 +31,13 @@ const NAV_GROUPS = [
     roles: ['admin', 'director', 'accountant', 'operator'],
   },
   {
+    id: 'chat',
+    label: 'Чат',
+    icon: '💬',
+    to: '/chat',
+    roles: ['admin', 'director', 'accountant', 'operator', 'customer'],
+  },
+  {
     id: 'more',
     label: 'Ещё',
     icon: '⋯',
@@ -56,6 +63,9 @@ export default function BottomNav() {
     }
     if (group.id === 'more') {
       return ['/users', '/changelog', '/feedback', '/more'].some(p => location.pathname === p);
+    }
+    if (group.id === 'chat') {
+      return location.pathname === '/chat';
     }
     return location.pathname === group.to;
   };

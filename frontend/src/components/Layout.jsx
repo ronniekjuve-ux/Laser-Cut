@@ -127,6 +127,7 @@ export default function Layout() {
     if (p === '/audit-mobile') return 'Аудит';
     if (p === '/changelog') return 'История изменений';
     if (p === '/feedback') return 'Жалобы и предложения';
+    if (p === '/chat') return 'Чат';
     if (p.startsWith('/applications/')) return 'Детали заявки';
     return 'Предварительный расчёт';
   })();

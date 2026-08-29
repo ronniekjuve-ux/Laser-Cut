@@ -17,6 +17,7 @@ import OrdersList from './pages/Orders/OrdersList';
 import CompletedOrdersList from './pages/Orders/CompletedOrdersList';
 import Feedback from './pages/Feedback';
 import MorePage from './pages/MorePage';
+import ChatPage from './components/ChatPage';
 import useIsMobile from './hooks/useIsMobile';
 
 function MobileIndex() {
@@ -112,6 +113,11 @@ export default function App() {
             <Route path="more" element={
               <ProtectedRoute>
                 <MorePage />
+              </ProtectedRoute>
+            } />
+            <Route path="chat" element={
+              <ProtectedRoute>
+                <ChatPage />
               </ProtectedRoute>
             } />
           </Route>

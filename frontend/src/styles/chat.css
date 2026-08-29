@@ -174,3 +174,15 @@
 .chat-mention-item:hover {
   background: #f3f4f6;
 }
+
+/* ChatPage - full-page mobile chat */
+.chat-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px); /* Full height minus header */
+}
+
+.chat-page-header {
+  padding: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
