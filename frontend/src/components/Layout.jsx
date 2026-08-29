@@ -10,6 +10,7 @@ import UpdateBanner from './UpdateBanner';
 import CacheManager from './CacheManager';
 import ChatWidget from './ChatWidget';
 import { getShiftForDate, loadOverridesFromServer } from '../utils/shifts';
+import { getUnreadCount } from '../api/chat';
 
 function getActiveOps(overrides) {
   const h = new Date().getHours();
@@ -93,6 +94,16 @@ export default function Layout() {
     fetchNotifs();
     const id = setInterval(fetchNotifs, 30000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const fetchChatUnread = async () => {
+      try {
+        const count = await getUnreadCount();
+        setUnreadCount(prev => prev + count);
+      } catch {}
+    };
+    fetchChatUnread();
   }, []);
 
   const openNotifications = async () => {
