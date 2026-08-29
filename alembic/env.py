@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 # Импортируем Base И ВСЕ МОДЕЛИ
 from app.db.base import Base
-from app.models import user, audit, session
+from app.models import user, audit, session, message
 
 config = context.config
 
