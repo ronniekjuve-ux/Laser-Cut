@@ -48,6 +48,27 @@ async def ensure_chat_db():
                 await conn.execute(text("CREATE INDEX ix_messages_chat_id ON messages(chat_id)"))
                 logger.info("Created messages table")
 
+            # Convert chatttype enum to varchar if needed
+            col_result = await conn.execute(text(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name = 'messages' AND column_name = 'chat_type'"
+            ))
+            col_type = col_result.scalar()
+            if col_type and 'character' not in col_type:
+                # chat_type is not varchar — convert it
+                await conn.execute(text(
+                    "ALTER TABLE messages ALTER COLUMN chat_type TYPE VARCHAR(20) USING chat_type::text"
+                ))
+                logger.info("Converted chat_type from enum to varchar")
+
+            # Drop the old chatttype enum if it exists and is unused
+            await conn.execute(text("""
+                DO $$ BEGIN
+                    DROP TYPE IF EXISTS chatttype;
+                EXCEPTION WHEN others THEN NULL;
+                END $$;
+            """))
+
             # Ensure is_edited, is_deleted columns
             cols_result = await conn.execute(text(
                 "SELECT column_name FROM information_schema.columns WHERE table_name = 'messages'"
