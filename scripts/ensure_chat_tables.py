@@ -15,12 +15,19 @@ async def ensure_chat_tables():
         has_messages = result.scalar()
 
         if not has_messages:
-            print("Creating messages table...")
+            print("Creating chattype enum and messages table...")
+            await conn.execute(text("""
+                DO $$ BEGIN
+                    CREATE TYPE chatttype AS ENUM ('general', 'personal');
+                EXCEPTION WHEN duplicate_object THEN
+                    NULL;
+                END $$;
+            """))
             await conn.execute(text("""
                 CREATE TABLE messages (
                     id SERIAL PRIMARY KEY,
                     sender_id INTEGER NOT NULL REFERENCES users(id),
-                    chat_type VARCHAR(20) NOT NULL DEFAULT 'general',
+                    chat_type chatttype NOT NULL DEFAULT 'general',
                     chat_id INTEGER REFERENCES users(id),
                     content TEXT NOT NULL,
                     reply_to_id INTEGER REFERENCES messages(id),
