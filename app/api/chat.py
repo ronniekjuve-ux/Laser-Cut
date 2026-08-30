@@ -2,7 +2,7 @@
 from datetime import timezone
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 from app.db.base import get_db
 from app.models.user import User, UserRole
 from app.models.message import Message, MessageMention, ChatType
