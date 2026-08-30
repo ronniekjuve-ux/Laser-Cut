@@ -2,7 +2,7 @@
 import enum
 from datetime import datetime, timezone
 from typing import Optional, List
-from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Enum as SAEnum, UniqueConstraint
+from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -17,7 +17,7 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    chat_type: Mapped[ChatType] = mapped_column(SAEnum(ChatType, values_callable=lambda x: [e.value for e in x]), default=ChatType.GENERAL)
+    chat_type: Mapped[str] = mapped_column(String(20), default="general")
     chat_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     reply_to_id: Mapped[Optional[int]] = mapped_column(ForeignKey("messages.id"), nullable=True)

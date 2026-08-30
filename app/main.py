@@ -25,14 +25,6 @@ async def ensure_chat_db():
         from app.db.base import engine
         from sqlalchemy import text
         async with engine.connect() as conn:
-            # Create chatttype enum
-            await conn.execute(text("""
-                DO $$ BEGIN
-                    CREATE TYPE chatttype AS ENUM ('general', 'personal');
-                EXCEPTION WHEN duplicate_object THEN NULL;
-                END $$;
-            """))
-
             # Create messages table if missing
             result = await conn.execute(text(
                 "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'messages')"
@@ -42,7 +34,7 @@ async def ensure_chat_db():
                     CREATE TABLE messages (
                         id SERIAL PRIMARY KEY,
                         sender_id INTEGER NOT NULL REFERENCES users(id),
-                        chat_type chatttype NOT NULL DEFAULT 'general',
+                        chat_type VARCHAR(20) NOT NULL DEFAULT 'general',
                         chat_id INTEGER REFERENCES users(id),
                         content TEXT NOT NULL,
                         reply_to_id INTEGER REFERENCES messages(id),
@@ -55,18 +47,6 @@ async def ensure_chat_db():
                 await conn.execute(text("CREATE INDEX ix_messages_sender_id ON messages(sender_id)"))
                 await conn.execute(text("CREATE INDEX ix_messages_chat_id ON messages(chat_id)"))
                 logger.info("Created messages table")
-
-            # Convert varchar chat_type to enum if needed
-            col_result = await conn.execute(text(
-                "SELECT data_type FROM information_schema.columns "
-                "WHERE table_name = 'messages' AND column_name = 'chat_type'"
-            ))
-            col_type = col_result.scalar()
-            if col_type and 'character' in col_type:
-                await conn.execute(text(
-                    "ALTER TABLE messages ALTER COLUMN chat_type TYPE chatttype USING chat_type::chatttype"
-                ))
-                logger.info("Converted chat_type to enum")
 
             # Ensure is_edited, is_deleted columns
             cols_result = await conn.execute(text(
