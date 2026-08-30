@@ -1,3 +1,6 @@
+import sys
+sys.path.insert(0, '/app')
+
 import asyncio
 from app.db.base import engine
 from sqlalchemy import text
