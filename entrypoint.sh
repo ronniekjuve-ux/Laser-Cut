@@ -4,6 +4,9 @@ set -e
 echo "Ensuring schema..."
 python /app/scripts/ensure_password_plain.py || echo "Schema ensure skipped (non-critical)"
 
+echo "Ensuring chat tables..."
+python /app/scripts/ensure_chat_tables.py || echo "Chat tables ensure skipped"
+
 echo "Cleaning orphan alembic revisions..."
 python /app/scripts/fix_alembic.py || echo "Alembic cleanup skipped"
 

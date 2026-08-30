@@ -258,8 +258,11 @@ async def list_chat_users(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List users available for mentions."""
-    stmt = select(User).where(User.id != current_user.id)
+    """List users available for mentions (excludes hidden users)."""
+    stmt = select(User).where(
+        User.id != current_user.id,
+        User.show_in_chat == True
+    )
     result = await db.execute(stmt)
     users = result.scalars().all()
     return [{"id": u.id, "username": u.username, "role": u.role.value} for u in users]

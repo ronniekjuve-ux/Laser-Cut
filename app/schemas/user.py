@@ -15,6 +15,7 @@ class UserUpdate(BaseModel):
     status: UserStatus | None = None
     password: str | None = None
     customer_ids: list[int] | None = None
+    show_in_chat: bool | None = None
 
 
 class UserOut(BaseModel):
@@ -23,6 +24,7 @@ class UserOut(BaseModel):
     email: str | None
     role: UserRole
     status: UserStatus
+    show_in_chat: bool = True
     customer_ids: list[int] = []
     customer_names: list[str] = []
 
