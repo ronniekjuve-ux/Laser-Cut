@@ -190,8 +190,6 @@ async def update_user(
             pass
     if payload.customer_ids is not None:
         await _set_user_customers(user.id, payload.customer_ids, db)
-    if payload.show_in_chat is not None:
-        user.show_in_chat = payload.show_in_chat
 
     await db.commit()
     await db.refresh(user)
@@ -201,7 +199,6 @@ async def update_user(
     return UserOut(
         id=user.id, username=user.username, email=user.email,
         role=user.role, status=user.status,
-        show_in_chat=getattr(user, 'show_in_chat', True),
         customer_ids=cust_ids, customer_names=cust_names
     )
 

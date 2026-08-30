@@ -56,7 +56,6 @@ class User(Base):
     status: Mapped[UserStatus] = mapped_column(SAEnum(UserStatus), default=UserStatus.ACTIVE)
     customer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("customers.id"), nullable=True)
     last_active: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    show_in_chat: Mapped[bool] = mapped_column(default=True)
 
     customer: Mapped[Optional["Customer"]] = relationship(back_populates="users")
     assigned_customers: Mapped[List["Customer"]] = relationship(

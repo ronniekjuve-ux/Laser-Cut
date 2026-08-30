@@ -259,13 +259,25 @@ async def list_chat_users(
     db: AsyncSession = Depends(get_db)
 ):
     """List users available for mentions (excludes hidden users)."""
-    stmt = select(User).where(
-        User.id != current_user.id,
-        User.show_in_chat == True
-    )
-    result = await db.execute(stmt)
-    users = result.scalars().all()
-    return [{"id": u.id, "username": u.username, "role": u.role.value} for u in users]
+    # Check if show_in_chat column exists
+    col_check = await db.execute(text(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+        "WHERE table_name = 'users' AND column_name = 'show_in_chat')"
+    ))
+    has_col = col_check.scalar()
+
+    if has_col:
+        result = await db.execute(text(
+            "SELECT id, username, role FROM users "
+            "WHERE id != :uid AND show_in_chat = TRUE"
+        ), {"uid": current_user.id})
+    else:
+        result = await db.execute(text(
+            "SELECT id, username, role FROM users WHERE id != :uid"
+        ), {"uid": current_user.id})
+
+    rows = result.fetchall()
+    return [{"id": r[0], "username": r[1], "role": r[2]} for r in rows]
 
 
 @router.put("/messages/{message_id}", response_model=MessageResponse)
