@@ -12,13 +12,22 @@ async def get_visible_messages(
     chat_type: Optional[ChatType] = None,
     limit: int = 50,
     offset: int = 0,
-    before: Optional[int] = None
+    before: Optional[int] = None,
+    chat_id: Optional[int] = None
 ) -> List[Message]:
     """Get messages visible to the user based on their role."""
     stmt = select(Message)
 
     if chat_type:
         stmt = stmt.where(Message.chat_type == chat_type)
+
+    if chat_id:
+        stmt = stmt.where(
+            or_(
+                and_(Message.sender_id == user.id, Message.chat_id == chat_id),
+                and_(Message.sender_id == chat_id, Message.chat_id == user.id)
+            )
+        )
 
     if before:
         stmt = stmt.where(Message.id < before)
@@ -75,7 +84,7 @@ async def get_visible_messages(
             )
         )
 
-    stmt = stmt.order_by(Message.created_at.desc()).offset(offset).limit(limit)
+    stmt = stmt.order_by(Message.created_at.asc()).offset(offset).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

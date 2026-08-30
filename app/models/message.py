@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Enum as SAEnum, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -17,11 +17,13 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    chat_type: Mapped[ChatType] = mapped_column(SAEnum(ChatType), default=ChatType.GENERAL)
+    chat_type: Mapped[ChatType] = mapped_column(SAEnum(ChatType, values_callable=lambda x: [e.value for e in x]), default=ChatType.GENERAL)
     chat_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     reply_to_id: Mapped[Optional[int]] = mapped_column(ForeignKey("messages.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    is_edited: Mapped[bool] = mapped_column(default=False)
+    is_deleted: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     sender = relationship("User", foreign_keys=[sender_id], lazy="selectin")

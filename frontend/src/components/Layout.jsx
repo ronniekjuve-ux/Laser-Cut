@@ -217,7 +217,7 @@ export default function Layout() {
           <Outlet />
         </div>
         <InstallPWA />
-        {!isMobile && <ChatWidget />}
+        {location.pathname !== '/chat' && <ChatWidget />}
         {isMobile && <BottomNav user={user} />}
       </div>
     </div>
