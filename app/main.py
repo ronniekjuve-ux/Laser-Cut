@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -17,11 +18,100 @@ logger = logging.getLogger(__name__)
 
 is_prod = settings.ENVIRONMENT == "prod"
 
+
+async def ensure_chat_db():
+    """Create chat tables if they don't exist. Runs on app startup."""
+    try:
+        from app.db.base import engine
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            # Create chatttype enum
+            await conn.execute(text("""
+                DO $$ BEGIN
+                    CREATE TYPE chatttype AS ENUM ('general', 'personal');
+                EXCEPTION WHEN duplicate_object THEN NULL;
+                END $$;
+            """))
+
+            # Create messages table if missing
+            result = await conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'messages')"
+            ))
+            if not result.scalar():
+                await conn.execute(text("""
+                    CREATE TABLE messages (
+                        id SERIAL PRIMARY KEY,
+                        sender_id INTEGER NOT NULL REFERENCES users(id),
+                        chat_type chatttype NOT NULL DEFAULT 'general',
+                        chat_id INTEGER REFERENCES users(id),
+                        content TEXT NOT NULL,
+                        reply_to_id INTEGER REFERENCES messages(id),
+                        is_edited BOOLEAN NOT NULL DEFAULT FALSE,
+                        is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ
+                    )
+                """))
+                await conn.execute(text("CREATE INDEX ix_messages_sender_id ON messages(sender_id)"))
+                await conn.execute(text("CREATE INDEX ix_messages_chat_id ON messages(chat_id)"))
+                logger.info("Created messages table")
+
+            # Convert varchar chat_type to enum if needed
+            col_result = await conn.execute(text(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name = 'messages' AND column_name = 'chat_type'"
+            ))
+            col_type = col_result.scalar()
+            if col_type and 'character' in col_type:
+                await conn.execute(text(
+                    "ALTER TABLE messages ALTER COLUMN chat_type TYPE chatttype USING chat_type::chatttype"
+                ))
+                logger.info("Converted chat_type to enum")
+
+            # Ensure is_edited, is_deleted columns
+            cols_result = await conn.execute(text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'messages'"
+            ))
+            cols = {row[0] for row in cols_result}
+            if 'is_edited' not in cols:
+                await conn.execute(text("ALTER TABLE messages ADD COLUMN is_edited BOOLEAN NOT NULL DEFAULT FALSE"))
+            if 'is_deleted' not in cols:
+                await conn.execute(text("ALTER TABLE messages ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT FALSE"))
+
+            # Create message_mentions table if missing
+            result = await conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'message_mentions')"
+            ))
+            if not result.scalar():
+                await conn.execute(text("""
+                    CREATE TABLE message_mentions (
+                        id SERIAL PRIMARY KEY,
+                        message_id INTEGER NOT NULL REFERENCES messages(id),
+                        mentioned_user_id INTEGER NOT NULL REFERENCES users(id),
+                        UNIQUE(message_id, mentioned_user_id)
+                    )
+                """))
+                await conn.execute(text("CREATE INDEX ix_message_mentions_message_id ON message_mentions(message_id)"))
+                await conn.execute(text("CREATE INDEX ix_message_mentions_mentioned_user_id ON message_mentions(mentioned_user_id)"))
+                logger.info("Created message_mentions table")
+
+            await conn.commit()
+            logger.info("Chat DB tables ensured OK")
+    except Exception as e:
+        logger.error("Failed to ensure chat tables: %s", e)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    await ensure_chat_db()
+    yield
+
 app = FastAPI(
     title="LaserCut Core",
     version="1.0.0",
     docs_url=None if is_prod else "/docs",
     redoc_url=None if is_prod else "/redoc",
+    lifespan=lifespan,
 )
 
 
