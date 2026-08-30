@@ -2,8 +2,6 @@ services:
   frontend:
     build:
       context: ./frontend
-    environment:
-      - VITE_API_URL=https://laser-cut.pro/api
     depends_on:
       - backend
 

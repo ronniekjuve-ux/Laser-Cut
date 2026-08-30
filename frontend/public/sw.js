@@ -1,107 +1,47 @@
-const CACHE_VERSION = '2026-07-26-v6';
+const CACHE_VERSION = '2026-08-31-v1';
 const CACHE_NAME = `lasercut-${CACHE_VERSION}`;
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icons/icon-192.svg',
-  '/icons/icon-512.svg'
-];
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
-      );
-    })
+    caches.keys().then((names) => {
+      return Promise.all(names.map(n => caches.delete(n)));
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
-  // Never cache API calls, auth, websocket, or admin pages
-  if (event.request.url.includes('/api/') ||
-      event.request.url.includes('/auth/') ||
-      event.request.url.includes('/ws/') ||
-      event.request.url.includes('/admin/')) {
-    return;
-  }
-
-  // Network-first for HTML pages
-  if (event.request.mode === 'navigate' ||
-      event.request.headers.get('accept')?.includes('text/html')) {
-    event.respondWith(
-      fetch(event.request).then(response => {
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then(cache => {
-          cache.put(event.request, responseClone);
-        });
-        return response;
-      }).catch(() => {
-        return caches.match(event.request).then(r => r || new Response('Offline', { status: 503 }));
-      })
-    );
-    return;
-  }
-
-  // Always network-first for JS and CSS
   const url = new URL(event.request.url);
-  if (event.request.method === 'GET' && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'))) {
-    event.respondWith(
-      fetch(event.request).then(response => {
-        if (response && response.status === 200) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseClone);
-          });
-        }
-        return response;
-      }).catch(() => {
-        return caches.match(event.request).then(r => r || new Response('Offline', { status: 503 }));
-      })
-    );
+
+  // Never intercept: API, auth, websocket, navigation, JS, CSS, HTML
+  if (url.pathname.startsWith('/api/') ||
+      url.pathname.startsWith('/auth/') ||
+      url.pathname.startsWith('/ws/') ||
+      event.request.mode === 'navigate' ||
+      url.pathname.endsWith('.js') ||
+      url.pathname.endsWith('.css') ||
+      url.pathname.endsWith('.html') ||
+      url.pathname === '/') {
     return;
   }
 
-  // Cache-first for other static assets (images, icons, fonts) — skip navigation
-  if (event.request.method === 'GET' && event.request.mode !== 'navigate') {
+  // Cache only images, fonts, icons
+  if (event.request.method === 'GET' &&
+      (url.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|woff2?|ttf|eot)$/) ||
+       url.pathname.startsWith('/icons/'))) {
     event.respondWith(
-      caches.match(event.request).then(response => {
-        if (response) return response;
-        return fetch(event.request).then(fetchResponse => {
-          if (fetchResponse && fetchResponse.status === 200) {
-            const responseClone = fetchResponse.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, responseClone);
-            });
+      caches.match(event.request).then(cached => {
+        if (cached) return cached;
+        return fetch(event.request).then(response => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
           }
-          return fetchResponse;
-        }).catch(() => new Response('Offline', { status: 503 }));
-      })
-    );
-  }
-});
-
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-  if (event.data && event.data.type === 'CLEAR_AND_RELOAD') {
-    caches.keys().then(names =>
-      Promise.all(names.map(n => caches.delete(n)))
-    ).then(() =>
-      self.clients.matchAll().then(clients => {
-        clients.forEach(client => client.postMessage({ type: 'CACHE_CLEARED' }));
+          return response;
+        }).catch(() => new Response('', { status: 408 }));
       })
     );
   }
