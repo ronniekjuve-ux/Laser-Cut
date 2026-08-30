@@ -4,6 +4,9 @@ set -e
 echo "Ensuring schema..."
 python /app/scripts/ensure_password_plain.py || echo "Schema ensure skipped (non-critical)"
 
+echo "Cleaning orphan alembic revisions..."
+python /app/scripts/fix_alembic.py || echo "Alembic cleanup skipped"
+
 echo "Running alembic migrations..."
 alembic upgrade heads || echo "Migration skipped"
 
