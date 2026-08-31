@@ -98,6 +98,23 @@ async def ensure_chat_db():
 
             await conn.commit()
             logger.info("Chat DB tables ensured OK")
+
+            # Ensure login_history has device columns
+            lh_cols_result = await conn.execute(text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'login_history'"
+            ))
+            lh_cols = {row[0] for row in lh_cols_result}
+            if 'device_id' not in lh_cols:
+                await conn.execute(text("ALTER TABLE login_history ADD COLUMN device_id VARCHAR(64)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_login_history_device_id ON login_history(device_id)"))
+                logger.info("Added device_id to login_history")
+            if 'device_name' not in lh_cols:
+                await conn.execute(text("ALTER TABLE login_history ADD COLUMN device_name VARCHAR(100)"))
+                logger.info("Added device_name to login_history")
+            if 'device_type' not in lh_cols:
+                await conn.execute(text("ALTER TABLE login_history ADD COLUMN device_type VARCHAR(20)"))
+                logger.info("Added device_type to login_history")
+            await conn.commit()
     except Exception as e:
         logger.error("Failed to ensure chat tables: %s", e)
 
