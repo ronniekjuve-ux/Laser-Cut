@@ -12,6 +12,7 @@ from app.services.chat import get_visible_messages, create_message, get_unread_c
 from typing import Optional, Dict, Set
 from jose import JWTError, jwt
 from app.core.config import settings
+from contextlib import asynccontextmanager
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
@@ -38,6 +39,13 @@ async def websocket_chat(websocket: WebSocket):
         chat_connections[user_id] = set()
     chat_connections[user_id].add(websocket)
 
+    # Update last_active on connect
+    async with asynccontextmanager(get_db)() as db:
+        user = await db.get(User, user_id)
+        if user:
+            user.last_active = datetime.now(timezone.utc).replace(tzinfo=None)
+            await db.commit()
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -53,6 +61,14 @@ async def websocket_chat(websocket: WebSocket):
                             })
                         except Exception:
                             pass
+            elif data.get("type") == "heartbeat":
+                # Update last_active on heartbeat
+                async with asynccontextmanager(get_db)() as db:
+                    user = await db.get(User, user_id)
+                    if user:
+                        user.last_active = datetime.now(timezone.utc).replace(tzinfo=None)
+                        await db.commit()
+                await websocket.send_json({"type": "heartbeat_ack"})
     except WebSocketDisconnect:
         chat_connections[user_id].discard(websocket)
         if not chat_connections[user_id]:

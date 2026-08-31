@@ -26,6 +26,14 @@ function timeAgo(isoStr) {
   return days + ' дн назад';
 }
 
+const DEVICE_ICONS = {
+  desktop: '🖥️',
+  mobile: '📱',
+  tablet: '📟',
+  api: '⚙️',
+  unknown: '❓',
+};
+
 export default function UsersList() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -145,7 +153,11 @@ export default function UsersList() {
                   )}
                 </td>
                 <td style={{fontSize: 12, color: '#64748b', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-                  {user.device_info || '—'}
+                  {user.device_info ? (
+                    <span title={user.device_info}>
+                      {DEVICE_ICONS[user.device_type] || '🖥️'} {user.device_info}
+                    </span>
+                  ) : '—'}
                 </td>
                 <td>
                   {user.status === 'suspended' ? (

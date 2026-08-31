@@ -9,6 +9,7 @@ from app.db.models import LoginHistory
 from app.schemas.auth import LoginRequest, TokenResponse, QRLoginRequest
 from app.core.security import verify_password, create_token, get_password_hash
 from app.core.deps import get_current_user
+from app.api.users import parse_user_agent_full
 import uuid
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -37,18 +38,25 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
     )
     db.add(session)
 
+    device_id = request.headers.get("x-device-id", "")[:64]
+    user_agent = request.headers.get("user-agent", "")[:200]
+    device_info = parse_user_agent_full(user_agent)
     db.add(LoginHistory(
         user_id=user.id,
         ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent", "")[:200]
+        user_agent=user_agent,
+        device_id=device_id or None,
+        device_type=device_info.get("device_type"),
+        device_name=device_info.get("device_name"),
     ))
+    user.last_active = datetime.now(timezone.utc).replace(tzinfo=None)
     await db.commit()
 
     return TokenResponse(access_token=token, token_type="bearer")
 
 
 @router.post("/login/qr", response_model=TokenResponse)
-async def login_qr(req: QRLoginRequest, db: AsyncSession = Depends(get_db)):
+async def login_qr(req: QRLoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     stmt = select(User).where(User.username == req.qr_payload, User.role == UserRole.OPERATOR)
     res = await db.execute(stmt)
     user = res.scalars().first()
@@ -66,6 +74,18 @@ async def login_qr(req: QRLoginRequest, db: AsyncSession = Depends(get_db)):
         token_jti=jti,
         expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=5)
     ))
+
+    user_agent = request.headers.get("user-agent", "")[:200]
+    device_info = parse_user_agent_full(user_agent)
+    db.add(LoginHistory(
+        user_id=user.id,
+        ip_address=request.client.host if request.client else None,
+        user_agent=user_agent,
+        device_id=request.headers.get("x-device-id", "")[:64] or None,
+        device_type=device_info.get("device_type"),
+        device_name=device_info.get("device_name"),
+    ))
+    user.last_active = datetime.now(timezone.utc).replace(tzinfo=None)
     await db.commit()
 
     return TokenResponse(access_token=token, token_type="bearer")

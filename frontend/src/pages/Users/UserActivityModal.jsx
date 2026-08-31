@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import client from '../../api/client';
 
 const ACTION_LABELS = {
@@ -198,6 +198,7 @@ export default function UserActivityModal({ user, onClose }) {
                                   <th>Вход</th>
                                   <th>Выход</th>
                                   <th>IP</th>
+                                  <th>Устройство</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -206,6 +207,14 @@ export default function UserActivityModal({ user, onClose }) {
                                     <td>{new Date(l.login_at).toLocaleString('ru-RU')}</td>
                                     <td>{l.logout_at ? new Date(l.logout_at).toLocaleString('ru-RU') : '—'}</td>
                                     <td>{l.ip_address || '—'}</td>
+                                    <td style={{fontSize: 12}}>
+                                      {l.device_name || '—'}
+                                      {l.device_type && (
+                                        <span style={{marginLeft: 4, color: '#94a3b8'}}>
+                                          ({l.device_type === 'desktop' ? 'ПК' : l.device_type === 'mobile' ? 'Моб' : l.device_type === 'tablet' ? 'Планшет' : l.device_type})
+                                        </span>
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>

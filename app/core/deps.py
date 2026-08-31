@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends, HTTPException, status
@@ -13,9 +13,11 @@ from app.db.models import UserActivity, LoginHistory, user_customers
 from fastapi.security import HTTPBearer
 import uuid
 import json
-from datetime import datetime
 
 oauth2_scheme = HTTPBearer()
+
+# Auto-logout timeout: 30 minutes of inactivity
+AUTO_LOGOUT_TIMEOUT_MINUTES = 30
 
 
 async def get_current_user(token: HTTPAuthorizationCredentials = Depends(oauth2_scheme),
@@ -45,12 +47,27 @@ async def get_current_user(token: HTTPAuthorizationCredentials = Depends(oauth2_
         if not user or user.status != UserStatus.ACTIVE:
             raise HTTPException(status_code=403, detail="Account inactive")
 
+        # Auto-logout check: if last_active > 30 min ago, session expired
         now = datetime.now(timezone.utc)
+        if user.last_active:
+            last_active = user.last_active
+            if last_active.tzinfo is None:
+                last_active = last_active.replace(tzinfo=timezone.utc)
+            if (now - last_active) > timedelta(minutes=AUTO_LOGOUT_TIMEOUT_MINUTES):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Session expired due to inactivity"
+                )
+
         user.last_active = now
-        db.add(UserActivity(user_id=user.id, timestamp=now, action_type="api_call"))
+        # Only create UserActivity if heartbeat is not available (fallback)
+        # With WebSocket heartbeat, we skip per-request activity logging
+        # db.add(UserActivity(user_id=user.id, timestamp=now, action_type="api_call"))
         await db.flush()
 
         return user
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {str(e)}")
 

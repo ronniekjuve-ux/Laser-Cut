@@ -331,6 +331,9 @@ class LoginHistory(Base):
     logout_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     ip_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     user_agent: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    device_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    device_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    device_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # desktop, mobile, tablet
 
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
 

@@ -99,6 +99,13 @@ export function useChat() {
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
+    // Heartbeat interval - send every 30 seconds
+    const heartbeatInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'heartbeat' }));
+      }
+    }, 30000);
+
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -129,6 +136,8 @@ export function useChat() {
         } else if (data.type === 'message_deleted') {
           const deleted = data.message;
           setMessages(prev => prev.map(m => m.id === deleted.id ? { ...m, is_deleted: true, content: '' } : m));
+        } else if (data.type === 'heartbeat_ack') {
+          // Heartbeat acknowledged
         }
       } catch (err) {
         console.error('WebSocket parse error:', err);
@@ -136,10 +145,12 @@ export function useChat() {
     };
 
     ws.onclose = () => {
+      clearInterval(heartbeatInterval);
       setTimeout(() => {}, 5000);
     };
 
     return () => {
+      clearInterval(heartbeatInterval);
       if (wsRef.current) wsRef.current.close();
     };
   }, []);

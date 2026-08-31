@@ -43,21 +43,49 @@ def parse_user_agent(ua: str) -> str:
     ua_lower = ua.lower()
     if "python" in ua_lower or "httpx" in ua_lower or "curl" in ua_lower:
         return "API"
-    os = "Другое"
-    if "windows" in ua_lower:
-        os = "Windows"
-    elif "iphone" in ua_lower:
-        os = "iPhone"
+
+    # Device type detection
+    device_type = "desktop"
+    if "mobile" in ua_lower or "android" in ua_lower and "mobile" in ua_lower:
+        device_type = "mobile"
+    elif "iphone" in ua_lower or "ipad" in ua_lower:
+        device_type = "mobile" if "iphone" in ua_lower else "tablet"
     elif "android" in ua_lower:
-        os = "Android"
+        device_type = "mobile"
+
+    # OS detection with version
+    os_name = "Другое"
+    os_version = ""
+    if "windows" in ua_lower:
+        os_name = "Windows"
+        import re
+        win_match = re.search(r'windows\s+nt\s+([\d.]+)', ua_lower)
+        if win_match:
+            os_version = win_match.group(1)
+    elif "iphone" in ua_lower:
+        os_name = "iOS"
+        import re
+        ios_match = re.search(r'iphone\s+os\s+([\d_]+)', ua_lower)
+        if ios_match:
+            os_version = ios_match.group(1).replace('_', '.')
+    elif "ipad" in ua_lower:
+        os_name = "iPadOS"
+    elif "android" in ua_lower:
+        os_name = "Android"
+        import re
+        android_match = re.search(r'android\s+([\d.]+)', ua_lower)
+        if android_match:
+            os_version = android_match.group(1)
     elif "mac os" in ua_lower or "macintosh" in ua_lower:
-        os = "Mac"
+        os_name = "macOS"
     elif "linux" in ua_lower:
-        os = "Linux"
+        os_name = "Linux"
+
+    # Browser detection
     browser = "Другое"
     if "edg" in ua_lower:
         browser = "Edge"
-    elif "chrome" in ua_lower:
+    elif "chrome" in ua_lower and "safari" in ua_lower:
         browser = "Chrome"
     elif "firefox" in ua_lower:
         browser = "Firefox"
@@ -65,7 +93,48 @@ def parse_user_agent(ua: str) -> str:
         browser = "Safari"
     elif "opr" in ua_lower or "opera" in ua_lower:
         browser = "Opera"
-    return f"{os} {browser}"
+
+    # Device model extraction (iPhone, Samsung, etc.)
+    device_model = ""
+    import re
+    if "iphone" in ua_lower:
+        model_match = re.search(r'iphone\s+(os\s+[\d_]+\s+)?([\w\s]+?)(?:\s+like|\s+\\|$)', ua, re.IGNORECASE)
+        if model_match:
+            device_model = f"iPhone"
+    elif "samsung" in ua_lower:
+        model_match = re.search(r'samsung[/-]([\w-]+)', ua, re.IGNORECASE)
+        if model_match:
+            device_model = f"Samsung {model_match.group(1)}"
+    elif "xiaomi" in ua_lower or "redmi" in ua_lower:
+        model_match = re.search(r'(xiaomi|redmi)[/-]([\w-]+)', ua, re.IGNORECASE)
+        if model_match:
+            device_model = f"{model_match.group(1).title()} {model_match.group(2)}"
+
+    result = f"{os_name} {browser}".strip()
+    if device_model:
+        result = f"{device_model} ({result})"
+    return result
+
+
+def parse_user_agent_full(ua: str) -> dict:
+    """Return structured device info for LoginHistory."""
+    if not ua:
+        return {"device_type": "unknown", "device_name": ""}
+
+    ua_lower = ua.lower()
+    if "python" in ua_lower or "httpx" in ua_lower or "curl" in ua_lower:
+        return {"device_type": "api", "device_name": "API Client"}
+
+    device_type = "desktop"
+    if "iphone" in ua_lower:
+        device_type = "mobile"
+    elif "ipad" in ua_lower:
+        device_type = "tablet"
+    elif "android" in ua_lower:
+        device_type = "mobile"
+
+    device_name = parse_user_agent(ua)
+    return {"device_type": device_type, "device_name": device_name}
 
 
 @router.post("/", response_model=UserOut, status_code=201)
@@ -127,7 +196,10 @@ async def list_users(
             .order_by(LoginHistory.login_at.desc()).limit(1)
         )
         last_login = last_login_res.scalar_one_or_none()
-        device_info = parse_user_agent(last_login.user_agent) if last_login and last_login.user_agent else None
+        device_info = last_login.device_name if last_login and last_login.device_name else (
+            parse_user_agent(last_login.user_agent) if last_login and last_login.user_agent else None
+        )
+        device_type = last_login.device_type if last_login and last_login.device_type else None
 
         cust_ids, cust_names = await _get_user_customers(u.id, db)
         result.append({
@@ -139,6 +211,7 @@ async def list_users(
             "last_active": u.last_active.isoformat() if u.last_active else None,
             "is_online": is_online,
             "device_info": device_info,
+            "device_type": device_type,
             "customer_ids": cust_ids,
             "customer_names": cust_names,
         })
@@ -451,6 +524,8 @@ async def get_user_history(
                 "login_at": l.login_at.isoformat(),
                 "logout_at": l.logout_at.isoformat() if l.logout_at else None,
                 "ip_address": l.ip_address,
+                "device_name": l.device_name,
+                "device_type": l.device_type,
             }
             for l in logins
         ],
