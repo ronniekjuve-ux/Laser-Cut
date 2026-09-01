@@ -47,18 +47,19 @@ async def get_current_user(token: HTTPAuthorizationCredentials = Depends(oauth2_
         if not user or user.status != UserStatus.ACTIVE:
             raise HTTPException(status_code=403, detail="Account inactive")
 
-        # Auto-logout check: if last_active > 30 min ago, session expired
-        now = datetime.now(timezone.utc)
-        if user.last_active:
-            last_active = user.last_active
-            if last_active.tzinfo is None:
-                last_active = last_active.replace(tzinfo=timezone.utc)
-            if (now - last_active) > timedelta(minutes=AUTO_LOGOUT_TIMEOUT_MINUTES):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Session expired due to inactivity"
-                )
+        # Auto-logout check disabled per Task 1
+        # now = datetime.now(timezone.utc)
+        # if user.last_active:
+        #     last_active = user.last_active
+        #     if last_active.tzinfo is None:
+        #         last_active = last_active.replace(tzinfo=timezone.utc)
+        #     if (now - last_active) > timedelta(minutes=AUTO_LOGOUT_TIMEOUT_MINUTES):
+        #         raise HTTPException(
+        #             status_code=status.HTTP_401_UNAUTHORIZED,
+        #             detail="Session expired due to inactivity"
+        #         )
 
+        now = datetime.now(timezone.utc)
         user.last_active = now
         # Only create UserActivity if heartbeat is not available (fallback)
         # With WebSocket heartbeat, we skip per-request activity logging
